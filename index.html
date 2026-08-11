@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -1330,28 +1330,14 @@ async function sbFetchAll(table){
 // Supabase REST: 全量替换 (DELETE ALL + INSERT ALL)
 async function sbReplaceAll(table,data){
   try{
-    // 删除旧数据
-    await fetch(SUPABASE_URL+'/rest/v1/'+table+'?id=gt.0',{method:'DELETE',headers:getSbHeaders()});
-    if(!data||!data.length) return;
-    // 批量插入（去掉 id 让数据库自生成）
-    var batch=[];
-    for(var i=0;i<data.length;i++){
-      var row={};
-      for(var k in data[i]){
-        if(!data[i].hasOwnProperty(k)) continue;
-        if(k==='id') continue;  // 跳过 id
-        row[k]=data[i][k];
-      }
-      batch.push(row);
-      if(batch.length>=500||i===data.length-1){
-        var res=await fetch(SUPABASE_URL+'/rest/v1/'+table,{
-          method:'POST',
-          headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(SUPABASE_JWT||SUPABASE_KEY),'Content-Type':'application/json','Prefer':'return=minimal'},
-          body:JSON.stringify(batch)
-        });
-        if(!res.ok) throw new Error(res.status+' '+res.statusText);
-        batch=[];
-      }
+    var res=await fetch('/api/save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({table:table,data:data})
+    });
+    if(!res.ok){
+      var err=await res.json().catch(()=>({}));
+      throw new Error(err.error||('API 返回 '+res.status));
     }
   }catch(e){console.error('sbReplaceAll '+table+' 失败:',e); throw e;}
 }
