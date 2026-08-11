@@ -409,8 +409,9 @@ body.dark-mode .theme-toggle-btn:hover{background:#1a1a2e}
 <el-button size="small" type="primary" @click="saleDateRange=null;filterByDate()" plain>本月累计</el-button>
 <el-button size="small" @click="setToday">今天</el-button>
 <el-button size="small" type="primary" @click="filterByDate">查询</el-button>
-<span style="font-size:12px;color:#303133">汇率(RMB/比索)：</span>
-<el-input-number v-model="exchangeRate" :min="0.01" :max="10" :precision="2" :step="0.01" size="small" style="width:120px"></el-input-number>
+<div style="width:1px;height:20px;background:#DCDFE6;margin:0 4px"></div>
+<span style="font-size:12px;color:#606266;white-space:nowrap">汇率(RMB/比索)：</span>
+<el-input-number v-model="exchangeRate" :min="0.01" :max="10" :precision="2" :step="0.01" size="small" style="width:140px" controls-position="right"></el-input-number>
 <div style="flex:1"></div>
 <div style="background:rgba(0,230,118,.08);border-radius:8px;padding:6px 14px;font-size:13px;color:#00E676;font-weight:600">
 {{saleDateLabel}} <span style="font-size:20px;margin-left:4px">{{saleDateTotal}}</span> 件
