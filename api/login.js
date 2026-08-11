@@ -30,12 +30,12 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: '缺少用户名或密码' });
     }
 
-    // 查询用户
+    // 查询用户（用 service_role key 绕过 RLS）
     var userUrl = SUPABASE_URL + '/rest/v1/users?username=eq.' + encodeURIComponent(username) + '&select=*';
     var userRes = await fetch(userUrl, {
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY
+        'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY
       }
     });
 
