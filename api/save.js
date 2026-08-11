@@ -63,7 +63,14 @@ module.exports = async function handler(req, res) {
           body: JSON.stringify(batch)
         });
         if (!insRes.ok) {
-          return res.status(insRes.status).json({ error: 'INSERT ' + table + ' 失败: ' + insRes.status });
+          var sbErr = await insRes.text();
+          var sampleKeys = batch.length > 0 ? Object.keys(batch[0]).join(',') : '(empty)';
+          return res.status(insRes.status).json({ 
+            error: 'INSERT ' + table + ' 失败: ' + insRes.status,
+            supabase_error: sbErr,
+            sample_keys: sampleKeys,
+            batch_size: batch.length
+          });
         }
         batch = [];
       }
