@@ -42,7 +42,7 @@ module.exports = async function handler(req, res) {
       return res.status(delRes.status).json({ error: 'DELETE ' + table + ' 失败: ' + delRes.status });
     }
 
-    // 2. UPSERT 新数据（ON CONFLICT DO NOTHING 跳过重复 id）
+    // 2. UPSERT 新数据
     if (!data || !data.length) {
       return res.status(200).json({ ok: true, table: table, deleted: true, inserted: 0 });
     }
@@ -76,7 +76,16 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ ok: true, table: table, inserted: data.length });
+    // 验证：重新读取确认数据已写入
+    var verifyRes = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?select=count', {
+      headers: headers
+    });
+    var verifyCount = 0;
+    if (verifyRes.ok) {
+      var vc = await verifyRes.json();
+      verifyCount = vc[0] ? vc[0].count : 0;
+    }
+    return res.status(200).json({ ok: true, table: table, inserted: data.length, verified_count: verifyCount });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
