@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>跨境电商管理系统 - Online</title>
+<title>跨境电商管理系统 - v2.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1286,7 +1286,7 @@ let SUPABASE_URL = '';
 let SUPABASE_KEY = '';
 let SUPABASE_JWT = '';
 function getSbHeaders(){return{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+(SUPABASE_JWT||SUPABASE_KEY),'Content-Type':'application/json'};}
-var sbOnline=true;
+var sb=true;
 
 // 动态加载配置
 async function sbInitConfig() {
@@ -3186,7 +3186,7 @@ XLSX.utils.book_append_sheet(wb,ws,'库存导入模板');
 XLSX.writeFile(wb,'库存批量导入模板.xlsx');
 },
 saveAllData:function(){
-if(!sbOnline) return;
+if(!sb) return;
 sbQueueSave('listings',this.LISTINGS);
 sbQueueSave('shipments',this.SHIPMENTS);
 sbQueueSave('inventory',this.INVENTORY);
@@ -3201,7 +3201,7 @@ try{localStorage.setItem('cb_logs',JSON.stringify(this.operationLogs));}catch(e)
 },
 loadAllData:function(){
 var self=this;
-if(!sbOnline){return}
+if(!sb){return}
 sbLoading=true;
 sbFetchAll('users').then(function(d){if(d) self.users=d;});
 sbFetchAll('listings').then(function(d){if(d) self.LISTINGS=d;});
