@@ -59,18 +59,25 @@ module.exports = async function handler(req, res) {
       passwordValid = (password === user.password);
       if (passwordValid) {
         // 自动升级为 bcrypt 哈希
-        var hash = bcrypt.hashSync(password, 10);
-        var patchUrl = SUPABASE_URL + '/rest/v1/users?id=eq.' + user.id;
-        await fetch(patchUrl, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({ password_hash: hash })
-        });
+        try {
+          var hash = bcrypt.hashSync(password, 10);
+          var patchUrl = SUPABASE_URL + '/rest/v1/users?id=eq.' + user.id;
+          var patchRes = await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ password_hash: hash })
+          });
+          if (!patchRes.ok) {
+            console.error('password_hash upgrade failed:', patchRes.status, await patchRes.text());
+          }
+        } catch (e2) {
+          console.error('password_hash upgrade error:', e2);
+        }
       }
     }
 
