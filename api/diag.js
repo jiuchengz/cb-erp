@@ -13,39 +13,43 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Test 1: Query user
-    var userUrl = SUPABASE_URL + '/rest/v1/users?username=eq.superadmin&select=*';
-    var userRes = await fetch(userUrl, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY
-      }
+    var results = {};
+
+    // Test 1: anon key
+    var r1 = await fetch(SUPABASE_URL + '/rest/v1/users?username=eq.superadmin&select=*', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
     });
+    results.anon = { ok: r1.ok, status: r1.status, count: 0, body: null };
+    if (r1.ok) { var b = await r1.json(); results.anon.count = b.length; results.anon.body = b; }
 
-    var users = userRes.ok ? await userRes.json() : [];
-    var user = users && users.length > 0 ? users[0] : null;
+    // Test 2: service role key
+    var r2 = await fetch(SUPABASE_URL + '/rest/v1/users?username=eq.superadmin&select=*', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY }
+    });
+    results.service = { ok: r2.ok, status: r2.status, count: 0, body: null };
+    if (r2.ok) { var b2 = await r2.json(); results.service.count = b2.length; results.service.body = b2; }
 
-    // Test 2: Check env vars
+    // Test 3: count all users
+    var r3 = await fetch(SUPABASE_URL + '/rest/v1/users?select=count', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY, 'Prefer': 'count=exact' }
+    });
+    results.count_all = { ok: r3.ok, status: r3.status, count: r3.headers.get('content-range') || 'N/A' };
+
+    // Test 4: check if users table exists at all
+    var r4 = await fetch(SUPABASE_URL + '/rest/v1/', {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_SERVICE_KEY }
+    });
+    results.schema = { ok: r4.ok, status: r4.status };
+
     return res.status(200).json({
       env: {
         has_url: !!SUPABASE_URL,
         has_key: !!SUPABASE_KEY,
         has_service: !!SUPABASE_SERVICE_KEY,
-        has_jwt_secret: !!process.env.JWT_SECRET,
-        has_supabase_jwt: !!process.env.SUPABASE_JWT_SECRET
+        has_jwt: !!process.env.JWT_SECRET,
+        has_sb_jwt: !!process.env.SUPABASE_JWT_SECRET
       },
-      query_ok: userRes.ok,
-      query_status: userRes.status,
-      users_count: users ? users.length : 0,
-      user: user ? {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        has_password: 'password' in user,
-        has_password_hash: 'password_hash' in user,
-        keys: Object.keys(user)
-      } : null
+      results: results
     });
   } catch (e) {
     return res.status(500).json({ error: e.message, stack: e.stack });
