@@ -42,7 +42,7 @@ module.exports = async function handler(req, res) {
       return res.status(delRes.status).json({ error: 'DELETE ' + table + ' 失败: ' + delRes.status });
     }
 
-    // 2. 插入新数据
+    // 2. UPSERT 新数据（ON CONFLICT DO NOTHING 跳过重复 id）
     if (!data || !data.length) {
       return res.status(200).json({ ok: true, table: table, deleted: true, inserted: 0 });
     }
