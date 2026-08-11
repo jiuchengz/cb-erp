@@ -1,7 +1,11 @@
 {
   "functions": {
     "api/**/*.js": {
-      "runtime": "nodejs20.x"
+      "runtime": "nodejs20.x",
+      "includeFiles": "api/**"
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
