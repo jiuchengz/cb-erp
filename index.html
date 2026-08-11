@@ -2329,6 +2329,8 @@ dailySales:dailySales
 imported++;
 }
 self.saveAllData();
+clearTimeout(sbSaveTimer);
+try{await sbFlushSaves();}catch(e){self.$message.error('云端保存失败：'+e.message);}
 self.addLog('success','商品导入','成功导入 '+imported+' 条，跳过重复 '+skipped+' 条');
 self.$message.success('成功导入 '+imported+' 条，跳过重复 '+skipped+' 条');
 }catch(err){
@@ -3211,15 +3213,15 @@ loadAllData:function(){
 var self=this;
 if(!sbOnline){return}
 sbLoading=true;
-sbFetchAll('users').then(function(d){if(d&&d.length) self.users=d;});
-sbFetchAll('listings').then(function(d){if(d&&d.length) self.LISTINGS=d;});
-sbFetchAll('shipments').then(function(d){if(d&&d.length) self.SHIPMENTS=d;});
-sbFetchAll('inventory').then(function(d){if(d&&d.length) self.INVENTORY=d;});
-sbFetchAll('transfers').then(function(d){if(d&&d.length) self.TRANSFERS=d;});
-sbFetchAll('sales').then(function(d){if(d&&d.length) self.SALES=d;});
-sbFetchAll('aftersales').then(function(d){if(d&&d.length) self.AFTERSALES=d;});
-sbFetchAll('procurement').then(function(d){if(d&&d.length) self.PROCUREMENTS=d;});
-sbFetchAll('replenishment').then(function(d){if(d&&d.length) self.REPLENISHMENTS=d;}).then(function(){sbLoading=false});
+sbFetchAll('users').then(function(d){if(d) self.users=d;});
+sbFetchAll('listings').then(function(d){if(d) self.LISTINGS=d;});
+sbFetchAll('shipments').then(function(d){if(d) self.SHIPMENTS=d;});
+sbFetchAll('inventory').then(function(d){if(d) self.INVENTORY=d;});
+sbFetchAll('transfers').then(function(d){if(d) self.TRANSFERS=d;});
+sbFetchAll('sales').then(function(d){if(d) self.SALES=d;});
+sbFetchAll('aftersales').then(function(d){if(d) self.AFTERSALES=d;});
+sbFetchAll('procurement').then(function(d){if(d) self.PROCUREMENTS=d;});
+sbFetchAll('replenishment').then(function(d){if(d) self.REPLENISHMENTS=d;}).then(function(){sbLoading=false});
 },_ensureExcelJS:function(cb){
 var self=this;
 if(typeof ExcelJS!=='undefined'){cb();return}
