@@ -2,6 +2,9 @@
   "name": "cb-erp",
   "version": "1.0.0",
   "description": "跨境电商管理系统 - Online",
+  "scripts": {
+    "build": "echo Build complete"
+  },
   "dependencies": {
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3"
