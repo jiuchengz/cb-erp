@@ -3196,14 +3196,21 @@ e.target.value='';
 reader.readAsArrayBuffer(file);
 },
 downloadInventoryTemplate:function(){
+try{
+if(typeof XLSX==='undefined'){this.$message.error('XLSX库未加载，请刷新后重试');return;}
 var headers=['编码','国内库存','海外库存','在途总数'];
+var sample=[];
+if(this.INVENTORY&&this.INVENTORY.length){
 var first=this.INVENTORY[0];
-var sample=[[first.code,first.domesticStock,first.overseasStock,first.inTransit]];
+sample=[[first.code||'',first.domesticStock||0,first.overseasStock||0,first.inTransit||0]];
+}
 var wb=XLSX.utils.book_new();
-var ws=XLSX.utils.aoa_to_sheet([headers].concat(sample));
+var rows=sample.length?[headers].concat(sample):[headers];
+var ws=XLSX.utils.aoa_to_sheet(rows);
 ws['!cols']=headers.map(function(){return {wch:20}});
 XLSX.utils.book_append_sheet(wb,ws,'库存导入模板');
 XLSX.writeFile(wb,'库存批量导入模板.xlsx');
+}catch(e){console.error(e);this.$message.error('下载模板失败：'+e.message);}
 },
 saveAllData:function(){
 if(!sb) return;
