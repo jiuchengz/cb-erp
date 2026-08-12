@@ -1,4 +1,4 @@
-﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -2565,7 +2565,7 @@ var self=this;
 var file=e.target.files[0];
 if(!file) return;
 var reader=new FileReader();
-reader.onload=function(evt){
+reader.onload=async function(evt){
 try{
 var data=new Uint8Array(evt.target.result);
 var wb=XLSX.read(data,{type:'array'});
@@ -2624,6 +2624,8 @@ imported++;
 var msg='成功导入 '+imported+' 条，跳过 '+skipped+' 条';
 if(notFound.length) msg+='（未匹配链接ID: '+notFound.join(', ')+'）';
 self.saveAllData();
+clearTimeout(sbSaveTimer);
+try{await sbFlushSaves();}catch(e){self.$message.error('云端保存失败：'+e.message);}
 self.$message.success(msg);
 }catch(err){
 self.addLog('error','导入失败','文件解析失败：'+err.message);self.$message.error('文件解析失败：'+err.message);
@@ -2842,7 +2844,7 @@ var self=this;
 var file=e.target.files[0];
 if(!file) return;
 var reader=new FileReader();
-reader.onload=function(evt){
+reader.onload=async function(evt){
 try{
 var data=new Uint8Array(evt.target.result);
 var wb=XLSX.read(data,{type:'array'});
@@ -2885,6 +2887,8 @@ var msg='成功导入 '+imported+' 条';
 if(skipped>0) msg+='，跳过 '+skipped+' 条';
 if(notFound.length) msg+='（未匹配: '+notFound.join(', ')+'）';
 self.saveAllData();
+clearTimeout(sbSaveTimer);
+try{await sbFlushSaves();}catch(e){self.$message.error('云端保存失败：'+e.message);}
 self.$message.success(msg);
 }catch(err){
 self.addLog('error','导入失败','文件解析失败：'+err.message);self.$message.error('文件解析失败：'+err.message);
@@ -3132,7 +3136,7 @@ var self=this;
 var file=e.target.files[0];
 if(!file) return;
 var reader=new FileReader();
-reader.onload=function(evt){
+reader.onload=async function(evt){
 try{
 var data=new Uint8Array(evt.target.result);
 var wb=XLSX.read(data,{type:'array'});
@@ -3184,6 +3188,9 @@ self.INVENTORY.push(newInv);
 imported++;
 }
 }
+self.saveAllData();
+clearTimeout(sbSaveTimer);
+try{await sbFlushSaves();}catch(e){self.$message.error('云端保存失败：'+e.message);}
 var msg='成功导入 '+imported+' 条';
 if(skipped>0) msg+='，跳过 '+skipped+' 条';
 if(notFound.length) msg+='（未匹配编码: '+notFound.join(', ')+'）';
@@ -3403,3 +3410,4 @@ else this.captchaAnswer=a*b;
 
 
  
+
