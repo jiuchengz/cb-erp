@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
 
   for (const c of candidates) {
     const pool = new Pool({
-      host: c.host, port: c.port, database: 'postgres', user: 'postgres',
+      host: c.host, port: c.port, database: 'postgres', user: 'postgres.lytbkusovltcgwmsikgp',
       password, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 8000
     });
     try {
