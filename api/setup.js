@@ -5,29 +5,45 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+
+  const ref = 'lytbkusovltcgwmsikgp';
+  const password = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  const candidates = [
+    { name: 'direct', host: `db.${ref}.supabase.co`, port: 5432 },
+    { name: 'pooler-us-east-1', host: 'aws-0-us-east-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-ap-southeast-1', host: 'aws-0-ap-southeast-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-ap-northeast-1', host: 'aws-0-ap-northeast-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-eu-west-1', host: 'aws-0-eu-west-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-eu-central-1', host: 'aws-0-eu-central-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-us-west-1', host: 'aws-0-us-west-1.pooler.supabase.com', port: 6543 },
+    { name: 'pooler-ap-southeast-2', host: 'aws-0-ap-southeast-2.pooler.supabase.com', port: 6543 }
+  ];
+
+  let client = null;
+  let connected = null;
+  const attempts = [];
+
+  for (const c of candidates) {
+    const pool = new Pool({
+      host: c.host, port: c.port, database: 'postgres', user: 'postgres',
+      password, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 8000
+    });
+    try {
+      const cl = await pool.connect();
+      client = cl; connected = c; break;
+    } catch (e) {
+      attempts.push({ name: c.name, error: e.message });
+      try { await pool.end(); } catch (_) {}
+    }
   }
 
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (!client) {
+    return res.status(500).json({ error: 'ALL_CONNECTION_FAILED', attempts });
   }
 
   try {
-    const ref = 'lytbkusovltcgwmsikgp';
-    const pool = new Pool({
-      host: `db.${ref}.supabase.co`,
-      port: 5432,
-      database: 'postgres',
-      user: 'postgres',
-      password: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 10000
-    });
-
-    const client = await pool.connect();
-
     const tables = {
       listings: ["barcode","category","code","competitorId","dailySales","firstLegFreight","imgText","lastMileDeliveryPeso","linkId","listingTime","mlCommissionRate","monthSales","name","purchaseCost","sellingPricePeso","shipping","sku","todaySales","totalSales","unit","warehouseNo"],
       shipments: ["abnormalPenalty","actualWarehouseQty","appointmentTime","billCheckStatus","billableAmount","billableWeightVol","cargoStatus","checkTime","estimatedArrival","forwarder","freight","freightDiff","productCode","pullDeclareQty","shipDate","shipmentNo","shippingCartons","shippingMode","shippingQty","totalFreight","volumeDiff","warehouseNo","warehouseStatus"],
@@ -48,25 +64,23 @@ module.exports = async function handler(req, res) {
     let totalAdded = 0;
 
     for (const [table, cols] of Object.entries(tables)) {
-      results[table] = { added: [], skipped: [] };
+      results[table] = { added: [], errors: [] };
       for (const col of cols) {
         let colType = 'TEXT';
         if (textCols.includes(col)) colType = 'TEXT';
         else if (numCols.includes(col)) colType = 'NUMERIC';
         else if (intCols.includes(col)) colType = 'INTEGER';
         else if (tsCols.includes(col)) colType = 'TIMESTAMPTZ';
-
         try {
           await client.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${col}" ${colType}`);
           results[table].added.push(col);
           totalAdded++;
         } catch (e) {
-          results[table].skipped.push(`${col}: ${e.message}`);
+          results[table].errors.push(col + ': ' + e.message);
         }
       }
     }
 
-    // Verify by querying each table
     const verify = {};
     for (const table of Object.keys(tables)) {
       try {
@@ -77,11 +91,10 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    client.release();
-    await pool.end();
-
-    return res.status(200).json({ ok: true, totalColumnsAdded: totalAdded, results, verify });
+    return res.status(200).json({ ok: true, connectedVia: connected, totalColumnsAdded: totalAdded, results, verify });
   } catch (e) {
     return res.status(500).json({ error: e.message, stack: e.stack });
+  } finally {
+    try { client.release(); } catch (_) {}
   }
 };
