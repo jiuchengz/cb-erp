@@ -264,6 +264,12 @@ body.dark-mode .theme-toggle-btn:hover{background:#1a1a2e}
 <el-form @submit.native.prevent="login" style="margin-top:28px">
 <el-form-item><el-input v-model="loginUsername" placeholder="请输入用户名（英文）" size="medium" @input="loginUsername=loginUsername.replace(/[^a-zA-Z]/g,'')" @keyup.enter.native="login"></el-input></el-form-item>
 <el-form-item><el-input v-model="loginPassword" type="password" placeholder="请输入密码" size="medium" @keyup.enter.native="login" show-password></el-input></el-form-item>
+<el-form-item v-if="showCaptcha">
+<span style="background:#f0f2f5;padding:6px 14px;border-radius:4px;font-size:16px;font-weight:700;white-space:nowrap;cursor:pointer;display:inline-block;margin-bottom:6px;user-select:none" @click="generateCaptcha">
+{{captchaA}} {{op==='+'?'+':op==='-'?'−':'×'}} {{captchaB}} = ?
+</span>
+<el-input v-model="captchaInput" placeholder="请输入结果" size="medium" @keyup.enter.native="login" style="width:100%"></el-input>
+</el-form-item>
 <el-form-item><el-checkbox v-model="rememberPassword" style="float:left">记住密码</el-checkbox></el-form-item>
 <el-form-item><el-button type="primary" size="medium" style="width:100%" @click="login">登 录</el-button></el-form-item>
 </el-form>
@@ -1516,6 +1522,12 @@ loginUsername:'',
 loginPassword:'',
 rememberPassword:false,
 loginAttempts:{},
+showCaptcha:true,
+captchaA:0,
+captchaB:0,
+captchaAnswer:0,
+captchaInput:'',
+op:'+',
 users:[
 {username:'superadmin',name:'超级管理员',role:'超级管理员',password:'123456',permissions:['dashboard','listings','shipments','inventory','transfers','usermgmt','sales','aftersales','procurement','replenishment']},
 {username:'admin',name:'管理员',role:'管理员',password:'123456',permissions:['dashboard','listings','shipments','inventory','transfers','sales','aftersales','procurement','replenishment']},
@@ -1706,6 +1718,7 @@ return p.code.toLowerCase().indexOf(kw)>=0 || p.name.toLowerCase().indexOf(kw)>=
 },
 watch:{searchKeyword:function(){this.currentPage=1},shipmentSearchKeyword:function(){this.searchShipments()},activeMenu:function(val){if(val==='inventory'){this.syncInventoryData()}if(val==='shipments'){this.filteredShipments=[].concat(this.SHIPMENTS);this.shipmentSearchKeyword=''}}},
 mounted() {
+            this.generateCaptcha();
             var self=this;
             // 先加载远程配置
             sbInitConfig().then(function(ok) {
@@ -1737,7 +1750,12 @@ methods:{
 async login() {
                 if (!this.loginUsername) { this.$message.warning('请输入用户名'); return; }
                 if (!this.loginPassword) { this.$message.warning('请输入密码'); return; }
-                
+                if (this.showCaptcha) {
+                    if (!this.captchaInput) { this.$message.warning('请输入验证码结果'); return; }
+                    if (parseInt(this.captchaInput) !== this.captchaAnswer) {
+                        this.$message.error('验证码错误，请重试'); this.generateCaptcha(); this.captchaInput=''; return;
+                    }
+                }
                 const now = Date.now();
                 const attempts = JSON.parse(localStorage.getItem('cb_login_attempts') || '{}');
                 const lockKey = this.loginUsername + '_lock';
@@ -1797,6 +1815,8 @@ async login() {
                     
                     // 清除失败记录
                     localStorage.removeItem('cb_login_attempts');
+                    this.showCaptcha = false;
+                    this.captchaInput = '';
                     
                     // 先加载全量数据再保存
                     this.loadAllData();
@@ -3354,6 +3374,19 @@ getProductImageByLinkId:function(linkId){
 if(!linkId) return '';
 var found=this.LISTINGS.filter(function(p){return p.linkId===linkId});
 return found.length?found[0].imgText:'';
+},
+generateCaptcha:function(){
+var ops=['+','-','*'];
+var op=ops[Math.floor(Math.random()*ops.length)];
+var a=0,b=0;
+this.op=op;
+if(op==='+'){a=Math.floor(Math.random()*20)+1;b=Math.floor(Math.random()*20)+1;}
+else if(op==='-'){a=Math.floor(Math.random()*20)+10;b=Math.floor(Math.random()*a);}
+else{a=Math.floor(Math.random()*9)+1;b=Math.floor(Math.random()*9)+1;}
+this.captchaA=a;this.captchaB=b;
+if(op==='+') this.captchaAnswer=a+b;
+else if(op==='-') this.captchaAnswer=a-b;
+else this.captchaAnswer=a*b;
 }}
 });
 })();
