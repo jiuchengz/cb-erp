@@ -1325,12 +1325,12 @@ async function sbFetchAll(table){
 }
 
 // Supabase REST: 全量替换 (DELETE ALL + INSERT ALL)
-async function sbReplaceAll(table,data){
+async function sbReplaceAll(table,data,mode){
   try{
     var res=await fetch('/api/save',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({table:table,data:data})
+      body:JSON.stringify({table:table,data:data,mode:mode||'replace'})
     });
     if(!res.ok){
       var err=await res.json().catch(()=>({}));
@@ -1353,7 +1353,18 @@ async function sbFlushSaves(){
   var failed=[];
   for(var t in tables){
     if(!tables.hasOwnProperty(t)) continue;
-    try{await sbReplaceAll(t,tables[t]);}catch(e){failed.push(t+': '+e.message);}
+    var rows=tables[t]||[];
+    try{
+      if(rows.length===0){
+        await sbReplaceAll(t,[],'replace');
+      }else{
+        var CHUNK=20;
+        for(var i=0;i<rows.length;i+=CHUNK){
+          var chunk=rows.slice(i,i+CHUNK);
+          await sbReplaceAll(t,chunk,(i===0)?'replace':'append');
+        }
+      }
+    }catch(e){failed.push(t+': '+e.message);}
   }
   if(failed.length>0) throw new Error('云端保存失败:\n'+failed.join('\n'));
 }
@@ -2155,6 +2166,33 @@ try{localStorage.setItem('cb_dark_mode',this.darkMode?'1':'0');}catch(e){}
 triggerListingsUpload:function(){
 this.$refs.listingsUploadFile.click();
 },
+compressImageDataUrl:function(dataUrl){
+return new Promise(function(resolve){
+try{
+if(!dataUrl||dataUrl.indexOf('data:image/')!==0){resolve(dataUrl);return;}
+if(dataUrl.length<150000){resolve(dataUrl);return;}
+var img=new Image();
+img.onload=function(){
+try{
+var w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+var maxW=800,maxH=800,q=0.72;
+var scale=Math.min(1,maxW/w,maxH/h);
+if(scale>=1){resolve(dataUrl);return;}
+var cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
+var canvas=document.createElement('canvas');
+canvas.width=cw;canvas.height=ch;
+var ctx=canvas.getContext('2d');
+ctx.fillStyle='#fff';ctx.fillRect(0,0,cw,ch);
+ctx.drawImage(img,0,0,cw,ch);
+var out=canvas.toDataURL('image/jpeg',q);
+resolve(out.length<dataUrl.length?out:dataUrl);
+}catch(e){resolve(dataUrl);}
+};
+img.onerror=function(){resolve(dataUrl);};
+img.src=dataUrl;
+}catch(e){resolve(dataUrl);}
+});
+},
 extractImagesFromXlsx:function(arrayBuffer){
 var self=this;
 return new Promise(function(resolve){
@@ -2186,7 +2224,8 @@ return imgFile.async('base64').then(function(b64){
 var ext=imgPath.split('.').pop().toLowerCase();
 var mimeMap={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',bmp:'image/bmp',webp:'image/webp',svg:'image/svg+xml'};
 var mime=mimeMap[ext]||'image/png';
-return {row:a.row,col:a.col,dataUrl:'data:'+mime+';base64,'+b64};
+var raw='data:'+mime+';base64,'+b64;
+return self.compressImageDataUrl(raw).then(function(c){return {row:a.row,col:a.col,dataUrl:c};});
 });
 });
 return Promise.all(imgPromises);
@@ -2241,7 +2280,8 @@ imgFile.async('base64').then(function(b64){
 var ext=imgPath.split('.').pop().toLowerCase();
 var mimeMap={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',bmp:'image/bmp',webp:'image/webp'};
 var mime=mimeMap[ext]||'image/png';
-idToB64[id]='data:'+mime+';base64,'+b64;
+var raw='data:'+mime+';base64,'+b64;
+return self.compressImageDataUrl(raw).then(function(c){idToB64[id]=c;});
 })
 );
 })(id,idToRid[id]);

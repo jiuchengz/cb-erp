@@ -20,9 +20,13 @@ module.exports = async function handler(req, res) {
     var body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     var table = body.table;
     var data = body.data;
+    var mode = body.mode || 'replace';
 
     if (!table) {
       return res.status(400).json({ error: '缺少 table 参数' });
+    }
+    if (!Array.isArray(data)) {
+      return res.status(400).json({ error: 'data 必须是数组' });
     }
 
     var headers = {
@@ -61,6 +65,35 @@ module.exports = async function handler(req, res) {
         row[key] = (data[i][key] === undefined) ? null : data[i][key];
       }
       normalized.push(row);
+    }
+
+    // 追加模式：不清空旧数据，仅 INSERT（用于前端分批保存）
+    if (mode === 'append') {
+      if (!normalized.length) {
+        return res.status(200).json({ ok: true, table: table, mode: 'append', inserted: 0 });
+      }
+      var appendBatch = [];
+      for (var ai = 0; ai < normalized.length; ai++) {
+        appendBatch.push(normalized[ai]);
+        if (appendBatch.length >= 500 || ai === normalized.length - 1) {
+          var appendRes = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(appendBatch)
+          });
+          if (!appendRes.ok) {
+            var appendErr = await appendRes.text();
+            return res.status(appendRes.status).json({
+              error: 'INSERT ' + table + ' 失败: ' + appendRes.status,
+              supabase_error: appendErr,
+              sample_keys: allKeys.join(','),
+              batch_size: appendBatch.length
+            });
+          }
+          appendBatch = [];
+        }
+      }
+      return res.status(200).json({ ok: true, table: table, mode: 'append', inserted: normalized.length });
     }
 
     // 3. 删除旧数据
