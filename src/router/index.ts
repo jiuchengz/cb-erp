@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -76,6 +77,21 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+  if (!auth.initialized) await auth.init()
+
+  if (to.meta.public) {
+    if (to.name === 'login' && auth.session) return '/dashboard'
+    return true
+  }
+
+  if (!auth.session) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  return true
 })
 
 export default router

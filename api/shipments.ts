@@ -16,6 +16,7 @@ const itemSchema = z.object({
 
 const createSchema = z.object({
   tracking_no: z.string().min(1).max(64),
+  warehouse_id: z.string().uuid(),
   carrier: z.string().max(128).optional().default(''),
   items: z.array(itemSchema).min(1).max(200),
 });
@@ -47,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('shipments')
         .insert({
           tracking_no: body.tracking_no,
+          warehouse_id: body.warehouse_id,
           carrier: body.carrier || null,
           created_by: ctx.userId,
         })

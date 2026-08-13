@@ -48,7 +48,7 @@ npm run dev
 ## 构建
 
 ```bash
-npm run type-check
+npm run typecheck
 npm run build
 ```
 

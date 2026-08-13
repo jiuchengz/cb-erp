@@ -6,8 +6,14 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 
-const app = createApp(App)
-app.use(createPinia())
-app.use(router)
-app.use(ElementPlus)
-app.mount('#app')
+async function bootstrap() {
+  const app = createApp(App)
+  const pinia = createPinia()
+  app.use(pinia)
+  app.use(router)
+  app.use(ElementPlus)
+  await router.isReady()
+  app.mount('#app')
+}
+
+void bootstrap()

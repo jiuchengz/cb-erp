@@ -20,6 +20,14 @@ const createSchema = z.object({
   type: z.enum(['return', 'exchange', 'refund']),
   reason: z.string().max(256).optional().default(''),
   items: z.array(itemSchema).min(1).max(200),
+}).superRefine((value, ctx) => {
+  if (value.type === 'return' && !value.warehouse_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['warehouse_id'],
+      message: '退货单必须指定入库仓库',
+    });
+  }
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -16,6 +16,7 @@ const adjustSchema = z.object({
   reference_type: z.string().max(64).nullable().optional(),
   reference_id: z.string().uuid().nullable().optional(),
   note: z.string().max(500).nullable().optional(),
+  operation_key: z.string().min(1).max(200),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -38,12 +39,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       p_reference_id: body.reference_id ?? null,
       p_created_by: ctx.userId,
       p_note: body.note ?? null,
+      p_operation_key: body.operation_key,
     });
 
     if (error) {
       const msg = error.message || '';
       if (msg.includes('INSUFFICIENT_INVENTORY')) throw Errors.conflict('库存不足');
       if (msg.includes('INVALID_INVENTORY_TYPE')) throw Errors.badRequest('非法的库存变更类型');
+      if (msg.includes('IDEMPOTENCY_KEY_CONFLICT')) throw Errors.conflict('幂等操作键已被其他库存变更使用');
       throw error;
     }
 

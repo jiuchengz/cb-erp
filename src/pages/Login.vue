@@ -27,7 +27,10 @@ async function onSubmit() {
   error.value = ''
   try {
     await auth.signIn(email.value, password.value)
-    router.push('/dashboard')
+    const redirect = typeof router.currentRoute.value.query.redirect === 'string'
+      ? router.currentRoute.value.query.redirect
+      : '/dashboard'
+    router.push(redirect)
   } catch (e: any) {
     error.value = e?.message || '登录失败'
   } finally {
