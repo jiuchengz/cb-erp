@@ -1816,9 +1816,8 @@ async login() {
                     this.showCaptcha = false;
                     this.captchaInput = '';
                     
-                    // 先加载全量数据再保存
+                    // 登录后仅加载云端数据，不做覆盖式保存（避免用内存旧数据冲掉云端）
                     this.loadAllData();
-                    setTimeout(() => { this.saveAllData(); }, 3000);
                     this.$message.success('登录成功，欢迎 ' + this.currentUser.name);
                     
                 } catch(e) {
