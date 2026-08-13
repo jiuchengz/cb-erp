@@ -20,14 +20,28 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loadProfile() {
     if (!user.value) return
-    const { data } = await supabase
-      .from('profiles')
-      .select('roles(roles(name)), user_roles(roles(role_permissions(permissions(name))))')
-      .eq('id', user.value.id)
-      .single()
-    if (data) {
-      roles.value = []
-      permissions.value = []
+    const uid = user.value.id
+    roles.value = []
+    permissions.value = []
+
+    // 1. 用户角色：user_roles -> roles
+    const { data: userRoles } = await supabase
+      .from('user_roles')
+      .select('role_id, roles(name)')
+      .eq('user_id', uid)
+
+    const roleRows = (userRoles ?? []) as any[]
+    const roleIds = roleRows.map(r => r.role_id).filter(Boolean) as string[]
+    roles.value = roleRows.map(r => r.roles?.name).filter(Boolean) as string[]
+
+    // 2. 角色权限：role_permissions -> permissions
+    if (roleIds.length) {
+      const { data: rolePerms } = await supabase
+        .from('role_permissions')
+        .select('permissions(code)')
+        .in('role_id', roleIds)
+      const codes = ((rolePerms ?? []) as any[]).map(r => r.permissions?.code).filter(Boolean) as string[]
+      permissions.value = Array.from(new Set(codes))
     }
   }
 
