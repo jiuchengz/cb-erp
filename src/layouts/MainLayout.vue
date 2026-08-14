@@ -27,6 +27,9 @@ import { useRouter } from 'vue-router'
 const auth = useAuthStore()
 const router = useRouter()
 
+// 恢复会话并加载角色权限：刷新后必须调用 init()，否则 roles/permissions 为空导致按钮不显示
+auth.init()
+
 const menus = [
   { path: '/dashboard', label: '首页' },
   { path: '/products', label: '商品' },
