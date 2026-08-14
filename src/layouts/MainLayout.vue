@@ -11,6 +11,7 @@
     <div class="main">
       <header class="topbar">
         <span class="user">{{ auth.user?.email }}</span>
+        <span class="debug">{{ auth.debug }}</span>
         <button @click="onSignOut">退出</button>
       </header>
       <main class="content">
@@ -59,6 +60,7 @@ async function onSignOut() {
 .sidebar nav a:hover, .sidebar nav a.router-link-active { background: rgba(255,255,255,.08); color: #fff; }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { height: 56px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 0 20px; background: #fff; border-bottom: 1px solid #e5e6eb; }
+.debug { font-size: 12px; color: #aaa; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar button { padding: 6px 14px; border: 1px solid #dcdfe6; background: #fff; border-radius: 4px; cursor: pointer; }
 .content { flex: 1; padding: 20px; overflow: auto; }
 </style>
