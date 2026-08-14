@@ -1,9 +1,4 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/**/*.ts": {
-      "includeFiles": "node_modules/**"
-    }
-  }
+  "outputDirectory": "dist"
 }
