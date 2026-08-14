@@ -22,16 +22,22 @@ export const useAuthStore = defineStore('auth', () => {
   async function loadProfile() {
     if (!user.value) return
     try {
+      // 确保 access_token 有效：getUser() 会校验当前会话 token，过期则自动刷新
+      const { data: fresh } = await supabase.auth.getUser()
+      if (!fresh.user) {
+        const { error: refreshErr } = await supabase.auth.refreshSession()
+        if (refreshErr) console.warn('[auth] refreshSession 失败:', refreshErr)
+      }
       const { data } = await api.get('/auth/me')
       roles.value = data.roles ?? []
       permissions.value = data.permissions ?? []
       user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
     } catch (e: any) {
       console.error('[auth] loadProfile 失败:', e)
-      // 失败时保留已有权限，避免界面按钮闪失；无权限时给出可见提示
-      if (roles.value.length === 0 && permissions.value.length === 0) {
-        console.warn('[auth] 权限加载失败，请刷新重试或重新登录')
-      }
+      try {
+        const { ElMessage } = await import('element-plus')
+        ElMessage.error('权限加载失败: ' + (e?.response?.data?.error?.message || e?.message || '未知错误，请重新登录'))
+      } catch { /* ignore */ }
     }
   }
 
