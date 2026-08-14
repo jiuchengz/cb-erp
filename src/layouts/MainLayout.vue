@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <aside class="sidebar">
-      <div class="logo">跨境电商 ERP</div>
+      <div class="logo">跨境电商 ERP v2</div>
       <nav>
         <router-link v-for="item in menus" :key="item.path" :to="item.path">
           {{ item.label }}
@@ -11,9 +11,9 @@
     <div class="main">
       <header class="topbar">
         <span class="user">{{ auth.user?.email }}</span>
-        <span class="debug">{{ auth.debug }}</span>
         <button @click="onSignOut">退出</button>
       </header>
+      <div v-if="auth.debug" class="debug-bar">{{ auth.debug }}</div>
       <main class="content">
         <router-view />
       </main>
@@ -60,7 +60,7 @@ async function onSignOut() {
 .sidebar nav a:hover, .sidebar nav a.router-link-active { background: rgba(255,255,255,.08); color: #fff; }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { height: 56px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 0 20px; background: #fff; border-bottom: 1px solid #e5e6eb; }
-.debug { font-size: 12px; color: #aaa; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debug-bar { padding: 8px 20px; background: #fff7e6; color: #8a5b00; border-bottom: 1px solid #ffd591; font-size: 13px; line-height: 1.5; word-break: break-all; }
 .topbar button { padding: 6px 14px; border: 1px solid #dcdfe6; background: #fff; border-radius: 4px; cursor: pointer; }
 .content { flex: 1; padding: 20px; overflow: auto; }
 </style>
