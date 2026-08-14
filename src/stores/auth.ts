@@ -21,12 +21,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loadProfile() {
     if (!user.value) return
-    roles.value = []
-    permissions.value = []
-    const { data } = await api.get('/auth/me')
-    roles.value = data.roles ?? []
-    permissions.value = data.permissions ?? []
-    user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
+    try {
+      const { data } = await api.get('/auth/me')
+      roles.value = data.roles ?? []
+      permissions.value = data.permissions ?? []
+      user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
+    } catch (e: any) {
+      console.error('[auth] loadProfile 失败:', e)
+      // 失败时保留已有权限，避免界面按钮闪失；无权限时给出可见提示
+      if (roles.value.length === 0 && permissions.value.length === 0) {
+        console.warn('[auth] 权限加载失败，请刷新重试或重新登录')
+      }
+    }
   }
 
   async function signIn(email: string, password: string) {
