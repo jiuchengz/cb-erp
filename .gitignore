@@ -6,6 +6,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# API 单函数构建产物
+api/index.cjs
+
 # 日志
 *.log
 npm-debug.log*
