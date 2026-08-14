@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/services/supabase'
+import { api } from '@/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref<Session | null>(null)
@@ -20,29 +21,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loadProfile() {
     if (!user.value) return
-    const uid = user.value.id
     roles.value = []
     permissions.value = []
-
-    // 1. 用户角色：user_roles -> roles
-    const { data: userRoles } = await supabase
-      .from('user_roles')
-      .select('role_id, roles(name)')
-      .eq('user_id', uid)
-
-    const roleRows = (userRoles ?? []) as any[]
-    const roleIds = roleRows.map(r => r.role_id).filter(Boolean) as string[]
-    roles.value = roleRows.map(r => r.roles?.name).filter(Boolean) as string[]
-
-    // 2. 角色权限：role_permissions -> permissions
-    if (roleIds.length) {
-      const { data: rolePerms } = await supabase
-        .from('role_permissions')
-        .select('permissions(code)')
-        .in('role_id', roleIds)
-      const codes = ((rolePerms ?? []) as any[]).map(r => r.permissions?.code).filter(Boolean) as string[]
-      permissions.value = Array.from(new Set(codes))
-    }
+    const { data } = await api.get('/auth/me')
+    roles.value = data.roles ?? []
+    permissions.value = data.permissions ?? []
+    user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
   }
 
   async function signIn(email: string, password: string) {

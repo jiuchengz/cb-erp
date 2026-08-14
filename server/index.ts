@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import authMe from './_handlers/auth';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
 import inventory from './_handlers/inventory';
@@ -31,6 +32,7 @@ interface Route {
 }
 
 const routes: Route[] = [
+  { pattern: /^\/auth\/me$/, handler: authMe },
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },
   { pattern: /^\/after-sales$/, handler: afterSales },
   { pattern: /^\/audit-logs$/, handler: auditLogs },
