@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '@/services/supabase'
+import { supabase, supabaseStorageKey } from '@/services/supabase'
 import { api } from '@/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -14,6 +14,16 @@ export const useAuthStore = defineStore('auth', () => {
   async function init() {
     console.log('[auth:init] 开始, ts=' + new Date().toISOString())
     debug.value = 'getSession...'
+    // 诊断：init 前 localStorage 中 session 键是否存在
+    let rawSession = null
+    try { rawSession = localStorage.getItem(supabaseStorageKey) } catch (e) { console.warn('[auth:init] 读取localStorage异常:', e) }
+    console.log('[auth:init] localStorage键[' + supabaseStorageKey + ']:', rawSession ? '存在,长度=' + rawSession.length : '不存在')
+    if (rawSession) {
+      try {
+        const parsed = JSON.parse(rawSession)
+        console.log('[auth:init] 存储session概要: expires_at=' + parsed?.expires_at + ' now=' + Math.floor(Date.now()/1000) + ' 是否过期=' + (parsed?.expires_at ? (parsed.expires_at < Date.now()/1000 ? '是' : '否') : '未知(无expires_at)'))
+      } catch (e) { console.warn('[auth:init] 解析存储session失败:', e) }
+    }
     let { data } = await supabase.auth.getSession()
     console.log('[auth:init] getSession 结果:', data.session ? '有session' : 'session为空')
     if (!data.session) {
