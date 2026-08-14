@@ -14,8 +14,20 @@ const createSchema = z.object({
   barcode: z.string().max(64).nullable().optional(),
   category: z.string().max(100).nullable().optional(),
   unit_price: z.coerce.number().min(0).optional().default(0),
-  currency: z.string().max(8).optional().default('CNY'),
+  currency: z.string().max(8).optional().default('MXN'),
   status: z.enum(['active', 'inactive']).optional().default('active'),
+  // 老系统 listings 业务字段
+  code: z.string().max(255).nullable().optional(),
+  listing_time: z.string().max(255).nullable().optional(),
+  image_text: z.string().max(255).nullable().optional(),
+  link_id: z.string().max(255).nullable().optional(),
+  unit: z.string().max(50).optional().default('套'),
+  competitor_id: z.string().max(255).nullable().optional(),
+  shipping_mode: z.string().max(20).optional().default('海运'),
+  purchase_cost: z.coerce.number().min(0).optional().default(0),
+  first_leg_freight: z.coerce.number().min(0).optional().default(0),
+  last_mile_delivery_peso: z.coerce.number().min(0).optional().default(0),
+  ml_commission_rate: z.coerce.number().min(0).max(1).optional().default(0.165),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

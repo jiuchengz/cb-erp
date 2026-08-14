@@ -23,10 +23,17 @@
 
     <el-table v-loading="loading" :data="rows" border stripe>
       <el-table-column prop="sku" label="SKU" min-width="140" />
+      <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
       <el-table-column prop="barcode" label="条形码" min-width="140" />
       <el-table-column prop="category" label="分类" min-width="120" />
-      <el-table-column prop="unit_price" label="单价" width="120" align="right" />
+      <el-table-column prop="listing_time" label="上新时间" width="110" />
+      <el-table-column prop="unit" label="单位" width="80" />
+      <el-table-column prop="unit_price" label="售价" width="120" align="right" />
+      <el-table-column prop="purchase_cost" label="采购成本" width="120" align="right" />
+      <el-table-column prop="shipping_mode" label="空海运" width="100" />
+      <el-table-column prop="competitor_id" label="竞品ID" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="link_id" label="链接ID" min-width="120" show-overflow-tooltip />
       <el-table-column prop="currency" label="币种" width="90" />
       <el-table-column prop="status" label="状态" width="90">
         <template #default="{ row }">
@@ -53,13 +60,16 @@
       @size-change="onSizeChange"
     />
 
-    <el-dialog v-model="dialogVisible" title="新增商品" width="520px" destroy-on-close>
-      <el-form :model="form" label-width="80px">
+    <el-dialog v-model="dialogVisible" title="新增商品" width="720px" destroy-on-close>
+      <el-form :model="form" label-width="110px">
         <el-form-item label="SKU" required>
           <el-input v-model="form.sku" placeholder="唯一编码" />
         </el-form-item>
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item label="产品编号">
+          <el-input v-model="form.code" placeholder="老系统 listing code" />
         </el-form-item>
         <el-form-item label="条形码">
           <el-input v-model="form.barcode" />
@@ -67,11 +77,42 @@
         <el-form-item label="分类">
           <el-input v-model="form.category" />
         </el-form-item>
-        <el-form-item label="单价">
+        <el-form-item label="上新时间">
+          <el-input v-model="form.listing_time" placeholder="如 2026-08" />
+        </el-form-item>
+        <el-form-item label="单位">
+          <el-input v-model="form.unit" />
+        </el-form-item>
+        <el-form-item label="售价">
           <el-input-number v-model="form.unit_price" :min="0" :precision="2" :step="1" />
+        </el-form-item>
+        <el-form-item label="采购成本">
+          <el-input-number v-model="form.purchase_cost" :min="0" :precision="2" :step="1" />
+        </el-form-item>
+        <el-form-item label="头程运费">
+          <el-input-number v-model="form.first_leg_freight" :min="0" :precision="2" :step="1" />
+        </el-form-item>
+        <el-form-item label="尾程派送(比索)">
+          <el-input-number v-model="form.last_mile_delivery_peso" :min="0" :precision="2" :step="1" />
+        </el-form-item>
+        <el-form-item label="佣金率">
+          <el-input-number v-model="form.ml_commission_rate" :min="0" :max="1" :precision="4" :step="0.001" />
+        </el-form-item>
+        <el-form-item label="运输方式">
+          <el-select v-model="form.shipping_mode" style="width: 100%">
+            <el-option label="海运" value="海运" />
+            <el-option label="空运" value="空运" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="链接ID">
+          <el-input v-model="form.link_id" />
+        </el-form-item>
+        <el-form-item label="竞品ID">
+          <el-input v-model="form.competitor_id" />
         </el-form-item>
         <el-form-item label="币种">
           <el-select v-model="form.currency" style="width: 100%">
+            <el-option label="MXN" value="MXN" />
             <el-option label="CNY" value="CNY" />
             <el-option label="USD" value="USD" />
             <el-option label="PHP" value="PHP" />
@@ -135,10 +176,20 @@ const saving = ref(false)
 const form = reactive({
   sku: '',
   name: '',
+  code: '',
   barcode: '',
   category: '',
+  listing_time: '',
+  unit: '套',
   unit_price: 0,
-  currency: 'CNY',
+  purchase_cost: 0,
+  first_leg_freight: 0,
+  last_mile_delivery_peso: 0,
+  ml_commission_rate: 0.165,
+  shipping_mode: '海运',
+  link_id: '',
+  competitor_id: '',
+  currency: 'MXN',
   status: 'active',
 })
 
@@ -146,10 +197,20 @@ function openCreate() {
   Object.assign(form, {
     sku: '',
     name: '',
+    code: '',
     barcode: '',
     category: '',
+    listing_time: '',
+    unit: '套',
     unit_price: 0,
-    currency: 'CNY',
+    purchase_cost: 0,
+    first_leg_freight: 0,
+    last_mile_delivery_peso: 0,
+    ml_commission_rate: 0.165,
+    shipping_mode: '海运',
+    link_id: '',
+    competitor_id: '',
+    currency: 'MXN',
     status: 'active',
   })
   dialogVisible.value = true

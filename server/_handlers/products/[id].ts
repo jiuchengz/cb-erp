@@ -15,6 +15,18 @@ const updateSchema = z.object({
   unit_price: z.coerce.number().min(0).optional(),
   currency: z.string().max(8).optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  // 老系统 listings 业务字段
+  code: z.string().max(255).nullable().optional(),
+  listing_time: z.string().max(255).nullable().optional(),
+  image_text: z.string().max(255).nullable().optional(),
+  link_id: z.string().max(255).nullable().optional(),
+  unit: z.string().max(50).optional(),
+  competitor_id: z.string().max(255).nullable().optional(),
+  shipping_mode: z.string().max(20).optional(),
+  purchase_cost: z.coerce.number().min(0).optional(),
+  first_leg_freight: z.coerce.number().min(0).optional(),
+  last_mile_delivery_peso: z.coerce.number().min(0).optional(),
+  ml_commission_rate: z.coerce.number().min(0).max(1).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
