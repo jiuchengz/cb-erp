@@ -18,3 +18,5 @@ npm-debug.log*
 
 # 旧代码归档（保留在 git 中但排除构建）
 legacy
+
+temp/
