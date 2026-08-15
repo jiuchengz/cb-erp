@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import authMe from './_handlers/auth';
+import authPassword from './_handlers/auth/password';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
 import inventory from './_handlers/inventory';
@@ -13,7 +14,11 @@ import shipments from './_handlers/shipments';
 import transfers from './_handlers/transfers';
 import users from './_handlers/users';
 import warehouses from './_handlers/warehouses';
+import dashboard from './_handlers/dashboard';
+import forwarders from './_handlers/forwarders';
+import forwardersId from './_handlers/forwarders/[id]';
 import afterSalesId from './_handlers/after-sales/[id]';
+import inventoryId from './_handlers/inventory/[id]';
 import inventoryAdjust from './_handlers/inventory/adjust';
 import inventoryTransactions from './_handlers/inventory/transactions';
 import productsId from './_handlers/products/[id]';
@@ -22,6 +27,8 @@ import replenishmentId from './_handlers/replenishment/[id]';
 import salesId from './_handlers/sales/[id]';
 import shipmentsId from './_handlers/shipments/[id]';
 import transfersId from './_handlers/transfers/[id]';
+import usersId from './_handlers/users/[id]';
+import warehousesId from './_handlers/warehouses/[id]';
 
 type Handler = (req: VercelRequest, res: VercelResponse) => Promise<unknown> | unknown;
 
@@ -32,12 +39,17 @@ interface Route {
 }
 
 const routes: Route[] = [
+  { pattern: /^\/auth\/password$/, handler: authPassword },
   { pattern: /^\/auth\/me$/, handler: authMe },
+  { pattern: /^\/dashboard\/stats$/, handler: dashboard },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: forwardersId, params: ['id'] },
+  { pattern: /^\/forwarders$/, handler: forwarders },
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },
   { pattern: /^\/after-sales$/, handler: afterSales },
   { pattern: /^\/audit-logs$/, handler: auditLogs },
   { pattern: /^\/inventory\/adjust$/, handler: inventoryAdjust },
   { pattern: /^\/inventory\/transactions$/, handler: inventoryTransactions },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: inventoryId, params: ['id'] },
   { pattern: /^\/inventory$/, handler: inventory },
   { pattern: /^\/permissions$/, handler: permissions },
   { pattern: /^\/products\/([^/]+)$/, handler: productsId, params: ['id'] },
@@ -53,7 +65,9 @@ const routes: Route[] = [
   { pattern: /^\/shipments$/, handler: shipments },
   { pattern: /^\/transfers\/([^/]+)$/, handler: transfersId, params: ['id'] },
   { pattern: /^\/transfers$/, handler: transfers },
+  { pattern: /^\/users\/([^/]+)$/, handler: usersId, params: ['id'] },
   { pattern: /^\/users$/, handler: users },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: warehousesId, params: ['id'] },
   { pattern: /^\/warehouses$/, handler: warehouses },
 ];
 

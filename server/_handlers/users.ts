@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       let query: any = supabase
         .from('profiles')
-        .select('*, user_roles(role_id, roles(slug, name))', { count: 'exact' });
+        .select('*, user_roles(role_id, roles(id, name))', { count: 'exact' });
       const email = typeof req.query.email === 'string' ? req.query.email.trim() : '';
       if (email) query = query.ilike('email', `%${email}%`);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);

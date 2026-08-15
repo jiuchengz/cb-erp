@@ -16,9 +16,12 @@ const AFTER_SALES_FLOW: Record<string, string[]> = {
   REJECTED: [],
 };
 
-const updateSchema = z.object({
-  status: z.enum(['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED']),
-});
+const updateSchema = z
+  .object({
+    status: z.enum(['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED']).optional(),
+    result: z.string().max(512).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.result !== undefined, { message: '至少提供一个更新字段' });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -44,17 +47,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
         throw getErr;
       }
-
-      const allowed = AFTER_SALES_FLOW[before.status] || [];
-      if (!allowed.includes(body.status)) {
-        throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
-      }
       requirePermission(ctx, 'after_sales.write');
 
+      const updatePayload: any = {};
+      if (body.result !== undefined) updatePayload.result = body.result;
+
       const items = before.after_sale_items || [];
+      const isStatusUpdate = body.status !== undefined;
+      const allowed = AFTER_SALES_FLOW[before.status] || [];
+      if (isStatusUpdate && !allowed.includes(body.status!)) {
+        throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
+      }
 
       // 售后退货入库：COMPLETED 且 type=return 时入库
-      if (body.status === 'COMPLETED' && before.status !== 'COMPLETED' && before.type === 'return' && before.warehouse_id) {
+      if (isStatusUpdate && body.status === 'COMPLETED' && before.status !== 'COMPLETED' && before.type === 'return' && before.warehouse_id) {
         for (const it of items) {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
             p_product_id: it.product_id,
@@ -70,11 +76,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      const { data, error } = await supabase.from('after_sales').update({ status: body.status }).eq('id', id).select().single();
+      if (isStatusUpdate) updatePayload.status = body.status;
+      const { data, error } = await supabase.from('after_sales').update(updatePayload).eq('id', id).select().single();
       if (error) throw error;
 
-      await writeAudit(ctx, req, body.status === 'REJECTED' ? 'reject' : body.status, 'after_sale', id, before, data);
+      const action = isStatusUpdate ? (body.status === 'REJECTED' ? 'reject' : body.status!) : 'update';
+      await writeAudit(ctx, req, action, 'after_sale', id, before, data);
       return res.status(200).json({ data });
+    }
+
+    if (req.method === 'DELETE') {
+      requirePermission(ctx, 'after_sales.write');
+      const { data: before, error: getErr } = await supabase.from('after_sales').select('*').eq('id', id).single();
+      if (getErr) {
+        if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
+        throw getErr;
+      }
+      const { error } = await supabase.from('after_sales').delete().eq('id', id);
+      if (error) throw error;
+      await writeAudit(ctx, req, 'delete', 'after_sale', id, before, null);
+      return res.status(200).json({ ok: true });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });

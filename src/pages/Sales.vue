@@ -2,15 +2,24 @@
   <div class="page">
     <div class="page-header">
       <h2>销售管理</h2>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">新增销售单</el-button>
+      <div>
+        <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
+        <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
+          批量删除{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
+        <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">新增销售单</el-button>
+        <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
+      </div>
     </div>
 
     <div class="filters">
       <el-input
-        v-model="query.order_no"
-        placeholder="订单号"
+        v-model="query.keyword"
+        placeholder="订单号/链接ID/产品名"
         clearable
-        style="width: 220px"
+        style="width: 240px"
         @keyup.enter="load"
         @clear="load"
       />
@@ -20,8 +29,39 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe>
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="46" />
+      <el-table-column label="图片" width="70">
+        <template #default="{ row }">
+          <el-image
+            v-if="firstProductImage(row)"
+            :src="firstProductImage(row)"
+            :preview-src-list="[firstProductImage(row)]"
+            preview-teleported
+            fit="cover"
+            style="width: 42px; height: 42px; border-radius: 4px"
+            @error="onImgError"
+          />
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="order_no" label="订单号" min-width="160" />
+      <el-table-column label="链接ID" min-width="110">
+        <template #default="{ row }">{{ firstProductLinkId(row) || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="平台" width="90">
+        <template #default="{ row }">{{ row.platform || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="利润" width="120" align="right">
+        <template #default="{ row }">
+          <template v-if="orderProfit(row).known">
+            <span :style="{ color: orderProfit(row).profit >= 0 ? '#67c23a' : '#f56c6c' }">
+              {{ orderProfit(row).profit >= 0 ? '+' : '' }}{{ orderProfit(row).profit.toFixed(2) }}
+            </span>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="customer_id" label="客户ID" min-width="160" show-overflow-tooltip />
       <el-table-column prop="currency" label="币种" width="80" />
       <el-table-column prop="total_amount" label="总金额" width="120" align="right" />
@@ -133,9 +173,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { exportTable, todayStr } from '../utils/export'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('sales.write'))
@@ -185,10 +227,38 @@ function formatDate(v: string) {
   return new Date(v).toLocaleString('zh-CN', { hour12: false })
 }
 
+function firstProductImage(row: any): string {
+  const it = (row?.sales_order_items || [])[0]
+  const img = it?.products?.image_text
+  return img && isImageUrl(img) ? img : ''
+}
+function firstProductLinkId(row: any): string {
+  const it = (row?.sales_order_items || [])[0]
+  return it?.products?.link_id || ''
+}
+function isImageUrl(v: string): boolean {
+  return typeof v === 'string' && /^(https?:\/\/|\/|data:image\/)/i.test(v)
+}
+function onImgError(e: Event) {
+  ;(e.target as HTMLImageElement).style.visibility = 'hidden'
+}
+// 利润 = 明细小计 - 数量×采购成本；任一明细缺成本则 known=false（显示 '-'）
+function orderProfit(row: any): { profit: number; known: boolean } {
+  const items = row?.sales_order_items || []
+  if (!items.length) return { profit: 0, known: false }
+  let profit = 0
+  for (const it of items) {
+    const cost = it?.products?.purchase_cost
+    if (cost === undefined || cost === null || cost === '') return { profit: 0, known: false }
+    profit += Number(it.subtotal || 0) - Number(it.quantity || 0) * Number(cost)
+  }
+  return { profit, known: true }
+}
+
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, order_no: '', status: '' })
+const query = reactive({ page: 1, pageSize: 20, keyword: '', status: '' })
 
 async function load() {
   loading.value = true
@@ -312,6 +382,186 @@ async function submitFlow() {
   } finally {
     saving.value = false
   }
+}
+
+const selected = ref<any[]>([])
+function onSelectionChange(rows: any[]) {
+  selected.value = rows
+}
+
+const importing = ref(false)
+const importFile = ref<any>(null)
+
+function downloadTpl() {
+  downloadTemplate(
+    [
+      { label: '订单号', sample: 'MLM-SALE-IMP001' },
+      { label: '商品SKU', sample: 'SKU-DLB-001' },
+      { label: '数量', sample: 2 },
+      { label: '单价', sample: 329 },
+      { label: '折扣', sample: 0 },
+      { label: '销售日期', sample: '2026-08-05' },
+      { label: '平台', sample: 'ML' },
+      { label: '客户ID', sample: '' },
+    ],
+    '销售导入模板',
+    '销售批量导入模板.xlsx'
+  )
+}
+
+function triggerImport() {
+  importFile.value?.click()
+}
+
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const { headers, rows } = await readExcelFile(file)
+    const col = buildColMap(headers, {
+      order_no: ['订单号', 'order_no', 'orderNo'],
+      sku: ['商品SKU', 'SKU', '产品编号', '编码', '链接ID', 'code', 'linkId', 'sku'],
+      quantity: ['数量', 'quantity', 'qty'],
+      unit_price: ['单价', 'price', 'unit_price'],
+      discount: ['折扣', 'discount'],
+      customer_id: ['客户ID', 'customer_id', 'customerId'],
+    })
+    if (col.sku === undefined || col.quantity === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品SKU"和"数量"列')
+      return
+    }
+    // 拉取全量商品建立 SKU 映射
+    const skuMap: Record<string, any> = {}
+    let page = 1
+    for (;;) {
+      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+      ;(data.data ?? []).forEach((p: any) => {
+        if (p.sku) skuMap[p.sku] = p
+        if (p.code) skuMap[p.code] = p
+      })
+      if (page * 200 >= (data.total ?? 0)) break
+      page++
+    }
+    // 按订单号分组合并明细
+    const groups = new Map<string, { order_no: string; customer_id: string; rows: any[][] }>()
+    let autoSeq = 0
+    const failures: string[] = []
+    rows.forEach((row, idx) => {
+      const lineNo = idx + 2
+      const sku = cellStr(row, col.sku)
+      const qty = cellNum(row, col.quantity)
+      if (!sku) {
+        failures.push(`第${lineNo}行：商品SKU为空`)
+        return
+      }
+      if (qty <= 0) {
+        failures.push(`第${lineNo}行：数量必须大于 0`)
+        return
+      }
+      const product = skuMap[sku]
+      if (!product) {
+        failures.push(`第${lineNo}行：SKU「${sku}」未匹配到商品`)
+        return
+      }
+      const rawNo = cellStr(row, col.order_no)
+      const orderNo = rawNo || autoNo('SALE-IMP', ++autoSeq)
+      const key = orderNo
+      if (!groups.has(key)) {
+        groups.set(key, { order_no: orderNo, customer_id: cellStr(row, col.customer_id), rows: [] })
+      }
+      groups.get(key)!.rows.push(row)
+    })
+    let ok = 0
+    const errLines: string[] = []
+    for (const g of groups.values()) {
+      const items = g.rows
+        .map((row) => {
+          const product = skuMap[cellStr(row, col.sku)]
+          return {
+            product_id: product.id,
+            quantity: cellNum(row, col.quantity),
+            unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : undefined,
+            discount: col.discount !== undefined ? cellNum(row, col.discount) : undefined,
+          }
+        })
+        .filter((it) => it.quantity > 0)
+      // 超过 200 条明细时按 200 拆分
+      for (let i = 0; i < items.length; i += 200) {
+        const payload: any = { order_no: g.order_no, items: items.slice(i, i + 200) }
+        if (g.customer_id) payload.customer_id = g.customer_id
+        try {
+          await api.post('/sales', payload)
+          ok++
+        } catch (err: any) {
+          errLines.push(`单号${g.order_no}：${err?.response?.data?.error?.message || '创建失败'}`)
+        }
+      }
+    }
+    if (failures.length) errLines.push(...failures)
+    if (errLines.length) {
+      ElMessage.warning(`成功导入 ${ok} 单，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+    } else {
+      ElMessage.success(`成功导入 ${ok} 单`)
+    }
+    load()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+const exporting = ref(false)
+function exportRows() {
+  const columns = [
+    { key: 'order_no', label: '订单号' },
+    { key: 'link_id', label: '链接ID', value: (r: any) => firstProductLinkId(r) },
+    { key: 'platform', label: '平台', value: (r: any) => r.platform || '-' },
+    { key: 'profit', label: '利润', value: (r: any) => (orderProfit(r).known ? orderProfit(r).profit.toFixed(2) : '-') },
+    { key: 'customer_id', label: '客户ID' },
+    { key: 'currency', label: '币种' },
+    { key: 'total_amount', label: '总金额' },
+    { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
+    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+  ]
+  exporting.value = true
+  try {
+    exportTable(rows.value, columns, `销售列表_${todayStr()}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function batchRemove() {
+  if (!selected.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selected.value.length} 个销售单吗？此操作不可恢复。`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  const ids = selected.value.map((r) => r.id)
+  let ok = 0
+  let fail = 0
+  for (const id of ids) {
+    try {
+      await api.delete(`/sales/${id}`)
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
+  selected.value = []
+  load()
 }
 
 onMounted(() => {

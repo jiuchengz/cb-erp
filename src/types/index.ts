@@ -32,6 +32,18 @@ export interface Product extends BaseEntity {
   unit_price: number
   currency: string
   status: string
+  // 老系统 listings 业务字段
+  code: string | null
+  listing_time: string | null
+  image_text: string | null
+  link_id: string | null
+  unit: string | null
+  competitor_id: string | null
+  shipping_mode: string | null
+  purchase_cost: number | null
+  first_leg_freight: number | null
+  last_mile_delivery_peso: number | null
+  ml_commission_rate: number | null
 }
 
 export interface Warehouse extends BaseEntity {

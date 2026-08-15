@@ -31,11 +31,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'sales.read');
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query: any = supabase.from('sales_orders').select('*', { count: 'exact' });
+      let query: any = supabase
+        .from('sales_orders')
+        .select(
+          '*, sales_order_items(product_id, sku, quantity, unit_price, discount, subtotal, products(id, sku, name, link_id, image_text, purchase_cost))',
+          { count: 'exact' }
+        );
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       const orderNo = typeof req.query.order_no === 'string' ? req.query.order_no.trim() : '';
+      const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
       if (status) query = query.eq('status', status);
       if (orderNo) query = query.ilike('order_no', `%${orderNo}%`);
+      if (keyword) {
+        const { data: matchedProducts } = await supabase
+          .from('products')
+          .select('id')
+          .or(`link_id.ilike.%${keyword}%,name.ilike.%${keyword}%`)
+          .limit(500);
+        const productIds = (matchedProducts || []).map((p: any) => p.id);
+        let orderIds: string[] = [];
+        if (productIds.length) {
+          const { data: matchedItems } = await supabase
+            .from('sales_order_items')
+            .select('order_id')
+            .in('product_id', productIds)
+            .limit(1000);
+          orderIds = (matchedItems || []).map((it: any) => it.order_id);
+        }
+        if (orderIds.length) {
+          query = query.or(`order_no.ilike.%${keyword}%,id.in.(${orderIds.join(',')})`);
+        } else {
+          query = query.ilike('order_no', `%${keyword}%`);
+        }
+      }
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;

@@ -28,7 +28,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'replenishment.read');
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query: any = supabase.from('replenishment_orders').select('*', { count: 'exact' });
+      let query: any = supabase
+        .from('replenishment_orders')
+        .select('*, replenishment_order_items(product_id, quantity, products(sku, name))', { count: 'exact' });
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);

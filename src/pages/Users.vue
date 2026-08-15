@@ -2,7 +2,13 @@
   <div class="page">
     <div class="page-header">
       <h2>用户管理</h2>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">新增用户</el-button>
+      <div>
+        <el-button v-if="canManage" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-button v-if="canManage" type="danger" :disabled="!selected.length" @click="batchRemove">
+          批量删除{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
+        <el-button v-if="canManage" type="primary" @click="openCreate">新增用户</el-button>
+      </div>
     </div>
 
     <div class="filters">
@@ -17,7 +23,8 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe>
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="46" />
       <el-table-column prop="email" label="邮箱" min-width="200" />
       <el-table-column prop="name" label="姓名" min-width="140" />
       <el-table-column label="角色" min-width="200">
@@ -35,8 +42,8 @@
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="canDelete && !row.is_super_admin" link type="danger" @click="remove(row)">删除</el-button>
+          <el-button v-if="canManage" link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="canManage && !row.is_super_admin" link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -82,10 +89,10 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { exportTable, todayStr } from '../utils/export'
 
 const auth = useAuthStore()
-const canWrite = computed(() => auth.hasPermission('users.write'))
-const canDelete = computed(() => auth.hasPermission('users.delete'))
+const canManage = computed(() => auth.hasPermission('user.manage'))
 
 function formatDate(v: string) {
   if (!v) return ''
@@ -204,6 +211,64 @@ async function remove(row: any) {
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '删除失败')
   }
+}
+
+const selected = ref<any[]>([])
+function onSelectionChange(rows: any[]) {
+  selected.value = rows
+}
+
+const exporting = ref(false)
+function exportRows() {
+  const columns = [
+    { key: 'email', label: '邮箱' },
+    { key: 'name', label: '姓名' },
+    {
+      key: 'roles',
+      label: '角色',
+      value: (r: any) => (r.roles || []).map((x: any) => x.name).join(', '),
+    },
+    { key: 'is_active', label: '状态', value: (r: any) => (r.is_active ? '启用' : '禁用') },
+    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+  ]
+  exporting.value = true
+  try {
+    exportTable(rows.value, columns, `用户列表_${todayStr()}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function batchRemove() {
+  const deletable = selected.value.filter((r) => !r.is_super_admin)
+  if (!deletable.length) {
+    ElMessage.warning('请选择非超级管理员用户')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${deletable.length} 个用户吗？此操作不可恢复。`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  let ok = 0
+  let fail = 0
+  for (const row of deletable) {
+    try {
+      await api.delete(`/users/${row.id}`)
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
+  selected.value = []
+  load()
 }
 
 onMounted(() => {

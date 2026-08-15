@@ -19,6 +19,7 @@ const createSchema = z.object({
   warehouse_id: z.string().uuid().optional(),
   type: z.enum(['return', 'exchange', 'refund']),
   reason: z.string().max(256).optional().default(''),
+  result: z.string().max(512).optional().default(''),
   items: z.array(itemSchema).min(1).max(200),
 });
 
@@ -53,6 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           warehouse_id: body.warehouse_id || null,
           type: body.type,
           reason: body.reason || null,
+          result: body.result || null,
           created_by: ctx.userId,
         })
         .select()

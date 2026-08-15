@@ -18,9 +18,12 @@ const PURCHASE_FLOW: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-const updateSchema = z.object({
-  status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PURCHASING', 'PARTIAL', 'RECEIVED', 'CANCELLED']),
-});
+const updateSchema = z
+  .object({
+    status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PURCHASING', 'PARTIAL', 'RECEIVED', 'CANCELLED']).optional(),
+    receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  })
+  .refine((v) => v.status !== undefined || v.receive_date !== undefined, { message: '至少提供一个更新字段' });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -50,17 +53,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('采购单不存在');
         throw getErr;
       }
-
-      const allowed = PURCHASE_FLOW[before.status] || [];
-      if (!allowed.includes(body.status)) {
-        throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
-      }
       requirePermission(ctx, 'procurement.write');
 
+      const updatePayload: any = {};
+      if (body.receive_date !== undefined) updatePayload.receive_date = body.receive_date;
+
       const items = before.purchase_order_items || [];
+      const isStatusUpdate = body.status !== undefined;
+      const allowed = PURCHASE_FLOW[before.status] || [];
+      if (isStatusUpdate && !allowed.includes(body.status!)) {
+        throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
+      }
 
       // 采购入库：RECEIVED 时按明细数量入库
-      if (body.status === 'RECEIVED' && before.status !== 'RECEIVED') {
+      if (isStatusUpdate && body.status === 'RECEIVED' && before.status !== 'RECEIVED') {
         for (const it of items) {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
             p_product_id: it.product_id,
@@ -79,11 +85,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      const { data, error } = await supabase.from('purchase_orders').update({ status: body.status }).eq('id', id).select().single();
+      if (isStatusUpdate) updatePayload.status = body.status;
+      const { data, error } = await supabase.from('purchase_orders').update(updatePayload).eq('id', id).select().single();
       if (error) throw error;
 
-      await writeAudit(ctx, req, body.status === 'CANCELLED' ? 'cancel' : body.status, 'purchase_order', id, before, data);
+      const action = isStatusUpdate ? (body.status === 'CANCELLED' ? 'cancel' : body.status!) : 'update';
+      await writeAudit(ctx, req, action, 'purchase_order', id, before, data);
       return res.status(200).json({ data });
+    }
+
+    if (req.method === 'DELETE') {
+      requirePermission(ctx, 'procurement.write');
+      const { data: before, error: getErr } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
+      if (getErr) {
+        if (getErr.code === 'PGRST116') throw Errors.notFound('采购单不存在');
+        throw getErr;
+      }
+      const { error } = await supabase.from('purchase_orders').delete().eq('id', id);
+      if (error) throw error;
+      await writeAudit(ctx, req, 'delete', 'purchase_order', id, before, null);
+      return res.status(200).json({ ok: true });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });

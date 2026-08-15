@@ -17,6 +17,7 @@ const itemSchema = z.object({
 const createSchema = z.object({
   tracking_no: z.string().min(1).max(64),
   carrier: z.string().max(128).optional().default(''),
+  forwarder_id: z.string().uuid().nullable().optional(),
   items: z.array(itemSchema).min(1).max(200),
 });
 
@@ -29,9 +30,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'shipment.read');
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query: any = supabase.from('shipments').select('*', { count: 'exact' });
+      let query: any = supabase.from('shipments').select('*, forwarders(name)', { count: 'exact' });
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
+      const cargoStatus = typeof req.query.cargo_status === 'string' ? req.query.cargo_status.trim() : '';
+      if (cargoStatus) query = query.eq('cargo_status', cargoStatus);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -48,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert({
           tracking_no: body.tracking_no,
           carrier: body.carrier || null,
+          forwarder_id: body.forwarder_id || null,
           created_by: ctx.userId,
         })
         .select()

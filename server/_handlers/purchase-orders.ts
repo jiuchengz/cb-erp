@@ -18,6 +18,7 @@ const createSchema = z.object({
   order_no: z.string().min(1).max(64),
   supplier: z.string().max(128).optional().default(''),
   warehouse_id: z.string().uuid(),
+  receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   items: z.array(itemSchema).min(1).max(200),
 });
 
@@ -59,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           order_no: body.order_no,
           supplier: body.supplier || null,
           warehouse_id: body.warehouse_id,
+          receive_date: body.receive_date || null,
           total_amount: totalAmount,
           created_by: ctx.userId,
         })

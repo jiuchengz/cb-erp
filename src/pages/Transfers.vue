@@ -2,7 +2,16 @@
   <div class="page">
     <div class="page-header">
       <h2>调拨管理</h2>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">新增调拨单</el-button>
+      <div>
+        <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
+        <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
+          批量删除{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
+        <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">新增调拨单</el-button>
+        <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
+      </div>
     </div>
 
     <div class="filters">
@@ -12,7 +21,8 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe>
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="46" />
       <el-table-column prop="transfer_no" label="调拨单号" min-width="160" />
       <el-table-column label="调出仓库" min-width="140">
         <template #default="{ row }">{{ warehouseName(row.from_warehouse_id) }}</template>
@@ -122,9 +132,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { exportTable, todayStr } from '../utils/export'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('transfer.write'))
@@ -308,6 +320,198 @@ async function submitFlow() {
   } finally {
     saving.value = false
   }
+}
+
+const selected = ref<any[]>([])
+function onSelectionChange(rows: any[]) {
+  selected.value = rows
+}
+
+const importing = ref(false)
+const importFile = ref<any>(null)
+
+function downloadTpl() {
+  downloadTemplate(
+    [
+      { label: '调拨单号', sample: 'TR-IMP001' },
+      { label: '调出仓库', sample: '默认仓库' },
+      { label: '调入仓库', sample: '海外仓' },
+      { label: '商品SKU', sample: 'SKU-DLB-001' },
+      { label: '数量', sample: 3 },
+    ],
+    '调拨导入模板',
+    '调拨批量导入模板.xlsx'
+  )
+}
+
+function triggerImport() {
+  importFile.value?.click()
+}
+
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const { headers, rows } = await readExcelFile(file)
+    const col = buildColMap(headers, {
+      transfer_no: ['调拨单号', 'transfer_no', 'transferNo'],
+      from_warehouse: ['调出仓库', '源仓库', 'from_warehouse', 'fromWarehouse'],
+      to_warehouse: ['调入仓库', '目标仓库', 'to_warehouse', 'toWarehouse'],
+      sku: ['商品SKU', 'SKU', '产品编码', '编码', 'code', 'sku'],
+      quantity: ['数量', 'quantity', 'qty'],
+    })
+    if (col.from_warehouse === undefined || col.to_warehouse === undefined || col.sku === undefined || col.quantity === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"调出仓库"、"调入仓库"、"商品SKU"和"数量"列')
+      return
+    }
+    const skuMap: Record<string, any> = {}
+    let page = 1
+    for (;;) {
+      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+      ;(data.data ?? []).forEach((p: any) => {
+        if (p.sku) skuMap[p.sku] = p
+        if (p.code) skuMap[p.code] = p
+      })
+      if (page * 200 >= (data.total ?? 0)) break
+      page++
+    }
+    const whNameMap: Record<string, any> = {}
+    warehouses.value.forEach((w) => {
+      whNameMap[w.name] = w
+      whNameMap[w.id] = w
+    })
+    const groups = new Map<string, { transfer_no: string; from_id: string; to_id: string; rows: any[][] }>()
+    let autoSeq = 0
+    const failures: string[] = []
+    rows.forEach((row, idx) => {
+      const lineNo = idx + 2
+      const fromName = cellStr(row, col.from_warehouse)
+      const toName = cellStr(row, col.to_warehouse)
+      const sku = cellStr(row, col.sku)
+      const qty = cellNum(row, col.quantity)
+      if (!fromName || !toName) {
+        failures.push(`第${lineNo}行：调出/调入仓库不能为空`)
+        return
+      }
+      if (!sku) {
+        failures.push(`第${lineNo}行：商品SKU为空`)
+        return
+      }
+      if (qty <= 0) {
+        failures.push(`第${lineNo}行：数量必须大于 0`)
+        return
+      }
+      const product = skuMap[sku]
+      if (!product) {
+        failures.push(`第${lineNo}行：SKU「${sku}」未匹配到商品`)
+        return
+      }
+      const fromWh = whNameMap[fromName]
+      const toWh = whNameMap[toName]
+      if (!fromWh) {
+        failures.push(`第${lineNo}行：调出仓库「${fromName}」未匹配`)
+        return
+      }
+      if (!toWh) {
+        failures.push(`第${lineNo}行：调入仓库「${toName}」未匹配`)
+        return
+      }
+      if (fromWh.id === toWh.id) {
+        failures.push(`第${lineNo}行：调出与调入仓库不能相同`)
+        return
+      }
+      const rawNo = cellStr(row, col.transfer_no)
+      const transferNo = rawNo || autoNo('TR-IMP', ++autoSeq)
+      const key = `${transferNo}|${fromWh.id}|${toWh.id}`
+      if (!groups.has(key)) {
+        groups.set(key, { transfer_no: transferNo, from_id: fromWh.id, to_id: toWh.id, rows: [] })
+      }
+      groups.get(key)!.rows.push(row)
+    })
+    let ok = 0
+    const errLines: string[] = []
+    for (const g of groups.values()) {
+      const items = g.rows
+        .map((row) => {
+          const product = skuMap[cellStr(row, col.sku)]
+          return { product_id: product.id, quantity: cellNum(row, col.quantity) }
+        })
+        .filter((it) => it.quantity > 0)
+      for (let i = 0; i < items.length; i += 200) {
+        try {
+          await api.post('/transfers', {
+            transfer_no: g.transfer_no,
+            from_warehouse_id: g.from_id,
+            to_warehouse_id: g.to_id,
+            items: items.slice(i, i + 200),
+          })
+          ok++
+        } catch (err: any) {
+          errLines.push(`单号${g.transfer_no}：${err?.response?.data?.error?.message || '创建失败'}`)
+        }
+      }
+    }
+    if (failures.length) errLines.push(...failures)
+    if (errLines.length) {
+      ElMessage.warning(`成功导入 ${ok} 单，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+    } else {
+      ElMessage.success(`成功导入 ${ok} 单`)
+    }
+    load()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+const exporting = ref(false)
+function exportRows() {
+  const columns = [
+    { key: 'transfer_no', label: '调拨单号' },
+    { key: 'from_warehouse_id', label: '调出仓库', value: (r: any) => warehouseName(r.from_warehouse_id) },
+    { key: 'to_warehouse_id', label: '调入仓库', value: (r: any) => warehouseName(r.to_warehouse_id) },
+    { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
+    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+  ]
+  exporting.value = true
+  try {
+    exportTable(rows.value, columns, `调拨列表_${todayStr()}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function batchRemove() {
+  if (!selected.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selected.value.length} 个调拨单吗？此操作不可恢复。`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  const ids = selected.value.map((r) => r.id)
+  let ok = 0
+  let fail = 0
+  for (const id of ids) {
+    try {
+      await api.delete(`/transfers/${id}`)
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
+  selected.value = []
+  load()
 }
 
 onMounted(() => {

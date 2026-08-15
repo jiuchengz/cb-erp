@@ -69,6 +69,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ data });
     }
 
+    if (req.method === 'DELETE') {
+      requirePermission(ctx, 'sales.write');
+      const { data: before, error: getErr } = await supabase.from('sales_orders').select('*').eq('id', id).single();
+      if (getErr) {
+        if (getErr.code === 'PGRST116') throw Errors.notFound('销售单不存在');
+        throw getErr;
+      }
+      const { error } = await supabase.from('sales_orders').delete().eq('id', id);
+      if (error) throw error;
+      await writeAudit(ctx, req, 'delete', 'sales_order', id, before, null);
+      return res.status(200).json({ ok: true });
+    }
+
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
   } catch (e) {
     return handleError(res, e);

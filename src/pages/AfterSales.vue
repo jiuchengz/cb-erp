@@ -2,7 +2,13 @@
   <div class="page">
     <div class="page-header">
       <h2>售后管理</h2>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">新增售后单</el-button>
+      <div>
+        <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
+          批量删除{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">新增售后单</el-button>
+      </div>
     </div>
 
     <div class="filters">
@@ -12,7 +18,8 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe>
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="46" />
       <el-table-column prop="order_no" label="售后单号" min-width="160" />
       <el-table-column label="类型" width="100">
         <template #default="{ row }">
@@ -23,6 +30,9 @@
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
       </el-table-column>
       <el-table-column prop="reason" label="原因" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="result" label="处理结果" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.result || '-' }}</template>
+      </el-table-column>
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
@@ -77,6 +87,9 @@
         <el-form-item label="原因">
           <el-input v-model="form.reason" type="textarea" :rows="2" maxlength="256" />
         </el-form-item>
+        <el-form-item label="处理结果">
+          <el-input v-model="form.result" type="textarea" :rows="2" maxlength="512" placeholder="处理结果（可选）" />
+        </el-form-item>
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
@@ -104,6 +117,18 @@
         <el-descriptions-item label="仓库">{{ warehouseName(detail.warehouse_id) }}</el-descriptions-item>
         <el-descriptions-item label="关联销售单ID" :span="2">{{ detail.sales_order_id || '-' }}</el-descriptions-item>
         <el-descriptions-item label="原因" :span="2">{{ detail.reason || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="处理结果" :span="2">
+          <el-input
+            v-if="canWrite"
+            v-model="detail.result"
+            type="textarea"
+            :rows="2"
+            maxlength="512"
+            placeholder="填写处理结果"
+            @change="saveResult(detail)"
+          />
+          <span v-else>{{ detail.result || '-' }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
       <el-table v-if="detail" :data="detail.after_sale_items || []" border stripe size="small" style="margin-top: 12px">
@@ -133,9 +158,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { exportTable, todayStr } from '../utils/export'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('after_sales.write'))
@@ -234,6 +260,7 @@ const form = reactive({
   sales_order_id: '',
   warehouse_id: '',
   reason: '',
+  result: '',
   items: [] as any[],
 })
 
@@ -250,6 +277,7 @@ function openCreate() {
   form.sales_order_id = ''
   form.warehouse_id = ''
   form.reason = ''
+  form.result = ''
   form.items = []
   addItem()
   createVisible.value = true
@@ -271,6 +299,7 @@ async function save() {
     reason: form.reason,
     items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity })),
   }
+  if (form.result) payload.result = form.result
   if (form.sales_order_id) payload.sales_order_id = form.sales_order_id
   if (form.warehouse_id) payload.warehouse_id = form.warehouse_id
   saving.value = true
@@ -321,6 +350,71 @@ async function submitFlow() {
   } finally {
     saving.value = false
   }
+}
+
+const selected = ref<any[]>([])
+function onSelectionChange(rows: any[]) {
+  selected.value = rows
+}
+
+// 处理结果内联保存：PATCH /after-sales/[id]
+async function saveResult(row: any) {
+  try {
+    const { data } = await api.patch(`/after-sales/${row.id}`, { result: row.result || '' })
+    if (data?.data) Object.assign(row, data.data)
+    ElMessage.success('已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+    load()
+  }
+}
+
+const exporting = ref(false)
+function exportRows() {
+  const columns = [
+    { key: 'order_no', label: '售后单号' },
+    { key: 'type', label: '类型', value: (r: any) => typeLabel(r.type) },
+    { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
+    { key: 'reason', label: '原因' },
+    { key: 'result', label: '处理结果', value: (r: any) => r.result || '-' },
+    { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
+    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+  ]
+  exporting.value = true
+  try {
+    exportTable(rows.value, columns, `售后列表_${todayStr()}.xlsx`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function batchRemove() {
+  if (!selected.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selected.value.length} 个售后单吗？此操作不可恢复。`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  const ids = selected.value.map((r) => r.id)
+  let ok = 0
+  let fail = 0
+  for (const id of ids) {
+    try {
+      await api.delete(`/after-sales/${id}`)
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
+  selected.value = []
+  load()
 }
 
 onMounted(() => {
