@@ -29,7 +29,7 @@
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
-          <button class="topbar-btn" title="操作日志" @click="openLogPanel">
+          <button class="topbar-btn" title="日志" @click="goLogs">
             <el-icon><document /></el-icon>
             <span v-if="localLogs.length" class="log-badge">{{ localLogs.length }}</span>
           </button>
@@ -72,52 +72,17 @@
         <el-button type="primary" size="default" :loading="pwdSaving" @click="onChangePassword">确认修改</el-button>
       </template>
     </el-dialog>
-
-    <!-- 操作日志浮动面板 -->
-    <el-drawer v-model="logPanelVisible" title="操作日志" size="420px" append-to-body>
-      <el-tabs v-model="logTab">
-        <el-tab-pane :label="`本地日志 (${localLogs.length})`" name="local">
-          <div class="log-toolbar">
-            <el-button size="small" @click="clearLocalLogs">清空本地日志</el-button>
-          </div>
-          <div class="log-list">
-            <div v-for="(log, i) in localLogs" :key="'l' + i" class="log-entry">
-              <span class="log-time">{{ log.time }}</span>
-              <el-tag :type="logTypeTag(log.type)" size="small">{{ logTypeLabel(log.type) }}</el-tag>
-              <span class="log-msg">{{ log.msg }}</span>
-              <span v-if="log.detail" class="log-detail">{{ log.detail }}</span>
-            </div>
-            <div v-if="!localLogs.length" class="log-empty">暂无本地操作日志</div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane :label="`服务端审计日志 (${serverTotal})`" name="server">
-          <div class="log-toolbar">
-            <el-button size="small" :loading="serverLoading" @click="loadServerLogs">刷新</el-button>
-          </div>
-          <div v-if="serverError" class="log-error">{{ serverError }}</div>
-          <div class="log-list">
-            <div v-for="(log, i) in serverLogs" :key="'s' + i" class="log-entry">
-              <span class="log-time">{{ formatServerTime(log.created_at) }}</span>
-              <el-tag :type="serverActionTag(log.action)" size="small">{{ log.action }}</el-tag>
-              <span class="log-msg">{{ log.resource_type }} #{{ log.resource_id ?? '-' }}</span>
-              <span v-if="log.user_email" class="log-detail">{{ log.user_email }}</span>
-            </div>
-            <div v-if="!serverLogs.length && !serverLoading && !serverError" class="log-empty">暂无服务端审计日志</div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Document, Moon, Search, Sunny } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
-import { addLog, clearLogs, getLogs, type OpLogEntry } from '@/utils/log'
+import { addLog, getLogs, type OpLogEntry } from '@/utils/log'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -137,6 +102,7 @@ const menus = [
   { path: '/after-sales', label: '售后' },
   { path: '/replenishment', label: '补货' },
   { path: '/users', label: '用户' },
+  { path: '/logs', label: '日志' },
   { path: '/settings', label: '设置' }
 ]
 
@@ -187,68 +153,21 @@ function onGlobalKeydown(e: KeyboardEvent) {
 }
 onMounted(() => {
   isDark.value = document.documentElement.classList.contains('dark')
+  refreshLocalLogs()
   window.addEventListener('keydown', onGlobalKeydown)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
 })
 
-/* ---------- 操作日志面板 ---------- */
-const logPanelVisible = ref(false)
-const logTab = ref<'local' | 'server'>('local')
-const localLogs = ref<OpLogEntry[]>([])
-const serverLogs = ref<any[]>([])
-const serverTotal = ref(0)
-const serverLoading = ref(false)
-const serverError = ref('')
+/* ---------- 日志入口 ---------- */
+const localLogs = ref<OpLogEntry[]>(getLogs())
 
 function refreshLocalLogs() {
   localLogs.value = getLogs()
 }
-function openLogPanel() {
-  logPanelVisible.value = true
-  logTab.value = 'local'
-  refreshLocalLogs()
-}
-watch(logTab, (t) => {
-  if (t === 'server') loadServerLogs()
-})
-watch(logPanelVisible, (v) => {
-  if (v) refreshLocalLogs()
-})
-
-function clearLocalLogs() {
-  clearLogs()
-  refreshLocalLogs()
-  ElMessage.success('本地日志已清空')
-}
-function logTypeTag(t: OpLogEntry['type']) {
-  return t === 'success' ? 'success' : t === 'warn' ? 'warning' : t === 'error' ? 'danger' : 'info'
-}
-function logTypeLabel(t: OpLogEntry['type']) {
-  return t === 'success' ? '成功' : t === 'warn' ? '警告' : t === 'error' ? '错误' : '信息'
-}
-async function loadServerLogs() {
-  serverLoading.value = true
-  serverError.value = ''
-  try {
-    const { data } = await api.get('/audit-logs', { params: { page: 1, pageSize: 50 } })
-    serverLogs.value = data.data ?? []
-    serverTotal.value = data.total ?? 0
-  } catch (e: any) {
-    serverError.value = e?.response?.data?.error?.message || '加载审计日志失败（可能需要 system.manage 权限）'
-  } finally {
-    serverLoading.value = false
-  }
-}
-function formatServerTime(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
-}
-function serverActionTag(action: string) {
-  if (action?.toLowerCase().includes('create') || action?.toLowerCase().includes('insert')) return 'success'
-  if (action?.toLowerCase().includes('delete') || action?.toLowerCase().includes('remove')) return 'danger'
-  return 'info'
+function goLogs() {
+  router.push('/logs')
 }
 
 /* ---------- 用户菜单 ---------- */
@@ -339,14 +258,4 @@ html.dark .debug-bar { background: #3a2f14; color: #e6c97a; border-bottom-color:
 .user { font-size: 14px; color: var(--color-text); }
 .arrow { font-size: 12px; color: var(--color-muted); }
 .content { flex: 1; padding: 20px; overflow: auto; }
-
-/* 日志面板 */
-.log-toolbar { margin-bottom: 10px; }
-.log-list { max-height: 60vh; overflow: auto; }
-.log-entry { padding: 8px 10px; border: 1px solid var(--color-border-light); border-radius: 6px; margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
-.log-time { color: var(--color-muted); font-size: 12px; width: 100%; }
-.log-msg { color: var(--color-text); }
-.log-detail { color: var(--color-muted); width: 100%; font-size: 12px; }
-.log-empty { text-align: center; color: var(--color-muted); padding: 30px 0; font-size: 13px; }
-.log-error { color: #e5484d; font-size: 13px; padding: 10px; background: var(--color-fill); border-radius: 6px; margin-bottom: 10px; }
 </style>

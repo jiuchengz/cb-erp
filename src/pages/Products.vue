@@ -3,11 +3,14 @@
     <div class="page-header">
       <h2>商品管理</h2>
       <div>
+        <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
         <el-button v-if="canDelete" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
+        <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增商品</el-button>
+        <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
     </div>
 
@@ -179,6 +182,7 @@ import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { exportTable, todayStr } from '../utils/export'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 import { addLog } from '../utils/log'
 
 const auth = useAuthStore()
@@ -430,6 +434,165 @@ async function batchRemove() {
   addLog('info', '批量删除商品', `成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
   selected.value = []
   load()
+}
+
+/* ---------- 下载模板 / 批量导入 ---------- */
+const importing = ref(false)
+const importFile = ref<HTMLInputElement>()
+
+function downloadTpl() {
+  downloadTemplate(
+    [
+      { label: 'SKU', sample: 'SKU-NEW-001' },
+      { label: '名称', sample: '示例商品' },
+      { label: '产品编号', sample: 'LC-2026-001' },
+      { label: '条形码', sample: '6901234567890' },
+      { label: '分类', sample: '家居' },
+      { label: '上新时间', sample: '2026-08' },
+      { label: '单位', sample: '套' },
+      { label: '售价', sample: 329 },
+      { label: '采购成本', sample: 120 },
+      { label: '头程运费', sample: 15 },
+      { label: '尾程派送(比索)', sample: 0 },
+      { label: '佣金率', sample: 0.165 },
+      { label: '运输方式', sample: '海运' },
+      { label: '链接ID', sample: 'M20260815' },
+      { label: '竞品ID', sample: '' },
+      { label: '币种', sample: 'MXN' },
+      { label: '状态', sample: '启用' },
+      { label: '图片链接', sample: '' },
+    ],
+    '商品导入模板',
+    '商品批量导入模板.xlsx'
+  )
+}
+
+function triggerImport() {
+  importFile.value?.click()
+}
+
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const { headers, rows } = await readExcelFile(file)
+    const col = buildColMap(headers, {
+      sku: ['SKU', 'sku', '编码'],
+      name: ['名称', 'name', '商品名称'],
+      code: ['产品编号', 'code', 'listing code'],
+      barcode: ['条形码', 'barcode', '条码'],
+      category: ['分类', 'category'],
+      listing_time: ['上新时间', 'listing_time'],
+      unit: ['单位', 'unit'],
+      unit_price: ['售价', 'unit_price', '价格'],
+      purchase_cost: ['采购成本', 'purchase_cost'],
+      first_leg_freight: ['头程运费', 'first_leg_freight'],
+      last_mile_delivery_peso: ['尾程派送(比索)', '尾程派送', 'last_mile_delivery_peso'],
+      ml_commission_rate: ['佣金率', 'ml_commission_rate'],
+      shipping_mode: ['运输方式', 'shipping_mode', '空海运'],
+      link_id: ['链接ID', 'link_id'],
+      competitor_id: ['竞品ID', 'competitor_id'],
+      currency: ['币种', 'currency'],
+      status: ['状态', 'status'],
+      image_text: ['图片链接', 'image_text', '图片'],
+    })
+    if (col.sku === undefined || col.name === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"SKU"和"名称"列')
+      return
+    }
+    // 拉取全量已存在 SKU，避免重复创建
+    const exist = new Set<string>()
+    let page = 1
+    for (;;) {
+      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+      ;(data.data ?? []).forEach((p: any) => {
+        if (p.sku) exist.add(p.sku)
+      })
+      if (page * 200 >= (data.total ?? 0)) break
+      page++
+    }
+    const seen = new Set<string>()
+    const failures: string[] = []
+    const payloads: Record<string, unknown>[] = []
+    rows.forEach((row, idx) => {
+      const lineNo = idx + 2
+      const sku = cellStr(row, col.sku)
+      const name = cellStr(row, col.name)
+      if (!sku) {
+        failures.push(`第${lineNo}行：SKU为空`)
+        return
+      }
+      if (!name) {
+        failures.push(`第${lineNo}行：名称为空`)
+        return
+      }
+      if (exist.has(sku) || seen.has(sku)) {
+        failures.push(`第${lineNo}行：SKU「${sku}」已存在，跳过`)
+        return
+      }
+      seen.add(sku)
+      const statusRaw = cellStr(row, col.status)
+      payloads.push({
+        sku,
+        name,
+        code: cellStr(row, col.code),
+        barcode: cellStr(row, col.barcode),
+        category: cellStr(row, col.category),
+        listing_time: cellStr(row, col.listing_time),
+        unit: cellStr(row, col.unit) || '套',
+        unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
+        purchase_cost: col.purchase_cost !== undefined ? cellNum(row, col.purchase_cost) : 0,
+        first_leg_freight: col.first_leg_freight !== undefined ? cellNum(row, col.first_leg_freight) : 0,
+        last_mile_delivery_peso:
+          col.last_mile_delivery_peso !== undefined ? cellNum(row, col.last_mile_delivery_peso) : 0,
+        ml_commission_rate:
+          col.ml_commission_rate !== undefined ? cellNum(row, col.ml_commission_rate, 0.165) : 0.165,
+        shipping_mode: cellStr(row, col.shipping_mode) || '海运',
+        link_id: cellStr(row, col.link_id),
+        competitor_id: cellStr(row, col.competitor_id),
+        currency: cellStr(row, col.currency) || 'MXN',
+        status: statusRaw === '停用' || statusRaw === 'inactive' ? 'inactive' : 'active',
+        image_text: cellStr(row, col.image_text),
+      })
+    })
+    let ok = 0
+    const errLines: string[] = []
+    for (const payload of payloads) {
+      try {
+        await api.post('/products', payload)
+        ok++
+      } catch (err: any) {
+        errLines.push(`SKU ${payload.sku}：${err?.response?.data?.error?.message || '创建失败'}`)
+      }
+    }
+    const summary = `导入完成：成功 ${ok} 条${failures.length ? `，跳过 ${failures.length} 条` : ''}${
+      errLines.length ? `，失败 ${errLines.length} 条` : ''
+    }`
+    ElMessage.success(summary)
+    addLog('info', '批量导入商品', summary)
+    if (failures.length) {
+      ElMessage.warning(
+        '跳过明细：\n' +
+          failures.slice(0, 10).join('\n') +
+          (failures.length > 10 ? `\n… 共 ${failures.length} 条` : '')
+      )
+    }
+    if (errLines.length) {
+      ElMessage.error(
+        '失败明细：\n' +
+          errLines.slice(0, 10).join('\n') +
+          (errLines.length > 10 ? `\n… 共 ${errLines.length} 条` : '')
+      )
+    }
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
 }
 
 onMounted(() => {
