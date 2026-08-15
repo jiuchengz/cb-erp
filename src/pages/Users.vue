@@ -67,8 +67,13 @@
         <el-form-item label="姓名" required>
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item v-if="!editing" label="密码" required>
-          <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" />
+        <el-form-item :label="editing ? '新密码' : '密码'" :required="!editing">
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="editing ? '留空则不修改密码' : '至少 6 位'"
+          />
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.role_ids" multiple placeholder="选择角色" style="width: 100%">
@@ -171,6 +176,7 @@ async function save() {
       await api.patch(`/users/${editing.value.id}`, {
         name: form.name,
         role_ids: form.role_ids,
+        ...(form.password ? { password: form.password } : {}),
       })
     } else {
       if (!form.password) {
