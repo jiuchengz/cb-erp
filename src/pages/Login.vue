@@ -27,6 +27,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { addLog } from '@/utils/log'
 
@@ -192,8 +193,15 @@ async function onSubmit() {
         /* ignore */
       }
     }
-    router.push('/dashboard')
     addLog('success', '登录系统', email.value.trim())
+    // 成功弹窗：点击确定后再跳转 dashboard；Esc/关闭时也放行
+    try {
+      await ElMessageBox.alert('欢迎回来，登录成功！', '登录成功', { type: 'success', confirmButtonText: '确定' })
+    } catch {
+      /* ignore */
+    } finally {
+      router.push('/dashboard')
+    }
   } catch (e: any) {
     const msg = e?.message || '登录失败'
     // Supabase 凭据错误统一提示为 用户名或密码错误
@@ -202,8 +210,16 @@ async function onSubmit() {
       const r = recordFail(email.value)
       if (r.locked) {
         error.value = '密码错误 ' + MAX_FAILS + ' 次，账户已锁定 15 分钟'
+        ElMessageBox.alert('密码错误 5 次，账户已锁定 15 分钟', '登录失败', { type: 'error', confirmButtonText: '确定' }).catch(
+          () => {
+            /* ignore */
+          }
+        )
       } else {
         error.value = '用户名或密码错误（' + r.fails + '/' + MAX_FAILS + '）'
+        ElMessageBox.alert('密码错误或用户名错误', '登录失败', { type: 'error', confirmButtonText: '确定' }).catch(() => {
+          /* ignore */
+        })
       }
     } else {
       error.value = msg
