@@ -38,7 +38,7 @@
             <template #content>
               <img :src="row.image_text" class="img-preview" referrerpolicy="no-referrer" @error="onImgError($event)" />
             </template>
-            <img :src="row.image_text" class="product-thumb" referrerpolicy="no-referrer" @error="onImgError($event)" />
+            <img :src="row.image_text" class="product-thumb" referrerpolicy="no-referrer" @error="onImgError($event)" @click="onPreviewImage(row.image_text)" />
           </el-tooltip>
           <div v-else-if="row.image_text" class="img-text-cell" :title="row.image_text">{{ row.image_text }}</div>
           <div v-else class="img-fallback">无图片</div>
@@ -188,6 +188,12 @@
         <el-button type="primary" @click="downloadImportResult">下载明细</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="previewVisible" title="图片预览" width="auto" align-center>
+      <div class="preview-box">
+        <img :src="previewUrl" class="preview-img" referrerpolicy="no-referrer" @error="onImgError($event)" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -210,6 +216,8 @@ const canDelete = computed(() => auth.hasPermission('products.delete'))
 const rows = ref<Product[]>([])
 const total = ref(0)
 const loading = ref(false)
+const previewVisible = ref(false)
+const previewUrl = ref('')
 const query = reactive({ page: 1, pageSize: 20, search: '', status: '' })
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
@@ -241,6 +249,11 @@ function onImgError(e: Event) {
     encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="#F5F7FA" width="40" height="40"/><text x="20" y="24" text-anchor="middle" font-size="12" fill="#C0C4CC">?</text></svg>'
     )
+}
+
+function onPreviewImage(url: string) {
+  previewUrl.value = url
+  previewVisible.value = true
 }
 
 async function load() {
@@ -686,6 +699,20 @@ onMounted(() => {
 .img-preview {
   max-width: 280px;
   max-height: 280px;
+  display: block;
+}
+.preview-box {
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.preview-img {
+  max-width: 100px;
+  max-height: 100px;
+  object-fit: contain;
   display: block;
 }
 .img-text-cell {
