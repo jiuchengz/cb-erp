@@ -1,6 +1,54 @@
 <template>
   <div class="page">
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane label="界面外观" name="appearance">
+        <div class="page-header">
+          <h2>界面外观</h2>
+        </div>
+        <div class="appearance-card">
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">玻璃透明度</div>
+              <div class="appearance-desc">调节侧边栏、卡片、弹窗等毛玻璃面板的透明程度，数值越大越不透明</div>
+            </div>
+            <div class="appearance-control">
+              <el-slider v-model="glassOpacity" :min="15" :max="75" :step="1" style="flex: 1" :format-tooltip="(v: number) => v + '%'" @input="applyOpacity" />
+              <span class="opacity-value">{{ glassOpacity }}%</span>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">背景配色</div>
+              <div class="appearance-desc">选择整体背景渐变与光斑配色方案</div>
+            </div>
+          </div>
+          <div class="scheme-grid">
+            <div
+              v-for="s in schemes"
+              :key="s.id"
+              class="scheme-item"
+              :class="{ active: activeScheme === s.id }"
+              @click="applyScheme(s)"
+            >
+              <div class="scheme-preview" :style="{ background: s.preview }"></div>
+              <span class="scheme-name">{{ s.label }}</span>
+              <span v-if="activeScheme === s.id" class="scheme-check">✓</span>
+            </div>
+          </div>
+
+          <div class="appearance-row custom-row">
+            <div class="appearance-info">
+              <div class="appearance-title">自定义强调色</div>
+              <div class="appearance-desc">调节按钮、选中态等强调色（点击色块取色）</div>
+            </div>
+            <el-color-picker v-model="accentColor" @change="applyAccent" />
+          </div>
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="角色管理" name="roles">
         <div class="page-header">
           <h2>角色管理</h2>
@@ -160,6 +208,135 @@ function onTabChange(name: string | number) {
   if (name === 'permissions') loadPermissions()
   if (name === 'warehouses') loadWarehouses()
   if (name === 'audit') loadAudit()
+}
+
+/* ---------- 界面外观（玻璃透明度 / 背景配色 / 强调色） ---------- */
+const APPEARANCE_KEY = 'cb_appearance'
+const glassOpacity = ref(42)
+const activeScheme = ref('aurora')
+const accentColor = ref('#3b82f6')
+
+interface AppearanceScheme {
+  id: string
+  label: string
+  colors: string[]
+  glow: string[]
+  preview: string
+}
+
+const schemes: AppearanceScheme[] = [
+  {
+    id: 'aurora',
+    label: '极光蓝紫',
+    colors: ['#7dd3fc', '#c4b5fd', '#f9a8d4', '#fde68a'],
+    glow: ['#f472b6', '#60a5fa'],
+    preview: 'linear-gradient(135deg,#7dd3fc,#c4b5fd,#f9a8d4,#fde68a)',
+  },
+  {
+    id: 'mint',
+    label: '薄荷青绿',
+    colors: ['#99f6e4', '#a5f3fc', '#bae6fd', '#d9f99d'],
+    glow: ['#34d399', '#38bdf8'],
+    preview: 'linear-gradient(135deg,#99f6e4,#a5f3fc,#bae6fd,#d9f99d)',
+  },
+  {
+    id: 'sunset',
+    label: '落日暖橙',
+    colors: ['#fecaca', '#fed7aa', '#fde68a', '#fbcfe8'],
+    glow: ['#f97316', '#f43f5e'],
+    preview: 'linear-gradient(135deg,#fecaca,#fed7aa,#fde68a,#fbcfe8)',
+  },
+  {
+    id: 'ocean',
+    label: '深海静谧',
+    colors: ['#bfdbfe', '#c7d2fe', '#e0e7ff', '#a5b4fc'],
+    glow: ['#3b82f6', '#6366f1'],
+    preview: 'linear-gradient(135deg,#bfdbfe,#c7d2fe,#e0e7ff,#a5b4fc)',
+  },
+  {
+    id: 'mono',
+    label: '云灰简约',
+    colors: ['#e2e8f0', '#f1f5f9', '#cbd5e1', '#e2e8f0'],
+    glow: ['#94a3b8', '#64748b'],
+    preview: 'linear-gradient(135deg,#e2e8f0,#f1f5f9,#cbd5e1,#e2e8f0)',
+  },
+]
+
+function applyOpacity(v: number | number[]) {
+  const val = typeof v === 'number' ? v : v[0] ?? 42
+  glassOpacity.value = val
+  document.documentElement.style.setProperty('--glass-alpha', String(val / 100))
+  saveAppearance()
+}
+
+function applyScheme(s: AppearanceScheme) {
+  activeScheme.value = s.id
+  const root = document.documentElement.style
+  root.setProperty('--bg-c1', s.colors[0])
+  root.setProperty('--bg-c2', s.colors[1])
+  root.setProperty('--bg-c3', s.colors[2])
+  root.setProperty('--bg-c4', s.colors[3])
+  root.setProperty('--glow-c1', s.glow[0])
+  root.setProperty('--glow-c2', s.glow[1])
+  saveAppearance()
+}
+
+function applyAccent(c: string | null) {
+  if (!c) return
+  accentColor.value = c
+  document.documentElement.style.setProperty('--accent', c)
+  document.documentElement.style.setProperty('--color-primary', c)
+  saveAppearance()
+}
+
+function saveAppearance() {
+  const s = schemes.find((x) => x.id === activeScheme.value) ?? schemes[0]
+  try {
+    localStorage.setItem(
+      APPEARANCE_KEY,
+      JSON.stringify({
+        opacity: glassOpacity.value,
+        scheme: s.id,
+        colors: s.colors,
+        glow: s.glow,
+        accent: accentColor.value,
+      })
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadAppearance() {
+  try {
+    const raw = localStorage.getItem(APPEARANCE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (typeof saved.opacity === 'number') {
+      glassOpacity.value = saved.opacity
+      document.documentElement.style.setProperty('--glass-alpha', String(saved.opacity / 100))
+    }
+    if (saved.scheme) {
+      const s = schemes.find((x) => x.id === saved.scheme)
+      if (s) {
+        activeScheme.value = s.id
+        const root = document.documentElement.style
+        root.setProperty('--bg-c1', s.colors[0])
+        root.setProperty('--bg-c2', s.colors[1])
+        root.setProperty('--bg-c3', s.colors[2])
+        root.setProperty('--bg-c4', s.colors[3])
+        root.setProperty('--glow-c1', s.glow[0])
+        root.setProperty('--glow-c2', s.glow[1])
+      }
+    }
+    if (typeof saved.accent === 'string' && saved.accent) {
+      accentColor.value = saved.accent
+      document.documentElement.style.setProperty('--accent', saved.accent)
+      document.documentElement.style.setProperty('--color-primary', saved.accent)
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 // 角色
@@ -381,6 +558,7 @@ const saving = ref(false)
 
 onMounted(() => {
   loadRoles()
+  loadAppearance()
 })
 </script>
 
@@ -399,5 +577,102 @@ onMounted(() => {
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
+}
+
+/* 界面外观 */
+.appearance-card {
+  max-width: 760px;
+  padding: 26px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
+  border-radius: var(--radius-lg);
+}
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.appearance-info {
+  flex-shrink: 0;
+}
+.appearance-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.appearance-desc {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 4px;
+  max-width: 420px;
+}
+.appearance-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 280px;
+}
+.opacity-value {
+  width: 48px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+.scheme-item {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.35);
+}
+.scheme-item:hover {
+  transform: translateY(-2px);
+}
+.scheme-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(70, 90, 160, 0.15);
+}
+.scheme-preview {
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.scheme-name {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 8px;
+}
+.scheme-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.custom-row {
+  margin-top: 22px;
 }
 </style>

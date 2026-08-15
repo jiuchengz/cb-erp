@@ -1,7 +1,13 @@
 <template>
   <div class="layout">
-    <aside class="sidebar">
-      <div class="logo">跨境电商 ERP v2</div>
+    <aside class="sidebar glass-panel">
+      <div class="brand">
+        <div class="brand-icon">E</div>
+        <div class="brand-text">
+          <div class="brand-name">跨境电商 ERP</div>
+          <div class="brand-sub">v2 · 管理系统</div>
+        </div>
+      </div>
       <nav>
         <router-link v-for="item in menus" :key="item.path" :to="item.path">
           {{ item.label }}
@@ -9,7 +15,7 @@
       </nav>
     </aside>
     <div class="main">
-      <header class="topbar">
+      <header class="topbar glass-panel">
         <div class="header-left">
           <!-- 全局搜索：可折叠，Ctrl/⌘K 聚焦 -->
           <div class="global-search" :class="{ expanded: searchExpanded }">
@@ -228,34 +234,51 @@ async function onSignOut() {
 </script>
 
 <style scoped>
-.layout { display: flex; height: 100%; }
-.sidebar { width: 220px; background: var(--color-sidebar); color: #fff; display: flex; flex-direction: column; }
-.logo { padding: 20px; font-size: 18px; font-weight: 600; }
-.sidebar nav { display: flex; flex-direction: column; }
-.sidebar nav a { padding: 12px 20px; color: #c9cdd4; }
-.sidebar nav a:hover, .sidebar nav a.router-link-active { background: rgba(255,255,255,.08); color: #fff; }
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.topbar { height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; background: var(--color-header-bg); border-bottom: 1px solid var(--color-border-light); }
+.layout { display: flex; height: 100%; gap: 22px; padding: 22px; overflow: hidden; }
+
+/* 玻璃面板 */
+.glass-panel {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
+  border-radius: var(--radius-lg);
+}
+
+.sidebar { width: 236px; display: flex; flex-direction: column; padding: 20px 14px; overflow: hidden; flex-shrink: 0; }
+.brand { display: flex; align-items: center; gap: 12px; padding: 4px 10px 18px; }
+.brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; }
+.brand-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.brand-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
+.sidebar nav a { display: block; padding: 11px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; }
+.sidebar nav a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
+.sidebar nav a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: var(--glass-border); box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+
+.main { flex: 1; display: flex; flex-direction: column; gap: 22px; overflow: hidden; min-width: 0; }
+.topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; flex-shrink: 0; }
 .header-left { display: flex; align-items: center; min-width: 0; }
 .header-right { display: flex; align-items: center; gap: 12px; }
-.debug-bar { padding: 8px 20px; background: #fff7e6; color: #8a5b00; border-bottom: 1px solid #ffd591; font-size: 13px; line-height: 1.5; word-break: break-all; }
-html.dark .debug-bar { background: #3a2f14; color: #e6c97a; border-bottom-color: #5a4a20; }
+.debug-bar { padding: 8px 20px; background: rgba(255,247,230,.85); color: #8a5b00; border-radius: var(--radius-sm); font-size: 13px; line-height: 1.5; word-break: break-all; -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
+html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 
 /* 全局搜索框 */
-.global-search { display: flex; align-items: center; gap: 6px; width: 42px; overflow: hidden; padding: 0 8px; height: 32px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-input-bg); transition: width .25s ease; }
+.global-search { display: flex; align-items: center; gap: 8px; width: 46px; overflow: hidden; padding: 0 12px; height: 36px; border: 1px solid var(--glass-border); border-radius: 999px; background: rgba(255,255,255,.55); transition: width .25s ease; }
 .global-search.expanded { width: 320px; }
-.global-search .search-icon { font-size: 15px; color: var(--color-muted); cursor: pointer; flex-shrink: 0; }
-.global-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--color-text); font-size: 13px; }
-.global-search input::placeholder { color: var(--color-muted); }
-.global-search .shortcut { flex-shrink: 0; font-size: 11px; color: var(--color-muted); background: var(--color-fill); border-radius: 4px; padding: 1px 5px; }
+.global-search .search-icon { font-size: 15px; color: var(--ink-3); cursor: pointer; flex-shrink: 0; }
+.global-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--ink); font-size: 13px; }
+.global-search input::placeholder { color: var(--ink-3); }
+.global-search .shortcut { flex-shrink: 0; font-size: 11px; color: var(--ink-3); background: rgba(255,255,255,.6); border-radius: 6px; padding: 2px 7px; }
 
 /* 顶栏按钮 */
-.topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-input-bg); color: var(--color-text); cursor: pointer; font-size: 16px; }
-.topbar-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
+.topbar-btn:hover { background: rgba(255,255,255,.85); color: var(--accent); transform: translateY(-1px); }
 .log-badge { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; line-height: 16px; text-align: center; font-size: 11px; color: #fff; background: #e5484d; border-radius: 8px; }
 
-.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-input-bg); outline: none; }
-.user { font-size: 14px; color: var(--color-text); }
-.arrow { font-size: 12px; color: var(--color-muted); }
-.content { flex: 1; padding: 20px; overflow: auto; }
+.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 7px 12px; border: 1px solid var(--glass-border); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
+.user-trigger:hover { background: rgba(255,255,255,.85); }
+.user { font-size: 14px; color: var(--ink); }
+.arrow { font-size: 12px; color: var(--ink-3); }
+.content { flex: 1; overflow: auto; padding: 2px 2px 2px 0; }
 </style>

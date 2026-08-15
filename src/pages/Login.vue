@@ -221,16 +221,27 @@ async function onSubmit() {
 </script>
 
 <style scoped>
-.login { height: 100%; display: flex; align-items: center; justify-content: center; }
-.card { width: 360px; padding: 32px; background: var(--color-card); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.08); display: flex; flex-direction: column; gap: 16px; }
-h1 { font-size: 20px; text-align: center; }
-input { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 14px; background: var(--color-input-bg); color: var(--color-text); }
-button { padding: 10px; background: var(--color-primary); color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.login { height: 100%; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+.card {
+  width: 380px; padding: 36px;
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
+  border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; gap: 16px;
+}
+h1 { font-size: 20px; text-align: center; color: var(--ink); }
+input { padding: 11px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); font-size: 14px; background: rgba(255,255,255,.55); color: var(--ink); outline: none; transition: box-shadow .2s ease; }
+input:focus { box-shadow: 0 0 0 2px var(--accent); }
+button { padding: 11px; background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; border: none; border-radius: 999px; cursor: pointer; font-weight: 600; box-shadow: 0 10px 26px rgba(99,102,241,.35); transition: opacity .2s ease; }
+button:hover { opacity: .95; }
 button:disabled { opacity: .6; cursor: not-allowed; }
 .error { color: #e5484d; font-size: 13px; margin: 0; }
 .captcha-row { display: flex; gap: 10px; align-items: center; }
-.captcha-expr { flex-shrink: 0; background: var(--color-fill); padding: 9px 14px; border-radius: 4px; font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer; user-select: none; }
+.captcha-expr { flex-shrink: 0; background: rgba(255,255,255,.55); padding: 9px 14px; border-radius: var(--radius-sm); font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer; user-select: none; color: var(--ink); }
 .captcha-input { flex: 1; min-width: 0; }
-.remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-muted); cursor: pointer; }
+.remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); cursor: pointer; }
 .remember input { width: 14px; height: 14px; }
 </style>
