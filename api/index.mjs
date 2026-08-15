@@ -26491,10 +26491,52 @@ async function handler16(req, res) {
 }
 
 // server/_handlers/users.ts
+var createSchema8 = external_exports.object({
+  email: external_exports.string().email(),
+  name: external_exports.string().min(1).max(100),
+  password: external_exports.string().min(6).max(72),
+  role_ids: external_exports.array(external_exports.string().uuid()).optional()
+});
+async function getProfileWithRoles(supabase, id) {
+  const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name))").eq("id", id).single();
+  if (error) {
+    if (error.code === "PGRST116") throw Errors.notFound("\u7528\u6237\u4E0D\u5B58\u5728");
+    throw error;
+  }
+  return data;
+}
 async function handler17(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
+    if (req.method === "POST") {
+      requirePermission(ctx, "user.manage");
+      const body = parse(createSchema8, req.body || {});
+      const supabase = getAdminClient();
+      const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+        email: body.email,
+        password: body.password,
+        email_confirm: true
+      });
+      if (authErr) {
+        if (authErr.status === 409 || /already.*registered/i.test(authErr.message || "")) {
+          throw Errors.conflict("\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C");
+        }
+        throw authErr;
+      }
+      const newId = authData.user?.id;
+      if (!newId) throw new Error("\u521B\u5EFA Auth \u7528\u6237\u5931\u8D25");
+      const { error: profileErr } = await supabase.from("profiles").upsert({ id: newId, display_name: body.name, is_active: true });
+      if (profileErr) throw profileErr;
+      if (body.role_ids && body.role_ids.length > 0) {
+        const rows = body.role_ids.map((role_id) => ({ user_id: newId, role_id }));
+        const { error: roleErr } = await supabase.from("user_roles").insert(rows);
+        if (roleErr) throw roleErr;
+      }
+      const after = await getProfileWithRoles(supabase, newId);
+      await writeAudit(ctx, req, "create", "user", newId, null, after);
+      return res.status(201).json({ data: after });
+    }
     if (req.method === "GET") {
       requirePermission(ctx, "user.read");
       const q = parse(paginationSchema, req.query);
@@ -26514,7 +26556,7 @@ async function handler17(req, res) {
 }
 
 // server/_handlers/warehouses.ts
-var createSchema8 = external_exports.object({
+var createSchema9 = external_exports.object({
   code: external_exports.string().min(1).max(32),
   name: external_exports.string().min(1).max(100),
   address: external_exports.string().max(300).nullable().optional()
@@ -26532,7 +26574,7 @@ async function handler18(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "inventory.write");
-      const body = parse(createSchema8, req.body || {});
+      const body = parse(createSchema9, req.body || {});
       const supabase = getAdminClient();
       const { data, error } = await supabase.from("warehouses").insert(body).select().single();
       if (error) {
@@ -26600,7 +26642,7 @@ async function handler19(req, res) {
 }
 
 // server/_handlers/forwarders.ts
-var createSchema9 = external_exports.object({
+var createSchema10 = external_exports.object({
   name: external_exports.string().min(1).max(100),
   contact: external_exports.string().max(100).nullable().optional(),
   phone: external_exports.string().max(50).nullable().optional(),
@@ -26625,7 +26667,7 @@ async function handler20(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "shipment.write");
-      const body = parse(createSchema9, req.body || {});
+      const body = parse(createSchema10, req.body || {});
       const { data, error } = await supabase.from("forwarders").insert({
         name: body.name,
         contact: body.contact || null,
@@ -27395,7 +27437,7 @@ var updateSchema9 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   role_ids: external_exports.array(external_exports.string().uuid()).optional()
 });
-async function getProfileWithRoles(supabase, id) {
+async function getProfileWithRoles2(supabase, id) {
   const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name))").eq("id", id).single();
   if (error) {
     if (error.code === "PGRST116") throw Errors.notFound("\u7528\u6237\u4E0D\u5B58\u5728");
@@ -27413,7 +27455,7 @@ async function handler32(req, res) {
       requirePermission(ctx, "user.manage");
       const body = parse(updateSchema9, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
-      await getProfileWithRoles(supabase, id);
+      await getProfileWithRoles2(supabase, id);
       if (body.email !== void 0 || body.password !== void 0) {
         const authPatch = {};
         if (body.email !== void 0) authPatch.email = body.email;
@@ -27442,14 +27484,14 @@ async function handler32(req, res) {
           if (insErr) throw insErr;
         }
       }
-      const after = await getProfileWithRoles(supabase, id);
+      const after = await getProfileWithRoles2(supabase, id);
       await writeAudit(ctx, req, "update", "user", id, null, after);
       return res.status(200).json({ data: after });
     }
     if (req.method === "DELETE") {
       requirePermission(ctx, "user.manage");
       if (id === ctx.userId) throw Errors.badRequest("\u4E0D\u80FD\u5220\u9664\u5F53\u524D\u767B\u5F55\u8D26\u53F7");
-      const before = await getProfileWithRoles(supabase, id);
+      const before = await getProfileWithRoles2(supabase, id);
       const isSuperAdmin = (before.user_roles || []).some((ur) => ur.roles?.name === "super_admin");
       if (isSuperAdmin) throw Errors.badRequest("\u8D85\u7EA7\u7BA1\u7406\u5458\u4E0D\u53EF\u5220\u9664");
       const { error: authErr } = await supabase.auth.admin.deleteUser(id);
