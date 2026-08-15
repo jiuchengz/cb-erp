@@ -199,7 +199,7 @@ import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { exportTable, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, extractFloatingImages } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, extractFloatingImages, compressImageDataUrl } from '../utils/import'
 import { addLog } from '../utils/log'
 
 const auth = useAuthStore()
@@ -324,8 +324,11 @@ function onImageFileChange(e: Event) {
   const file = input.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
-    form.image_text = String(reader.result || '')
+  reader.onload = async () => {
+    const dataUrl = String(reader.result || '')
+    // 本地图片先压缩（最长边800、质量0.7），避免超大 base64 存入表单
+    const compressed = await compressImageDataUrl(dataUrl)
+    form.image_text = compressed
   }
   reader.readAsDataURL(file)
 }
@@ -337,14 +340,24 @@ async function save() {
   }
   saving.value = true
   try {
+    // 本地图片（data URL）先上传 Storage 换取公开 URL，避免大 base64 存库
+    let imageText = form.image_text.trim()
+    if (imageText.startsWith('data:image/')) {
+      try {
+        const up = await api.post('/products/upload-image', { base64: imageText, sku: form.sku })
+        imageText = up.data?.url || imageText
+      } catch {
+        // 上传失败则保留原值，由后端 schema 长度校验兜底提示
+      }
+    }
     if (editing.value) {
-      const payload: Record<string, unknown> = { ...form }
+      const payload: Record<string, unknown> = { ...form, image_text: imageText }
       delete payload.sku // PATCH schema 不允许更新 sku
       await api.patch(`/products/${editing.value.id}`, payload)
       addLog('success', '编辑商品', form.name)
       ElMessage.success('修改成功')
     } else {
-      await api.post('/products', form)
+      await api.post('/products', { ...form, image_text: imageText })
       addLog('success', '新增商品', form.name)
       ElMessage.success('创建成功')
     }
@@ -437,18 +450,15 @@ async function batchRemove() {
     return
   }
   const ids = selected.value.map((r) => r.id)
-  let ok = 0
-  let fail = 0
-  for (const id of ids) {
-    try {
-      await api.delete(`/products/${id}`)
-      ok++
-    } catch {
-      fail++
-    }
+  try {
+    const { data } = await api.post('/products/batch-delete', { ids })
+    ElMessage.success(
+      `删除完成：成功 ${data.deleted} 条${data.missing ? `，未找到 ${data.missing} 条` : ''}`
+    )
+    addLog('info', '批量删除商品', `成功 ${data.deleted} 条${data.missing ? `，未找到 ${data.missing} 条` : ''}`)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
   }
-  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
-  addLog('info', '批量删除商品', `成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
   selected.value = []
   load()
 }
@@ -594,36 +604,22 @@ async function onImportFile(e: Event) {
           competitor_id: cut(cellStr(row, col.competitor_id), 255),
           currency: cut(cellStr(row, col.currency) || 'MXN', 8),
           status: statusRaw === '停用' || statusRaw === 'inactive' ? 'inactive' : 'active',
-          image_text: urlText || floatImg || '',
-          __floatImg: floatImg && !urlText ? floatImg : '',
+          image_text: urlText || '',
+          image_base64: floatImg && !urlText ? floatImg : '',
         },
         lineNo,
         sku,
       })
     })
-    // 分批并行创建（每批 10 条），失败逐条记录完整原因
+    // 分批并行创建（每批 20 条），图片随商品请求内联上传，失败逐条记录完整原因
     let ok = 0
     const errLines: string[] = []
-    const BATCH = 10
+    const BATCH = 20
     for (let i = 0; i < items.length; i += BATCH) {
       const batch = items.slice(i, i + BATCH)
       await Promise.all(
         batch.map(async (item) => {
           try {
-            const imgB64 = (item.payload as any).__floatImg as string
-            delete (item.payload as any).__floatImg
-            if (imgB64) {
-              try {
-                const up = await api.post('/products/upload-image', { base64: imgB64, sku: item.sku })
-                item.payload.image_text = up.data?.url || item.payload.image_text
-              } catch (upErr: any) {
-                errLines.push(
-                  `第${item.lineNo}行 SKU ${item.sku}：图片上传失败（${
-                    upErr?.response?.data?.error?.message || upErr?.message || '未知错误'
-                  }）`
-                )
-              }
-            }
             await api.post('/products', item.payload)
             ok++
           } catch (err: any) {

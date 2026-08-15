@@ -6,6 +6,7 @@ import auditLogs from './_handlers/audit-logs';
 import inventory from './_handlers/inventory';
 import permissions from './_handlers/permissions';
 import products from './_handlers/products';
+import productsBatchDelete from './_handlers/products/batch-delete';
 import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
 import replenishment from './_handlers/replenishment';
@@ -53,6 +54,7 @@ const routes: Route[] = [
   { pattern: /^\/inventory\/([^/]+)$/, handler: inventoryId, params: ['id'] },
   { pattern: /^\/inventory$/, handler: inventory },
   { pattern: /^\/permissions$/, handler: permissions },
+  { pattern: /^\/products\/batch-delete$/, handler: productsBatchDelete },
   { pattern: /^\/products\/upload-image$/, handler: uploadImage },
   { pattern: /^\/products\/([^/]+)$/, handler: productsId, params: ['id'] },
   { pattern: /^\/products$/, handler: products },
