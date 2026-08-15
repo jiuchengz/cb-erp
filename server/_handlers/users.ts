@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 2) profiles upsert（profiles 主键即 auth.users.id，upsert 保证幂等）
       const { error: profileErr } = await supabase
         .from('profiles')
-        .upsert({ id: newId, display_name: body.name, is_active: true });
+        .upsert({ id: newId, email: body.email, display_name: body.name, is_active: true });
       if (profileErr) throw profileErr;
 
       // 3) 角色分配
