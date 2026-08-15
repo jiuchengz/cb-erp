@@ -171,6 +171,23 @@
         <el-button type="primary" :loading="saving" @click="save">{{ editing ? '保存修改' : '保存' }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="importResultVisible" title="导入结果明细" width="680px" destroy-on-close>
+      <div style="max-height: 420px; overflow: auto; font-size: 13px; line-height: 1.8">
+        <div
+          v-for="(line, i) in importResultLines"
+          :key="i"
+          :style="{ color: line.startsWith('[失败]') ? '#F56C6C' : '#E6A23C' }"
+        >
+          {{ line }}
+        </div>
+        <div v-if="!importResultLines.length" style="color: var(--color-muted)">无明细</div>
+      </div>
+      <template #footer>
+        <el-button @click="importResultVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadImportResult">下载明细</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -182,7 +199,7 @@ import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { exportTable, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, extractFloatingImages } from '../utils/import'
 import { addLog } from '../utils/log'
 
 const auth = useAuthStore()
@@ -439,6 +456,18 @@ async function batchRemove() {
 /* ---------- 下载模板 / 批量导入 ---------- */
 const importing = ref(false)
 const importFile = ref<HTMLInputElement>()
+const importResultVisible = ref(false)
+const importResultLines = ref<string[]>([])
+
+function downloadImportResult() {
+  const content = '\ufeff' + importResultLines.value.join('\n')
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `导入结果明细_${todayStr()}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
 
 function downloadTpl() {
   downloadTemplate(
@@ -478,7 +507,9 @@ async function onImportFile(e: Event) {
   if (!file) return
   importing.value = true
   try {
+    const fileAb = await file.arrayBuffer()
     const { headers, rows } = await readExcelFile(file)
+    const cellImages = await extractFloatingImages(fileAb)
     const col = buildColMap(headers, {
       sku: ['SKU', 'sku', '编码'],
       name: ['名称', 'name', '商品名称'],
@@ -514,78 +545,106 @@ async function onImportFile(e: Event) {
       if (page * 200 >= (data.total ?? 0)) break
       page++
     }
+    const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s)
     const seen = new Set<string>()
-    const failures: string[] = []
-    const payloads: Record<string, unknown>[] = []
+    const skipLines: string[] = []
+    const items: { payload: Record<string, unknown>; lineNo: number; sku: string }[] = []
     rows.forEach((row, idx) => {
       const lineNo = idx + 2
-      const sku = cellStr(row, col.sku)
-      const name = cellStr(row, col.name)
+      const sku = cut(cellStr(row, col.sku), 64)
+      const name = cut(cellStr(row, col.name), 200)
       if (!sku) {
-        failures.push(`第${lineNo}行：SKU为空`)
+        skipLines.push(`第${lineNo}行：SKU为空`)
         return
       }
       if (!name) {
-        failures.push(`第${lineNo}行：名称为空`)
+        skipLines.push(`第${lineNo}行：名称为空`)
         return
       }
       if (exist.has(sku) || seen.has(sku)) {
-        failures.push(`第${lineNo}行：SKU「${sku}」已存在，跳过`)
+        skipLines.push(`第${lineNo}行：SKU「${sku}」已存在，跳过`)
         return
       }
       seen.add(sku)
+      // 佣金率宽容处理：>1 视为百分数（如 16.5 -> 0.165），越界回默认
+      let ml = col.ml_commission_rate !== undefined ? cellNum(row, col.ml_commission_rate, 0.165) : 0.165
+      if (ml > 1) ml = ml / 100
+      if (ml < 0 || ml > 1) ml = 0.165
       const statusRaw = cellStr(row, col.status)
-      payloads.push({
+      const urlText = cut(cellStr(row, col.image_text), 255)
+      // 浮动图片：Excel 行号（0-based）= idx + 1（表头行=0，首条数据行=1）
+      const floatImg = cellImages?.[idx + 1] ? Object.values(cellImages[idx + 1])[0] : ''
+      items.push({
+        payload: {
+          sku,
+          name,
+          code: cut(cellStr(row, col.code), 255),
+          barcode: cut(cellStr(row, col.barcode), 64),
+          category: cut(cellStr(row, col.category), 100),
+          listing_time: cut(cellStr(row, col.listing_time), 255),
+          unit: cut(cellStr(row, col.unit) || '套', 50),
+          unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
+          purchase_cost: col.purchase_cost !== undefined ? cellNum(row, col.purchase_cost) : 0,
+          first_leg_freight: col.first_leg_freight !== undefined ? cellNum(row, col.first_leg_freight) : 0,
+          last_mile_delivery_peso:
+            col.last_mile_delivery_peso !== undefined ? cellNum(row, col.last_mile_delivery_peso) : 0,
+          ml_commission_rate: ml,
+          shipping_mode: cut(cellStr(row, col.shipping_mode) || '海运', 20),
+          link_id: cut(cellStr(row, col.link_id), 255),
+          competitor_id: cut(cellStr(row, col.competitor_id), 255),
+          currency: cut(cellStr(row, col.currency) || 'MXN', 8),
+          status: statusRaw === '停用' || statusRaw === 'inactive' ? 'inactive' : 'active',
+          image_text: urlText || floatImg || '',
+          __floatImg: floatImg && !urlText ? floatImg : '',
+        },
+        lineNo,
         sku,
-        name,
-        code: cellStr(row, col.code),
-        barcode: cellStr(row, col.barcode),
-        category: cellStr(row, col.category),
-        listing_time: cellStr(row, col.listing_time),
-        unit: cellStr(row, col.unit) || '套',
-        unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
-        purchase_cost: col.purchase_cost !== undefined ? cellNum(row, col.purchase_cost) : 0,
-        first_leg_freight: col.first_leg_freight !== undefined ? cellNum(row, col.first_leg_freight) : 0,
-        last_mile_delivery_peso:
-          col.last_mile_delivery_peso !== undefined ? cellNum(row, col.last_mile_delivery_peso) : 0,
-        ml_commission_rate:
-          col.ml_commission_rate !== undefined ? cellNum(row, col.ml_commission_rate, 0.165) : 0.165,
-        shipping_mode: cellStr(row, col.shipping_mode) || '海运',
-        link_id: cellStr(row, col.link_id),
-        competitor_id: cellStr(row, col.competitor_id),
-        currency: cellStr(row, col.currency) || 'MXN',
-        status: statusRaw === '停用' || statusRaw === 'inactive' ? 'inactive' : 'active',
-        image_text: cellStr(row, col.image_text),
       })
     })
+    // 分批并行创建（每批 10 条），失败逐条记录完整原因
     let ok = 0
     const errLines: string[] = []
-    for (const payload of payloads) {
-      try {
-        await api.post('/products', payload)
-        ok++
-      } catch (err: any) {
-        errLines.push(`SKU ${payload.sku}：${err?.response?.data?.error?.message || '创建失败'}`)
-      }
+    const BATCH = 10
+    for (let i = 0; i < items.length; i += BATCH) {
+      const batch = items.slice(i, i + BATCH)
+      await Promise.all(
+        batch.map(async (item) => {
+          try {
+            const imgB64 = (item.payload as any).__floatImg as string
+            delete (item.payload as any).__floatImg
+            if (imgB64) {
+              try {
+                const up = await api.post('/products/upload-image', { base64: imgB64, sku: item.sku })
+                item.payload.image_text = up.data?.url || item.payload.image_text
+              } catch (upErr: any) {
+                errLines.push(
+                  `第${item.lineNo}行 SKU ${item.sku}：图片上传失败（${
+                    upErr?.response?.data?.error?.message || upErr?.message || '未知错误'
+                  }）`
+                )
+              }
+            }
+            await api.post('/products', item.payload)
+            ok++
+          } catch (err: any) {
+            errLines.push(
+              `第${item.lineNo}行 SKU ${item.sku}：${err?.response?.data?.error?.message || err?.message || '创建失败'}`
+            )
+          }
+        })
+      )
     }
-    const summary = `导入完成：成功 ${ok} 条${failures.length ? `，跳过 ${failures.length} 条` : ''}${
+    const summary = `导入完成：成功 ${ok} 条${skipLines.length ? `，跳过 ${skipLines.length} 条` : ''}${
       errLines.length ? `，失败 ${errLines.length} 条` : ''
     }`
     ElMessage.success(summary)
     addLog('info', '批量导入商品', summary)
-    if (failures.length) {
-      ElMessage.warning(
-        '跳过明细：\n' +
-          failures.slice(0, 10).join('\n') +
-          (failures.length > 10 ? `\n… 共 ${failures.length} 条` : '')
-      )
-    }
-    if (errLines.length) {
-      ElMessage.error(
-        '失败明细：\n' +
-          errLines.slice(0, 10).join('\n') +
-          (errLines.length > 10 ? `\n… 共 ${errLines.length} 条` : '')
-      )
+    if (skipLines.length || errLines.length) {
+      importResultLines.value = [
+        ...skipLines.map((s) => `[跳过] ${s}`),
+        ...errLines.map((s) => `[失败] ${s}`),
+      ]
+      importResultVisible.value = true
     }
     load()
   } catch (e: any) {

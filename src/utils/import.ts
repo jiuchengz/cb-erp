@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 
 export interface TemplateColumn {
   label: string
@@ -74,4 +75,92 @@ export function autoNo(prefix: string, seq: number) {
   const d = new Date()
   const pad = (n: number, l = 2) => String(n).padStart(l, '0')
   return `${prefix}-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(seq, 3)}`
+}
+
+// 压缩 base64 图片（canvas 重绘，最长边 maxSize，质量 0.7），压缩失败时原样返回
+export function compressImageDataUrl(dataUrl: string, maxSize = 800): Promise<string> {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          let { width, height } = img
+          if (width > maxSize || height > maxSize) {
+            const ratio = Math.min(maxSize / width, maxSize / height)
+            width = Math.round(width * ratio)
+            height = Math.round(height * ratio)
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return resolve(dataUrl)
+          ctx.drawImage(img, 0, 0, width, height)
+          const out = canvas.toDataURL('image/jpeg', 0.7)
+          resolve(out.length < dataUrl.length ? out : dataUrl)
+        } catch {
+          resolve(dataUrl)
+        }
+      }
+      img.onerror = () => resolve(dataUrl)
+      img.src = dataUrl
+    } catch {
+      resolve(dataUrl)
+    }
+  })
+}
+
+// 从 xlsx 提取浮动图片（旧版功能移植）
+// 返回 row -> col -> dataUrl；row 为 0-based Excel 行号（表头行=0，首条数据行=1），对应 sheet_to_json(header:1) 的下标
+export async function extractFloatingImages(
+  arrayBuffer: ArrayBuffer
+): Promise<Record<number, Record<number, string>>> {
+  const result: Record<number, Record<number, string>> = {}
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer)
+    const drawingFiles = Object.keys(zip.files).filter((p) => /^xl\/drawings\/drawing\d+\.xml$/.test(p))
+    for (const df of drawingFiles) {
+      const drawingXml = await zip.file(df)!.async('string')
+      const relsPath = `xl/drawings/_rels/${df.split('/').pop()}.rels`
+      const relsXml = zip.file(relsPath) ? await zip.file(relsPath)!.async('string') : ''
+      const relsMap: Record<string, string> = {}
+      const relRe = /<Relationship[^>]*Id="([^"]*)"[^>]*Target="([^"]*)"[^>]*\/>/g
+      let relM: RegExpExecArray | null
+      while ((relM = relRe.exec(relsXml)) !== null) relsMap[relM[1]] = relM[2]
+      const anchorRe =
+        /<(?:xdr:)?(twoCellAnchor|oneCellAnchor)[\s\S]*?<(?:xdr:)?from>[\s\S]*?<(?:xdr:)?col>(\d+)<\/(?:xdr:)?col>[\s\S]*?<(?:xdr:)?row>(\d+)<\/(?:xdr:)?row>[\s\S]*?<(?:a:)?blip[^>]*r:embed="([^"]*)"[\s\S]*?<\/(?:xdr:)?(?:twoCellAnchor|oneCellAnchor)>/g
+      const anchors: { row: number; col: number; rId: string }[] = []
+      let anchM: RegExpExecArray | null
+      while ((anchM = anchorRe.exec(drawingXml)) !== null) {
+        anchors.push({ row: parseInt(anchM[3]), col: parseInt(anchM[2]), rId: anchM[4] })
+      }
+      for (const a of anchors) {
+        const target = relsMap[a.rId]
+        if (!target || target === 'NULL') continue
+        let imgPath = target
+        if (imgPath.startsWith('../')) imgPath = 'xl/' + imgPath.substring(3)
+        const imgFile = zip.file(imgPath)
+        if (!imgFile) continue
+        const b64 = await imgFile.async('base64')
+        const ext = imgPath.split('.').pop()?.toLowerCase() || 'png'
+        const mimeMap: Record<string, string> = {
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          gif: 'image/gif',
+          bmp: 'image/bmp',
+          webp: 'image/webp',
+          svg: 'image/svg+xml',
+        }
+        const mime = mimeMap[ext] || 'image/png'
+        const raw = `data:${mime};base64,${b64}`
+        const compressed = await compressImageDataUrl(raw)
+        if (!result[a.row]) result[a.row] = {}
+        result[a.row][a.col] = compressed
+      }
+    }
+  } catch {
+    // 解析失败返回空，不影响导入主流程
+  }
+  return result
 }
