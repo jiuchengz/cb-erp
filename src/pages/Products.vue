@@ -624,11 +624,12 @@ async function onImportFile(e: Event) {
         sku,
       })
     })
-    // 分批并行创建（每批 20 条），图片随商品请求内联上传，失败逐条记录完整原因
+    // 分批并行创建：按批次首元素是否有图动态切批——无图每批 50 条并发，含图每批 20 条（避免大请求体触发 Vercel 限制），失败逐条记录完整原因
     let ok = 0
     const errLines: string[] = []
-    const BATCH = 20
-    for (let i = 0; i < items.length; i += BATCH) {
+    for (let i = 0; i < items.length; ) {
+      const hasImg = Boolean(items[i].payload.image_base64)
+      const BATCH = hasImg ? 20 : 50
       const batch = items.slice(i, i + BATCH)
       await Promise.all(
         batch.map(async (item) => {
@@ -642,6 +643,7 @@ async function onImportFile(e: Event) {
           }
         })
       )
+      i += BATCH
     }
     const summary = `导入完成：成功 ${ok} 条${skipLines.length ? `，跳过 ${skipLines.length} 条` : ''}${
       errLines.length ? `，失败 ${errLines.length} 条` : ''

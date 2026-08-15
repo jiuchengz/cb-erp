@@ -119,6 +119,8 @@ export async function extractFloatingImages(
   try {
     const zip = await JSZip.loadAsync(arrayBuffer)
     const drawingFiles = Object.keys(zip.files).filter((p) => /^xl\/drawings\/drawing\d+\.xml$/.test(p))
+    // 先收集所有 (row, col, raw dataUrl) 压缩任务，再分批并行压缩，避免 600 张图串行等待
+    const tasks: { row: number; col: number; raw: string }[] = []
     for (const df of drawingFiles) {
       const drawingXml = await zip.file(df)!.async('string')
       const relsPath = `xl/drawings/_rels/${df.split('/').pop()}.rels`
@@ -153,11 +155,20 @@ export async function extractFloatingImages(
           svg: 'image/svg+xml',
         }
         const mime = mimeMap[ext] || 'image/png'
-        const raw = `data:${mime};base64,${b64}`
-        const compressed = await compressImageDataUrl(raw)
-        if (!result[a.row]) result[a.row] = {}
-        result[a.row][a.col] = compressed
+        tasks.push({ row: a.row, col: a.col, raw: `data:${mime};base64,${b64}` })
       }
+    }
+    // 每批 20 张并发压缩，结果仍按 row/col 写回，返回结构不变
+    const BATCH = 20
+    for (let i = 0; i < tasks.length; i += BATCH) {
+      const batch = tasks.slice(i, i + BATCH)
+      await Promise.all(
+        batch.map(async (t) => {
+          const compressed = await compressImageDataUrl(t.raw)
+          if (!result[t.row]) result[t.row] = {}
+          result[t.row][t.col] = compressed
+        })
+      )
     }
   } catch {
     // 解析失败返回空，不影响导入主流程
