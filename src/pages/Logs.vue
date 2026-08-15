@@ -10,6 +10,27 @@
       </div>
     </div>
 
+    <div class="db-usage-card" v-loading="dbUsageLoading">
+      <template v-if="dbUsage && dbUsage.ok">
+        <div class="db-usage-head">
+          <el-progress
+            :percentage="Math.min(dbUsage.percent, 100)"
+            :stroke-width="10"
+            :show-text="false"
+            style="flex: 1; max-width: 420px"
+          />
+          <span class="db-usage-percent">{{ dbUsage.percent }}%</span>
+        </div>
+        <div class="db-usage-text">
+          数据库已用 {{ dbUsage.usedMB }} MB / {{ dbUsage.quotaMB }} MB，剩余 {{ dbUsage.freeMB }} MB
+        </div>
+      </template>
+      <div v-else-if="dbUsage && dbUsage.ok === false" class="db-usage-warn">
+        {{ dbUsage.message }}
+      </div>
+      <div v-else class="db-usage-warn">数据库用量加载失败</div>
+    </div>
+
     <el-tabs v-model="logTab" @tab-change="onTabChange">
       <el-tab-pane :label="`本地日志 (${localLogs.length})`" name="local">
         <div class="log-filter">
@@ -68,12 +89,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
 import { clearLogs, getLogs, type OpLogEntry } from '../utils/log'
 
 const logTab = ref<'local' | 'server'>('local')
+
+/* ---------- 数据库用量 ---------- */
+const dbUsage = ref<any>(null)
+const dbUsageLoading = ref(false)
+
+async function loadDbUsage() {
+  dbUsageLoading.value = true
+  try {
+    const { data } = await api.get('/db-usage')
+    dbUsage.value = data
+  } catch (e: any) {
+    dbUsage.value = { ok: false, message: e?.response?.data?.error?.message || '数据库用量加载失败' }
+  } finally {
+    dbUsageLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadDbUsage()
+})
 
 /* ---------- 本地日志 ---------- */
 const localLogs = ref<OpLogEntry[]>(getLogs())
@@ -142,6 +183,34 @@ function serverActionTag(action: string) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+.db-usage-card {
+  background: var(--color-fill);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.db-usage-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.db-usage-percent {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 52px;
+  text-align: right;
+}
+.db-usage-text {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+.db-usage-warn {
+  font-size: 13px;
+  color: #e5484d;
 }
 .log-filter {
   margin-bottom: 12px;

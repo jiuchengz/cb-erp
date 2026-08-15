@@ -3,6 +3,7 @@ import authMe from './_handlers/auth';
 import authPassword from './_handlers/auth/password';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
+import dbUsage from './_handlers/db-usage';
 import inventory from './_handlers/inventory';
 import permissions from './_handlers/permissions';
 import products from './_handlers/products';
@@ -49,6 +50,7 @@ const routes: Route[] = [
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },
   { pattern: /^\/after-sales$/, handler: afterSales },
   { pattern: /^\/audit-logs$/, handler: auditLogs },
+  { pattern: /^\/db-usage$/, handler: dbUsage },
   { pattern: /^\/inventory\/adjust$/, handler: inventoryAdjust },
   { pattern: /^\/inventory\/transactions$/, handler: inventoryTransactions },
   { pattern: /^\/inventory\/([^/]+)$/, handler: inventoryId, params: ['id'] },
