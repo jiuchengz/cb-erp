@@ -37,6 +37,11 @@
   --glow-c2: #60a5fa;
   --glow-opacity: 0.55;
 
+  /* 表格网格（亮色） */
+  --table-bg: rgba(255, 255, 255, 0.42);
+  --table-border: rgba(20, 24, 40, 0.12);
+  --table-line: rgba(20, 24, 40, 0.14);
+
   /* 旧变量兼容映射（供历史 scoped 样式引用） */
   --color-primary: var(--accent);
   --color-bg: transparent;
@@ -69,6 +74,9 @@ html.dark {
   --bg-c4: #1f2a44;
   --glow-c1: #7c3aed;
   --glow-c2: #2563eb;
+  --table-bg: rgba(30, 36, 56, 0.48);
+  --table-border: rgba(255, 255, 255, 0.16);
+  --table-line: rgba(255, 255, 255, 0.22);
   --color-text: var(--ink);
   --color-card: var(--glass-bg);
   --color-border: rgba(255, 255, 255, 0.16);
@@ -173,18 +181,24 @@ a {
   --el-table-header-bg-color: transparent;
   --el-table-header-text-color: var(--ink-3);
   --el-table-text-color: var(--ink);
-  --el-table-border-color: rgba(255, 255, 255, 0.16);
+  --el-table-border-color: var(--table-line);
   --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.35);
-  background: transparent !important;
+  background: var(--table-bg) !important;
+  border: 1px solid var(--table-border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 .el-table th.el-table__cell {
   background: transparent !important;
   font-weight: 600;
+  border-bottom: 1px solid var(--table-line);
 }
 .el-table td.el-table__cell {
   background: transparent;
+  border-bottom: 1px solid var(--table-line);
+}
+.el-table .el-table__row:last-of-type td.el-table__cell {
+  border-bottom: none;
 }
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
   background: rgba(255, 255, 255, 0.25);
