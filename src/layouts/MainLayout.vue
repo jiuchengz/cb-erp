@@ -1,6 +1,6 @@
 <template>
   <div class="layout">
-    <aside class="sidebar glass-panel">
+    <aside class="sidebar glass-panel" :class="{ open: drawerOpen }">
       <div class="brand">
         <div class="brand-icon">E</div>
         <div class="brand-text">
@@ -9,14 +9,19 @@
         </div>
       </div>
       <nav>
-        <router-link v-for="item in menus" :key="item.path" :to="item.path">
-          {{ item.label }}
+        <router-link v-for="item in menus" :key="item.path" :to="item.path" @click="closeDrawer">
+          <span class="mico"><component :is="item.icon" /></span>
+          <span class="mlabel">{{ item.label }}</span>
         </router-link>
       </nav>
     </aside>
+    <div v-if="drawerOpen" class="drawer-mask" @click="closeDrawer"></div>
     <div class="main">
       <header class="topbar glass-panel">
         <div class="header-left">
+          <button class="hamburger" :title="drawerOpen ? '收起菜单' : '展开菜单'" @click="toggleDrawer">
+            <el-icon><menu /></el-icon>
+          </button>
           <!-- 全局搜索：可折叠，Ctrl/⌘K 聚焦 -->
           <div class="global-search" :class="{ expanded: searchExpanded }">
             <el-icon class="search-icon" @click="expandSearch"><search /></el-icon>
@@ -84,7 +89,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Document, Moon, Search, Sunny } from '@element-plus/icons-vue'
+import { ArrowDown, Document, Menu, Moon, Search, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -98,19 +103,28 @@ const route = useRoute()
 auth.init()
 
 const menus = [
-  { path: '/dashboard', label: '首页' },
-  { path: '/products', label: '商品' },
-  { path: '/inventory', label: '库存' },
-  { path: '/sales', label: '销售' },
-  { path: '/shipments', label: '发货' },
-  { path: '/transfers', label: '调拨' },
-  { path: '/procurement', label: '采购' },
-  { path: '/after-sales', label: '售后' },
-  { path: '/replenishment', label: '补货' },
-  { path: '/users', label: '用户' },
-  { path: '/logs', label: '日志' },
-  { path: '/settings', label: '设置' }
+  { path: '/dashboard', label: '首页', icon: HomeFilled },
+  { path: '/products', label: '商品', icon: Goods },
+  { path: '/inventory', label: '库存', icon: Box },
+  { path: '/sales', label: '销售', icon: Sell },
+  { path: '/shipments', label: '发货', icon: Van },
+  { path: '/transfers', label: '调拨', icon: Switch },
+  { path: '/procurement', label: '采购', icon: ShoppingCart },
+  { path: '/after-sales', label: '售后', icon: Service },
+  { path: '/replenishment', label: '补货', icon: TrendCharts },
+  { path: '/users', label: '用户', icon: User },
+  { path: '/logs', label: '日志', icon: Notebook },
+  { path: '/settings', label: '设置', icon: Setting }
 ]
+
+/* ---------- 抽屉菜单（手机端） ---------- */
+const drawerOpen = ref(false)
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
+function closeDrawer() {
+  drawerOpen.value = false
+}
 
 /* ---------- 暗色模式 ---------- */
 const isDark = ref(false)
@@ -252,14 +266,21 @@ async function onSignOut() {
 .brand-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }
 .brand-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
-.sidebar nav a { display: block; padding: 11px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; }
+.sidebar nav a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; }
+.sidebar nav a .mico { display: inline-flex; align-items: center; justify-content: center; width: 20px; font-size: 16px; flex-shrink: 0; }
 .sidebar nav a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
 .sidebar nav a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: transparent; box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+
+/* 手机端抽屉遮罩 */
+.drawer-mask { position: fixed; inset: 0; z-index: 90; background: rgba(10,15,30,.35); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.layout:has(.drawer-mask) { position: relative; }
 
 .main { flex: 1; display: flex; flex-direction: column; gap: 22px; overflow: hidden; min-width: 0; }
 .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; flex-shrink: 0; }
 .header-left { display: flex; align-items: center; min-width: 0; }
 .header-right { display: flex; align-items: center; gap: 12px; }
+.hamburger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 17px; flex-shrink: 0; margin-right: 8px; }
+.hamburger:hover { background: rgba(255,255,255,.85); color: var(--accent); }
 .debug-bar { padding: 8px 20px; background: rgba(255,247,230,.85); color: #8a5b00; border-radius: var(--radius-sm); font-size: 13px; line-height: 1.5; word-break: break-all; -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
 html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 
@@ -281,4 +302,37 @@ html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 .user { font-size: 14px; color: var(--ink); }
 .arrow { font-size: 12px; color: var(--ink-3); }
 .content { flex: 1; overflow: auto; padding: 2px 2px 2px 0; }
+
+/* ===== 响应式三端适配 ===== */
+/* ---- 平板（<=1024px）：侧边栏收窄为图标栏 ---- */
+@media (max-width: 1024px) {
+  .layout { gap: 14px; padding: 14px; }
+  .sidebar { width: 76px; padding: 18px 10px; }
+  .sidebar .brand { justify-content: center; padding: 4px 0 16px; }
+  .sidebar .brand-text { display: none; }
+  .sidebar nav a { justify-content: center; gap: 0; padding: 12px 0; font-size: 0; }
+  .sidebar nav a .mico { font-size: 18px; width: auto; }
+  .sidebar nav a:hover { transform: none; }
+  .main { gap: 14px; }
+  .topbar { padding: 12px 16px; min-height: 58px; }
+  .global-search.expanded { width: 240px; }
+  .user-trigger .user { max-width: 120px; }
+}
+
+/* ---- 手机（<=700px）：侧边栏变抽屉 + 汉堡按钮 ---- */
+@media (max-width: 700px) {
+  .layout { display: block; padding: 10px; }
+  .sidebar { position: fixed; left: -300px; top: 0; bottom: 0; width: 260px; z-index: 100; border-radius: 0 28px 28px 0; transition: left .28s ease; padding: 20px 14px; }
+  .sidebar.open { left: 0; }
+  .sidebar .brand { justify-content: flex-start; padding: 4px 10px 18px; }
+  .sidebar .brand-text { display: block; }
+  .sidebar nav a { justify-content: flex-start; gap: 12px; font-size: 14px; padding: 11px 12px; }
+  .sidebar nav a .mico { font-size: 16px; width: 20px; }
+  .main { height: 100%; gap: 10px; }
+  .topbar { padding: 10px 12px; min-height: 52px; }
+  .hamburger { display: inline-flex; }
+  .global-search { display: none; }
+  .user-trigger .user { display: none; }
+  .user-trigger { padding: 7px 11px; }
+}
 </style>
