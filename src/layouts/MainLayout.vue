@@ -58,7 +58,6 @@
           </el-dropdown>
         </div>
       </header>
-      <div v-if="auth.debug" class="debug-bar">{{ auth.debug }}</div>
       <main class="content">
         <router-view />
       </main>
@@ -281,8 +280,6 @@ async function onSignOut() {
 .header-right { display: flex; align-items: center; gap: 12px; }
 .hamburger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 17px; flex-shrink: 0; margin-right: 8px; }
 .hamburger:hover { background: rgba(255,255,255,.85); color: var(--accent); }
-.debug-bar { padding: 8px 20px; background: rgba(255,247,230,.85); color: #8a5b00; border-radius: var(--radius-sm); font-size: 13px; line-height: 1.5; word-break: break-all; -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); }
-html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 
 /* 全局搜索框 */
 .global-search { display: flex; align-items: center; gap: 8px; width: 46px; overflow: hidden; padding: 0 12px; height: 36px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(255,255,255,.55); transition: width .25s ease; }
