@@ -233,13 +233,14 @@ a {
 .el-textarea__inner {
   background: rgba(255, 255, 255, 0.55) !important;
   border-radius: var(--radius-sm) !important;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45) inset !important;
+  box-shadow: 0 0 0 1px rgba(20, 24, 40, 0.10) inset !important;
   transition: box-shadow 0.2s ease !important;
 }
 html.dark .el-input__wrapper,
 html.dark .el-select__wrapper,
 html.dark .el-textarea__inner {
   background: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16) inset !important;
 }
 .el-input__wrapper.is-focus,
 .el-select__wrapper.is-focused {
