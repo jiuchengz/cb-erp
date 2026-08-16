@@ -155,6 +155,32 @@
         </el-table>
       </el-tab-pane>
 
+      <el-tab-pane label="数据库用量" name="usage">
+        <div class="page-header">
+          <h2>数据库用量</h2>
+        </div>
+        <div class="db-usage-card" v-loading="dbUsageLoading">
+          <template v-if="dbUsage && dbUsage.ok">
+            <div class="db-usage-head">
+              <el-progress
+                :percentage="Math.min(dbUsage.percent, 100)"
+                :stroke-width="10"
+                :show-text="false"
+                style="flex: 1; max-width: 420px"
+              />
+              <span class="db-usage-percent">{{ dbUsage.percent }}%</span>
+            </div>
+            <div class="db-usage-text">
+              数据库已用 {{ dbUsage.usedMB }} MB / {{ dbUsage.quotaMB }} MB，剩余 {{ dbUsage.freeMB }} MB
+            </div>
+          </template>
+          <div v-else-if="dbUsage && dbUsage.ok === false" class="db-usage-warn">
+            {{ dbUsage.message }}
+          </div>
+          <div v-else class="db-usage-warn">数据库用量加载失败</div>
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="审计日志" name="audit">
         <div class="filters">
           <el-input
@@ -259,7 +285,24 @@ const activeTab = ref('roles')
 function onTabChange(name: string | number) {
   if (name === 'permissions') loadPermissions()
   if (name === 'warehouses') loadWarehouses()
+  if (name === 'usage') loadDbUsage()
   if (name === 'audit') loadAudit()
+}
+
+/* ---------- 数据库用量 ---------- */
+const dbUsage = ref<any>(null)
+const dbUsageLoading = ref(false)
+
+async function loadDbUsage() {
+  dbUsageLoading.value = true
+  try {
+    const { data } = await api.get('/db-usage')
+    dbUsage.value = data
+  } catch (e: any) {
+    dbUsage.value = { ok: false, message: e?.response?.data?.error?.message || '数据库用量加载失败' }
+  } finally {
+    dbUsageLoading.value = false
+  }
 }
 
 /* ---------- 界面外观（玻璃透明度 / 背景配色 / 强调色 / 深色 / 圆角 / 光斑） ---------- */
@@ -821,5 +864,37 @@ onMounted(() => {
 }
 .glow-row {
   margin-top: 14px;
+}
+.db-usage-card {
+  max-width: 760px;
+  padding: 22px 24px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  border: none;
+  box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
+  border-radius: var(--radius-lg);
+}
+.db-usage-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.db-usage-percent {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.db-usage-text {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.db-usage-warn {
+  font-size: 13px;
+  color: #e5484d;
 }
 </style>

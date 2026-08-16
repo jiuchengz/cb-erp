@@ -9,10 +9,23 @@
         </div>
       </div>
       <nav>
-        <router-link v-for="item in menus" :key="item.path" :to="item.path" @click="closeDrawer">
+        <router-link v-for="item in soloMenus" :key="item.path" :to="item.path" class="solo-link" @click="closeDrawer">
           <span class="mico"><component :is="item.icon" /></span>
           <span class="mlabel">{{ item.label }}</span>
         </router-link>
+        <div v-for="group in menuGroups" :key="group.title" class="menu-group" :class="{ open: group.open }">
+          <div class="group-title" @click="toggleGroup(group)">
+            <span class="mico"><component :is="group.icon" /></span>
+            <span class="mlabel">{{ group.title }}</span>
+            <span class="garrow"><el-icon><arrow-down /></el-icon></span>
+          </div>
+          <div class="group-items">
+            <router-link v-for="item in group.children" :key="item.path" :to="item.path" @click="closeDrawer">
+              <span class="mico"><component :is="item.icon" /></span>
+              <span class="mlabel">{{ item.label }}</span>
+            </router-link>
+          </div>
+        </div>
       </nav>
     </aside>
     <div v-if="drawerOpen" class="drawer-mask" @click="closeDrawer"></div>
@@ -101,20 +114,55 @@ const route = useRoute()
 // 恢复会话并加载角色权限：刷新后必须调用 init()，否则 roles/permissions 为空导致按钮不显示
 auth.init()
 
-const menus = [
-  { path: '/dashboard', label: '首页', icon: HomeFilled },
-  { path: '/products', label: '商品', icon: Goods },
-  { path: '/inventory', label: '库存', icon: Box },
-  { path: '/sales', label: '销售', icon: Sell },
-  { path: '/shipments', label: '发货', icon: Van },
-  { path: '/transfers', label: '调拨', icon: Switch },
-  { path: '/procurement', label: '采购', icon: ShoppingCart },
-  { path: '/after-sales', label: '售后', icon: Service },
-  { path: '/replenishment', label: '补货', icon: TrendCharts },
-  { path: '/users', label: '用户', icon: User },
-  { path: '/logs', label: '日志', icon: Notebook },
-  { path: '/settings', label: '设置', icon: Setting }
+const soloMenus = [
+  { path: '/dashboard', label: '首页', icon: HomeFilled }
 ]
+
+const menuGroups = [
+  {
+    title: '商品中心',
+    icon: Goods,
+    open: true,
+    children: [
+      { path: '/products', label: '商品', icon: Goods },
+      { path: '/inventory', label: '库存', icon: Box }
+    ]
+  },
+  {
+    title: '销售中心',
+    icon: Sell,
+    open: true,
+    children: [
+      { path: '/sales', label: '销售', icon: Sell },
+      { path: '/shipments', label: '发货', icon: Van },
+      { path: '/after-sales', label: '售后', icon: Service },
+      { path: '/replenishment', label: '补货', icon: TrendCharts }
+    ]
+  },
+  {
+    title: '供应链',
+    icon: Switch,
+    open: true,
+    children: [
+      { path: '/procurement', label: '采购', icon: ShoppingCart },
+      { path: '/transfers', label: '调拨', icon: Switch }
+    ]
+  },
+  {
+    title: '系统管理',
+    icon: Setting,
+    open: true,
+    children: [
+      { path: '/users', label: '用户', icon: User },
+      { path: '/logs', label: '日志', icon: Notebook },
+      { path: '/settings', label: '设置', icon: Setting }
+    ]
+  }
+]
+
+function toggleGroup(group: { open: boolean }) {
+  group.open = !group.open
+}
 
 /* ---------- 抽屉菜单（手机端） ---------- */
 const drawerOpen = ref(false)
@@ -259,16 +307,23 @@ async function onSignOut() {
   border-radius: var(--radius-lg);
 }
 
-.sidebar { width: 236px; display: flex; flex-direction: column; padding: 20px 14px; overflow: hidden; flex-shrink: 0; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 4px 10px 18px; }
-.brand-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; }
-.brand-name { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }
-.brand-sub { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
-.sidebar nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
-.sidebar nav a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; }
-.sidebar nav a .mico { display: inline-flex; align-items: center; justify-content: center; width: 20px; font-size: 16px; flex-shrink: 0; }
-.sidebar nav a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
-.sidebar nav a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: transparent; box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+.sidebar { width: 200px; display: flex; flex-direction: column; padding: 20px 12px; overflow: hidden; flex-shrink: 0; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
+.brand-icon { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; }
+.brand-name { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.brand-sub { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; }
+.sidebar nav .solo-link, .sidebar nav .group-title, .sidebar nav .group-items a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; text-decoration: none; cursor: pointer; user-select: none; }
+.sidebar nav .solo-link .mico, .sidebar nav .group-title .mico, .sidebar nav .group-items a .mico { display: inline-flex; align-items: center; justify-content: center; width: 20px; font-size: 16px; flex-shrink: 0; }
+.sidebar nav .solo-link:hover, .sidebar nav .group-title:hover, .sidebar nav .group-items a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
+.sidebar nav .solo-link.router-link-active, .sidebar nav .group-items a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: transparent; box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+.sidebar nav .group-title .gname { flex: 1; }
+.sidebar nav .group-title .garrow { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-3); transition: transform .25s ease; flex-shrink: 0; }
+.sidebar nav .menu-group.open .group-title .garrow { transform: rotate(180deg); }
+.sidebar nav .group-items { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
+.sidebar nav .menu-group.open .group-items { max-height: 320px; }
+.sidebar nav .group-items a { padding-left: 42px; font-size: 13.5px; }
+.sidebar nav .group-items a .mico { font-size: 14px; width: 18px; }
 
 /* 手机端抽屉遮罩 */
 .drawer-mask { position: fixed; inset: 0; z-index: 90; background: rgba(10,15,30,.35); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
@@ -307,9 +362,12 @@ async function onSignOut() {
   .sidebar { width: 76px; padding: 18px 10px; }
   .sidebar .brand { justify-content: center; padding: 4px 0 16px; }
   .sidebar .brand-text { display: none; }
-  .sidebar nav a { justify-content: center; gap: 0; padding: 12px 0; font-size: 0; }
-  .sidebar nav a .mico { font-size: 18px; width: auto; }
-  .sidebar nav a:hover { transform: none; }
+  .sidebar nav .solo-link, .sidebar nav .group-title, .sidebar nav .group-items a { justify-content: center; gap: 0; padding: 12px 0; font-size: 0; }
+  .sidebar nav .solo-link .mico, .sidebar nav .group-title .mico, .sidebar nav .group-items a .mico { font-size: 18px; width: auto; }
+  .sidebar nav .solo-link:hover, .sidebar nav .group-title:hover, .sidebar nav .group-items a:hover { transform: none; }
+  .sidebar nav .group-title .garrow { display: none; }
+  .sidebar nav .group-items a { padding-left: 0; }
+  .sidebar nav .group-items a .mico { font-size: 18px; width: auto; }
   .main { gap: 14px; }
   .topbar { padding: 12px 16px; min-height: 58px; }
   .global-search.expanded { width: 240px; }
@@ -321,10 +379,13 @@ async function onSignOut() {
   .layout { display: block; padding: 10px; }
   .sidebar { position: fixed; left: -300px; top: 0; bottom: 0; width: 260px; z-index: 100; border-radius: 0 28px 28px 0; transition: left .28s ease; padding: 20px 14px; }
   .sidebar.open { left: 0; }
-  .sidebar .brand { justify-content: flex-start; padding: 4px 10px 18px; }
+  .sidebar .brand { justify-content: flex-start; padding: 4px 10px 16px; }
   .sidebar .brand-text { display: block; }
-  .sidebar nav a { justify-content: flex-start; gap: 12px; font-size: 14px; padding: 11px 12px; }
-  .sidebar nav a .mico { font-size: 16px; width: 20px; }
+  .sidebar nav .solo-link, .sidebar nav .group-title, .sidebar nav .group-items a { justify-content: flex-start; gap: 10px; font-size: 14px; padding: 11px 12px; }
+  .sidebar nav .solo-link .mico, .sidebar nav .group-title .mico, .sidebar nav .group-items a .mico { font-size: 16px; width: 20px; }
+  .sidebar nav .group-title .garrow { display: inline-flex; }
+  .sidebar nav .group-items a { padding-left: 42px; font-size: 13.5px; }
+  .sidebar nav .group-items a .mico { font-size: 14px; width: 18px; }
   .main { height: 100%; gap: 10px; }
   .topbar { padding: 10px 12px; min-height: 52px; }
   .hamburger { display: inline-flex; }
