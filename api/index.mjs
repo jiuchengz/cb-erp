@@ -26526,7 +26526,7 @@ async function handler17(req, res) {
       }
       const newId = authData.user?.id;
       if (!newId) throw new Error("\u521B\u5EFA Auth \u7528\u6237\u5931\u8D25");
-      const { error: profileErr } = await supabase.from("profiles").upsert({ id: newId, display_name: body.name, is_active: true });
+      const { error: profileErr } = await supabase.from("profiles").upsert({ id: newId, email: body.email, display_name: body.name, is_active: true });
       if (profileErr) throw profileErr;
       if (body.role_ids && body.role_ids.length > 0) {
         const rows = body.role_ids.map((role_id) => ({ user_id: newId, role_id }));

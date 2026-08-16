@@ -19,7 +19,7 @@ function applySavedDarkMode() {
 }
 applySavedDarkMode()
 
-// 启动时恢复界面外观（玻璃透明度 / 背景配色 / 强调色，由「设置 → 界面外观」写入 cb_appearance）
+// 启动时恢复界面外观（玻璃透明度 / 背景配色 / 强调色 / 圆角 / 光斑，由「设置 → 界面外观」写入 cb_appearance）
 function applySavedAppearance() {
   try {
     const raw = localStorage.getItem('cb_appearance')
@@ -42,6 +42,15 @@ function applySavedAppearance() {
     if (typeof saved.accent === 'string' && saved.accent) {
       root.setProperty('--accent', saved.accent)
       root.setProperty('--color-primary', saved.accent)
+    }
+    if (typeof saved.radius === 'number') {
+      root.setProperty('--radius-lg', saved.radius + 'px')
+    }
+    if (typeof saved.glowOpacity === 'number') {
+      root.setProperty('--glow-opacity', String(saved.glowOpacity / 100))
+    }
+    if (saved.glowEnabled === false) {
+      document.documentElement.classList.add('no-glow')
     }
   } catch {
     /* ignore */

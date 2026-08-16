@@ -227,13 +227,13 @@ async function onSubmit() {
   background: var(--glass-bg-strong);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  border: 1px solid var(--glass-border);
+  border: none;
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
   border-radius: var(--radius-lg);
   display: flex; flex-direction: column; gap: 16px;
 }
 h1 { font-size: 20px; text-align: center; color: var(--ink); }
-input { padding: 11px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); font-size: 14px; background: rgba(255,255,255,.55); color: var(--ink); outline: none; transition: box-shadow .2s ease; }
+input { padding: 11px 14px; border: 1px solid rgba(255,255,255,0.45); border-radius: var(--radius-sm); font-size: 14px; background: rgba(255,255,255,.55); color: var(--ink); outline: none; transition: box-shadow .2s ease; }
 input:focus { box-shadow: 0 0 0 2px var(--accent); }
 button { padding: 11px; background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; border: none; border-radius: 999px; cursor: pointer; font-weight: 600; box-shadow: 0 10px 26px rgba(99,102,241,.35); transition: opacity .2s ease; }
 button:hover { opacity: .95; }

@@ -46,6 +46,58 @@
             </div>
             <el-color-picker v-model="accentColor" @change="applyAccent" />
           </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">深色模式</div>
+              <div class="appearance-desc">切换深色界面，适合夜间使用</div>
+            </div>
+            <el-switch v-model="darkMode" @change="applyDarkMode" />
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">卡片圆角</div>
+              <div class="appearance-desc">调节面板、卡片的圆角大小</div>
+            </div>
+            <div class="appearance-control">
+              <el-slider v-model="cornerRadius" :min="16" :max="36" :step="1" style="flex: 1" :format-tooltip="(v: number) => v + 'px'" @input="applyCorner" />
+              <span class="opacity-value">{{ cornerRadius }}px</span>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">背景光斑</div>
+              <div class="appearance-desc">开启后背景显示柔和渐变光斑，可调节光斑浓度</div>
+            </div>
+            <el-switch v-model="glowEnabled" @change="applyGlow" />
+          </div>
+          <div class="appearance-row glow-row">
+            <div class="appearance-info">
+              <div class="appearance-desc">光斑强度</div>
+            </div>
+            <div class="appearance-control">
+              <el-slider v-model="glowOpacity" :min="10" :max="80" :step="1" :disabled="!glowEnabled" style="flex: 1" :format-tooltip="(v: number) => v + '%'" @input="applyGlowOpacity" />
+              <span class="opacity-value">{{ glowOpacity }}%</span>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">恢复默认</div>
+              <div class="appearance-desc">将以上所有外观设置恢复为系统默认值</div>
+            </div>
+            <el-button @click="resetAppearance">恢复默认设置</el-button>
+          </div>
         </div>
       </el-tab-pane>
 
@@ -210,11 +262,16 @@ function onTabChange(name: string | number) {
   if (name === 'audit') loadAudit()
 }
 
-/* ---------- 界面外观（玻璃透明度 / 背景配色 / 强调色） ---------- */
+/* ---------- 界面外观（玻璃透明度 / 背景配色 / 强调色 / 深色 / 圆角 / 光斑） ---------- */
 const APPEARANCE_KEY = 'cb_appearance'
+const DARK_KEY = 'cb_dark_mode'
 const glassOpacity = ref(42)
 const activeScheme = ref('aurora')
 const accentColor = ref('#3b82f6')
+const darkMode = ref(false)
+const cornerRadius = ref(28)
+const glowEnabled = ref(true)
+const glowOpacity = ref(55)
 
 interface AppearanceScheme {
   id: string
@@ -289,6 +346,72 @@ function applyAccent(c: string | null) {
   saveAppearance()
 }
 
+function applyDarkMode(v: string | number | boolean) {
+  const on = Boolean(v)
+  darkMode.value = on
+  document.documentElement.classList.toggle('dark', on)
+  try {
+    if (on) localStorage.setItem(DARK_KEY, '1')
+    else localStorage.removeItem(DARK_KEY)
+  } catch {
+    /* ignore */
+  }
+  saveAppearance()
+}
+
+function applyCorner(v: number | number[]) {
+  const val = typeof v === 'number' ? v : v[0] ?? 28
+  cornerRadius.value = val
+  document.documentElement.style.setProperty('--radius-lg', val + 'px')
+  saveAppearance()
+}
+
+function applyGlow(v: string | number | boolean) {
+  const on = Boolean(v)
+  glowEnabled.value = on
+  document.documentElement.classList.toggle('no-glow', !on)
+  saveAppearance()
+}
+
+function applyGlowOpacity(v: number | number[]) {
+  const val = typeof v === 'number' ? v : v[0] ?? 55
+  glowOpacity.value = val
+  document.documentElement.style.setProperty('--glow-opacity', String(val / 100))
+  saveAppearance()
+}
+
+function resetAppearance() {
+  glassOpacity.value = 42
+  activeScheme.value = 'aurora'
+  accentColor.value = '#3b82f6'
+  darkMode.value = false
+  cornerRadius.value = 28
+  glowEnabled.value = true
+  glowOpacity.value = 55
+  const root = document.documentElement
+  const s = schemes[0]
+  root.classList.remove('dark', 'no-glow')
+  const st = root.style
+  st.setProperty('--glass-alpha', '0.42')
+  st.setProperty('--radius-lg', '28px')
+  st.setProperty('--glow-opacity', '0.55')
+  st.setProperty('--accent', '#3b82f6')
+  st.setProperty('--color-primary', '#3b82f6')
+  st.setProperty('--bg-c1', s.colors[0])
+  st.setProperty('--bg-c2', s.colors[1])
+  st.setProperty('--bg-c3', s.colors[2])
+  st.setProperty('--bg-c4', s.colors[3])
+  st.setProperty('--glow-c1', s.glow[0])
+  st.setProperty('--glow-c2', s.glow[1])
+  try {
+    localStorage.removeItem(APPEARANCE_KEY)
+    localStorage.removeItem(DARK_KEY)
+  } catch {
+    /* ignore */
+  }
+  ElMessage.success('已恢复默认外观')
+}
+
 function saveAppearance() {
   const s = schemes.find((x) => x.id === activeScheme.value) ?? schemes[0]
   try {
@@ -300,6 +423,9 @@ function saveAppearance() {
         colors: s.colors,
         glow: s.glow,
         accent: accentColor.value,
+        radius: cornerRadius.value,
+        glowEnabled: glowEnabled.value,
+        glowOpacity: glowOpacity.value,
       })
     )
   } catch {
@@ -334,6 +460,24 @@ function loadAppearance() {
       document.documentElement.style.setProperty('--accent', saved.accent)
       document.documentElement.style.setProperty('--color-primary', saved.accent)
     }
+    if (typeof saved.radius === 'number') {
+      cornerRadius.value = saved.radius
+      document.documentElement.style.setProperty('--radius-lg', saved.radius + 'px')
+    }
+    if (typeof saved.glowEnabled === 'boolean') {
+      glowEnabled.value = saved.glowEnabled
+      document.documentElement.classList.toggle('no-glow', !saved.glowEnabled)
+    }
+    if (typeof saved.glowOpacity === 'number') {
+      glowOpacity.value = saved.glowOpacity
+      document.documentElement.style.setProperty('--glow-opacity', String(saved.glowOpacity / 100))
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    darkMode.value = localStorage.getItem(DARK_KEY) === '1'
+    document.documentElement.classList.toggle('dark', darkMode.value)
   } catch {
     /* ignore */
   }
@@ -586,7 +730,7 @@ onMounted(() => {
   background: var(--glass-bg);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  border: 1px solid var(--glass-border);
+  border: none;
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
   border-radius: var(--radius-lg);
 }
@@ -674,5 +818,8 @@ onMounted(() => {
 }
 .custom-row {
   margin-top: 22px;
+}
+.glow-row {
+  margin-top: 14px;
 }
 </style>

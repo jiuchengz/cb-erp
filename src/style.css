@@ -10,8 +10,8 @@
   --glass-alpha: 0.42;
   --glass-bg: rgba(255, 255, 255, var(--glass-alpha));
   --glass-bg-strong: rgba(255, 255, 255, calc(var(--glass-alpha) + 0.13));
-  --glass-border: rgba(255, 255, 255, 0.65);
-  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
   --glass-blur: 28px;
 
   /* 文字 */
@@ -35,6 +35,7 @@
   --bg-c4: #fde68a;
   --glow-c1: #f472b6;
   --glow-c2: #60a5fa;
+  --glow-opacity: 0.55;
 
   /* 旧变量兼容映射（供历史 scoped 样式引用） */
   --color-primary: var(--accent);
@@ -43,7 +44,7 @@
   --color-text: var(--ink);
   --color-card: var(--glass-bg);
   --color-border: var(--glass-border);
-  --color-border-light: rgba(255, 255, 255, 0.5);
+  --color-border-light: rgba(255, 255, 255, 0.16);
   --color-muted: var(--ink-3);
   --color-fill: rgba(255, 255, 255, 0.5);
   --color-header-bg: transparent;
@@ -54,8 +55,8 @@
 html.dark {
   --glass-bg: rgba(30, 36, 56, var(--glass-alpha));
   --glass-bg-strong: rgba(40, 48, 72, calc(var(--glass-alpha) + 0.13));
-  --glass-border: rgba(255, 255, 255, 0.16);
-  --glass-highlight: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.1);
   --ink: rgba(235, 240, 250, 0.92);
   --ink-2: rgba(220, 228, 240, 0.62);
   --ink-3: rgba(200, 210, 230, 0.42);
@@ -106,9 +107,14 @@ body::after {
   position: fixed;
   border-radius: 50%;
   filter: blur(90px);
-  opacity: 0.55;
+  opacity: var(--glow-opacity, 0.55);
   pointer-events: none;
   z-index: -1;
+  transition: opacity 0.3s ease;
+}
+body.no-glow::before,
+body.no-glow::after {
+  display: none;
 }
 body::before {
   width: 520px;
@@ -155,7 +161,7 @@ a {
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight) !important;
 }
 .el-card__header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
   color: var(--ink);
   font-weight: 700;
 }
@@ -167,7 +173,7 @@ a {
   --el-table-header-bg-color: transparent;
   --el-table-header-text-color: var(--ink-3);
   --el-table-text-color: var(--ink);
-  --el-table-border-color: rgba(255, 255, 255, 0.4);
+  --el-table-border-color: rgba(255, 255, 255, 0.16);
   --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.35);
   background: transparent !important;
   border-radius: var(--radius-md);
@@ -213,7 +219,7 @@ a {
 .el-textarea__inner {
   background: rgba(255, 255, 255, 0.55) !important;
   border-radius: var(--radius-sm) !important;
-  box-shadow: 0 0 0 1px var(--glass-border) inset !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45) inset !important;
   transition: box-shadow 0.2s ease !important;
 }
 html.dark .el-input__wrapper,
@@ -238,12 +244,12 @@ html.dark .el-textarea__inner {
 }
 .el-button--default {
   background: rgba(255, 255, 255, 0.6);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   color: var(--ink);
 }
 .el-button--default:hover {
   background: rgba(255, 255, 255, 0.85);
-  border-color: var(--glass-border);
+  border-color: rgba(255, 255, 255, 0.35);
   color: var(--ink);
 }
 .el-button--primary {
@@ -278,7 +284,7 @@ html.dark .el-textarea__inner {
   border-radius: 3px;
 }
 .el-tabs__nav-wrap::after {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* 分页 */
@@ -310,7 +316,7 @@ html.dark .el-textarea__inner {
   background: var(--glass-bg-strong) !important;
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid var(--glass-border) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: var(--radius-md) !important;
   box-shadow: var(--shadow) !important;
 }
@@ -324,7 +330,7 @@ html.dark .el-textarea__inner {
   background: var(--glass-bg-strong);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow);
 }
@@ -334,7 +340,7 @@ html.dark .el-textarea__inner {
   background: var(--glass-bg-strong) !important;
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid var(--glass-border) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: var(--radius-md) !important;
 }
 

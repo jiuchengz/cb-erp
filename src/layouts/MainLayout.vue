@@ -241,7 +241,7 @@ async function onSignOut() {
   background: var(--glass-bg);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   backdrop-filter: blur(var(--glass-blur)) saturate(180%);
-  border: 1px solid var(--glass-border);
+  border: none;
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
   border-radius: var(--radius-lg);
 }
@@ -254,7 +254,7 @@ async function onSignOut() {
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
 .sidebar nav a { display: block; padding: 11px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: all .22s ease; border: 1px solid transparent; }
 .sidebar nav a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
-.sidebar nav a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: var(--glass-border); box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+.sidebar nav a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: transparent; box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
 
 .main { flex: 1; display: flex; flex-direction: column; gap: 22px; overflow: hidden; min-width: 0; }
 .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; flex-shrink: 0; }
@@ -264,7 +264,7 @@ async function onSignOut() {
 html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 
 /* 全局搜索框 */
-.global-search { display: flex; align-items: center; gap: 8px; width: 46px; overflow: hidden; padding: 0 12px; height: 36px; border: 1px solid var(--glass-border); border-radius: 999px; background: rgba(255,255,255,.55); transition: width .25s ease; }
+.global-search { display: flex; align-items: center; gap: 8px; width: 46px; overflow: hidden; padding: 0 12px; height: 36px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(255,255,255,.55); transition: width .25s ease; }
 .global-search.expanded { width: 320px; }
 .global-search .search-icon { font-size: 15px; color: var(--ink-3); cursor: pointer; flex-shrink: 0; }
 .global-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--ink); font-size: 13px; }
@@ -272,11 +272,11 @@ html.dark .debug-bar { background: rgba(58,47,20,.8); color: #e6c97a; }
 .global-search .shortcut { flex-shrink: 0; font-size: 11px; color: var(--ink-3); background: rgba(255,255,255,.6); border-radius: 6px; padding: 2px 7px; }
 
 /* 顶栏按钮 */
-.topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--glass-border); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
+.topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
 .topbar-btn:hover { background: rgba(255,255,255,.85); color: var(--accent); transform: translateY(-1px); }
 .log-badge { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; line-height: 16px; text-align: center; font-size: 11px; color: #fff; background: #e5484d; border-radius: 8px; }
 
-.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 7px 12px; border: 1px solid var(--glass-border); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
+.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 7px 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
 .user-trigger:hover { background: rgba(255,255,255,.85); }
 .user { font-size: 14px; color: var(--ink); }
 .arrow { font-size: 12px; color: var(--ink-3); }
