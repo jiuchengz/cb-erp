@@ -118,7 +118,7 @@ const soloMenus = [
   { path: '/dashboard', label: '首页', icon: HomeFilled }
 ]
 
-const menuGroups = [
+const menuGroups = reactive([
   {
     title: '商品中心',
     icon: Goods,
@@ -158,7 +158,7 @@ const menuGroups = [
       { path: '/settings', label: '设置', icon: Setting }
     ]
   }
-]
+])
 
 function toggleGroup(group: { open: boolean }) {
   group.open = !group.open
