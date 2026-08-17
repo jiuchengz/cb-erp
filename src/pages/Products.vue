@@ -36,7 +36,8 @@
       <span class="profit-tip">修改汇率后利润列实时重算（只读联动）</span>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe max-height="480" @selection-change="onSelectionChange">
+    <div class="table-wrap">
+    <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column label="图片" width="90">
         <template #default="{ row }">
@@ -95,6 +96,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       background
@@ -724,6 +726,28 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.table-wrap :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
+/* 固定右列（操作列）不透明背景：滚动时不再透出下层数据（仅数据单元格，表头保持原样） */
+.table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
+  background: #fff !important;
+}
+html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
+  background: #1e2438 !important;
+}
 .page-header {
   display: flex;
   justify-content: space-between;
