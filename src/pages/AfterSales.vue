@@ -81,7 +81,12 @@
         </el-form-item>
         <el-form-item label="仓库">
           <el-select v-model="form.warehouse_id" clearable placeholder="退货入库仓库(可选)" style="width: 100%">
-            <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
+            <el-option-group v-if="domesticWh.length" label="国内仓库">
+              <el-option v-for="w in domesticWh" :key="w.id" :label="w.name" :value="w.id" />
+            </el-option-group>
+            <el-option-group v-if="overseasWh.length" label="海外仓">
+              <el-option v-for="w in overseasWh" :key="w.id" :label="w.name" :value="w.id" />
+            </el-option-group>
           </el-select>
         </el-form-item>
         <el-form-item label="原因">
@@ -233,6 +238,8 @@ function onSizeChange() {
 const products = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const salesOrders = ref<any[]>([])
+const domesticWh = computed(() => warehouses.value.filter((w: any) => w.wh_type === 'domestic'))
+const overseasWh = computed(() => warehouses.value.filter((w: any) => w.wh_type === 'overseas'))
 function warehouseName(id: string) {
   if (!id) return '-'
   return warehouses.value.find((w) => w.id === id)?.name || id
@@ -245,7 +252,7 @@ async function loadOptions() {
       api.get('/sales', { params: { page: 1, pageSize: 200 } }),
     ])
     products.value = prodRes.data.data ?? []
-    warehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
+    warehouses.value = whRes.data.data ?? []
     salesOrders.value = saleRes.data.data ?? []
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
