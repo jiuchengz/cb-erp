@@ -9,6 +9,9 @@ import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 
 const PURCHASE_FLOW: Record<string, string[]> = {
+  // 拿货新版：仅 ARRIVED（已到货）-> RECEIVED（已入库）
+  ARRIVED: ['RECEIVED'],
+  // 旧流程兼容保留
   DRAFT: ['SUBMITTED', 'CANCELLED'],
   SUBMITTED: ['APPROVED', 'CANCELLED'],
   APPROVED: ['PURCHASING', 'CANCELLED'],
@@ -20,7 +23,9 @@ const PURCHASE_FLOW: Record<string, string[]> = {
 
 const updateSchema = z
   .object({
-    status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PURCHASING', 'PARTIAL', 'RECEIVED', 'CANCELLED']).optional(),
+    status: z
+      .enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PURCHASING', 'PARTIAL', 'RECEIVED', 'CANCELLED', 'ARRIVED'])
+      .optional(),
     receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   })
   .refine((v) => v.status !== undefined || v.receive_date !== undefined, { message: '至少提供一个更新字段' });
@@ -34,7 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'procurement.read');
-      const { data, error } = await supabase.from('purchase_orders').select('*, purchase_order_items(*)').eq('id', id).single();
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('*, purchase_order_items(*, products(sku, code, name, image_text))')
+        .eq('id', id)
+        .single();
       if (error) {
         if (error.code === 'PGRST116') throw Errors.notFound('采购单不存在');
         throw error;

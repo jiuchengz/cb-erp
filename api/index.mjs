@@ -25971,7 +25971,7 @@ async function handler7(req, res) {
 
 // server/_handlers/products.ts
 var createSchema2 = external_exports.object({
-  sku: external_exports.string().min(1).max(64),
+  sku: external_exports.string().max(64).nullable().optional(),
   name: external_exports.string().min(1).max(200),
   barcode: external_exports.string().max(64).nullable().optional(),
   category: external_exports.string().max(100).nullable().optional(),
@@ -26006,7 +26006,7 @@ async function uploadProductImage(supabase, base64, sku) {
   const buffer = Buffer.from(b64, "base64");
   if (!buffer.length) throw new Error("\u56FE\u7247\u6570\u636E\u4E3A\u7A7A");
   const ext = (mime.split("/")[1] || "png").replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "");
-  const safeSku = sku.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) || "img";
+  const safeSku = String(sku || "img").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) || "img";
   const path = `${safeSku}_${Date.now()}.${ext}`;
   const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
     contentType: mime,
@@ -26040,18 +26040,27 @@ async function handler8(req, res) {
       requirePermission(ctx, "products.write");
       const body = parse(createSchema2, req.body || {});
       const supabase = getAdminClient();
+      if (body.code) {
+        const { data: dup } = await supabase.from("products").select("id").eq("code", body.code).limit(1);
+        if (dup && dup.length) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${body.code}`);
+      }
       const imgB64 = body.image_base64;
       delete body.image_base64;
       if (imgB64) {
         try {
-          body.image_text = await uploadProductImage(supabase, imgB64, body.sku);
+          body.image_text = await uploadProductImage(supabase, imgB64, body.sku || body.code);
         } catch (imgErr) {
           console.error("[products] inline image upload failed:", imgErr?.message || imgErr);
         }
       }
       const { data, error } = await supabase.from("products").insert(body).select().single();
       if (error) {
-        if (error.code === "23505") throw Errors.conflict(`SKU \u5DF2\u5B58\u5728\uFF1A${body.sku}`);
+        if (error.code === "23505") {
+          const msg = String(error.message || "");
+          throw Errors.conflict(
+            msg.includes("idx_products_code_unique") ? `\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${body.code}` : `SKU \u5DF2\u5B58\u5728\uFF1A${body.sku || ""}`
+          );
+        }
         throw error;
       }
       await writeAudit(ctx, req, "create", "product", data.id, null, data);
@@ -26134,18 +26143,24 @@ async function handler10(req, res) {
 }
 
 // server/_handlers/purchase-orders.ts
-var itemSchema2 = external_exports.object({
-  product_id: external_exports.string().uuid(),
-  quantity: external_exports.coerce.number().positive(),
-  unit_price: external_exports.coerce.number().min(0)
-});
 var createSchema3 = external_exports.object({
-  order_no: external_exports.string().min(1).max(64),
-  supplier: external_exports.string().max(128).optional().default(""),
-  warehouse_id: external_exports.string().uuid(),
-  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  items: external_exports.array(itemSchema2).min(1).max(200)
+  product_code: external_exports.string().min(1).max(64),
+  quantity: external_exports.coerce.number().positive(),
+  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
+function todayStr(d = /* @__PURE__ */ new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function genOrderNo(d = /* @__PURE__ */ new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const rand = String(Math.floor(Math.random() * 9e3) + 1e3);
+  return `CG-${y}${m}${day}-${rand}`;
+}
 async function handler11(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -26154,7 +26169,7 @@ async function handler11(req, res) {
       requirePermission(ctx, "procurement.read");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query = supabase.from("purchase_orders").select("*", { count: "exact" });
+      let query = supabase.from("purchase_orders").select("*, purchase_order_items(*, products(sku, code, name, image_text))", { count: "exact" });
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
       if (status) query = query.eq("status", status);
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -26166,32 +26181,74 @@ async function handler11(req, res) {
       requirePermission(ctx, "procurement.write");
       const body = parse(createSchema3, req.body || {});
       const supabase = getAdminClient();
-      const items = body.items.map((it) => ({
-        product_id: it.product_id,
-        quantity: it.quantity,
-        unit_price: it.unit_price,
-        received_quantity: 0,
-        subtotal: Number((Number(it.quantity) * Number(it.unit_price)).toFixed(2))
-      }));
-      const totalAmount = items.reduce((s, it) => s + Number(it.subtotal), 0);
-      const { data: order, error } = await supabase.from("purchase_orders").insert({
-        order_no: body.order_no,
-        supplier: body.supplier || null,
-        warehouse_id: body.warehouse_id,
-        receive_date: body.receive_date || null,
-        total_amount: totalAmount,
+      const { data: product, error: prodErr } = await supabase.from("products").select("id, sku, code, name").eq("code", body.product_code.trim()).limit(1).maybeSingle();
+      if (prodErr) throw prodErr;
+      if (!product) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u4E0D\u5B58\u5728\uFF1A${body.product_code.trim()}`);
+      const { data: warehouse, error: whErr } = await supabase.from("warehouses").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
+      if (whErr) throw whErr;
+      if (!warehouse) throw Errors.conflict("\u6682\u65E0\u4ED3\u5E93\uFF0C\u8BF7\u5148\u521B\u5EFA\u4ED3\u5E93");
+      const receiveDate = body.receive_date || todayStr();
+      const orderNo = genOrderNo();
+      const { data: order, error: orderErr } = await supabase.from("purchase_orders").insert({
+        order_no: orderNo,
+        supplier: null,
+        warehouse_id: warehouse.id,
+        receive_date: receiveDate,
+        status: "ARRIVED",
+        total_amount: 0,
         created_by: ctx.userId
       }).select().single();
-      if (error) {
-        if (error.code === "23505") throw Errors.conflict(`\u91C7\u8D2D\u5355\u53F7\u5DF2\u5B58\u5728\uFF1A${body.order_no}`);
-        throw error;
+      if (orderErr) {
+        if (orderErr.code === "23505") {
+          const retryNo = genOrderNo();
+          const { data: retryOrder, error: retryErr } = await supabase.from("purchase_orders").insert({
+            order_no: retryNo,
+            supplier: null,
+            warehouse_id: warehouse.id,
+            receive_date: receiveDate,
+            status: "ARRIVED",
+            total_amount: 0,
+            created_by: ctx.userId
+          }).select().single();
+          if (retryErr) throw retryErr;
+          const { error: itemErr2 } = await supabase.from("purchase_order_items").insert({
+            order_id: retryOrder.id,
+            product_id: product.id,
+            quantity: body.quantity,
+            received_quantity: 0,
+            unit_price: 0,
+            subtotal: 0
+          });
+          if (itemErr2) {
+            await supabase.from("purchase_orders").delete().eq("id", retryOrder.id);
+            throw itemErr2;
+          }
+          await writeAudit(ctx, req, "create", "purchase_order", retryOrder.id, null, {
+            order_no: retryOrder.order_no,
+            product_code: body.product_code.trim(),
+            quantity: body.quantity
+          });
+          return res.status(201).json({ data: retryOrder });
+        }
+        throw orderErr;
       }
-      const { error: itemErr } = await supabase.from("purchase_order_items").insert(items.map((it) => ({ order_id: order.id, ...it })));
+      const { error: itemErr } = await supabase.from("purchase_order_items").insert({
+        order_id: order.id,
+        product_id: product.id,
+        quantity: body.quantity,
+        received_quantity: 0,
+        unit_price: 0,
+        subtotal: 0
+      });
       if (itemErr) {
         await supabase.from("purchase_orders").delete().eq("id", order.id);
         throw itemErr;
       }
-      await writeAudit(ctx, req, "create", "purchase_order", order.id, null, { order_no: order.order_no, items: items.length });
+      await writeAudit(ctx, req, "create", "purchase_order", order.id, null, {
+        order_no: order.order_no,
+        product_code: body.product_code.trim(),
+        quantity: body.quantity
+      });
       return res.status(201).json({ data: order });
     }
     return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
@@ -26201,14 +26258,14 @@ async function handler11(req, res) {
 }
 
 // server/_handlers/replenishment.ts
-var itemSchema3 = external_exports.object({
+var itemSchema2 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
 var createSchema4 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   warehouse_id: external_exports.string().uuid(),
-  items: external_exports.array(itemSchema3).min(1).max(200)
+  items: external_exports.array(itemSchema2).min(1).max(200)
 });
 async function handler12(req, res) {
   try {
@@ -26272,7 +26329,7 @@ async function handler13(req, res) {
 }
 
 // server/_handlers/sales.ts
-var itemSchema4 = external_exports.object({
+var itemSchema3 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive(),
   unit_price: external_exports.coerce.number().min(0).optional(),
@@ -26282,7 +26339,7 @@ var createSchema5 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   customer_id: external_exports.string().uuid().nullable().optional(),
   currency: external_exports.string().max(8).optional(),
-  items: external_exports.array(itemSchema4).min(1).max(200)
+  items: external_exports.array(itemSchema3).min(1).max(200)
 });
 async function handler14(req, res) {
   try {
@@ -26369,7 +26426,7 @@ async function handler14(req, res) {
 }
 
 // server/_handlers/shipments.ts
-var itemSchema5 = external_exports.object({
+var itemSchema4 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive(),
   sales_order_id: external_exports.string().uuid().optional()
@@ -26378,7 +26435,7 @@ var createSchema6 = external_exports.object({
   tracking_no: external_exports.string().min(1).max(64),
   carrier: external_exports.string().max(128).optional().default(""),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
-  items: external_exports.array(itemSchema5).min(1).max(200)
+  items: external_exports.array(itemSchema4).min(1).max(200)
 });
 async function handler15(req, res) {
   try {
@@ -26434,7 +26491,7 @@ async function handler15(req, res) {
 }
 
 // server/_handlers/transfers.ts
-var itemSchema6 = external_exports.object({
+var itemSchema5 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
@@ -26442,7 +26499,7 @@ var createSchema7 = external_exports.object({
   transfer_no: external_exports.string().min(1).max(64),
   from_warehouse_id: external_exports.string().uuid(),
   to_warehouse_id: external_exports.string().uuid(),
-  items: external_exports.array(itemSchema6).min(1).max(200)
+  items: external_exports.array(itemSchema5).min(1).max(200)
 }).refine((v) => v.from_warehouse_id !== v.to_warehouse_id, { message: "\u8C03\u51FA\u4E0E\u8C03\u5165\u4ED3\u5E93\u4E0D\u80FD\u76F8\u540C" });
 async function handler16(req, res) {
   try {
@@ -26924,7 +26981,7 @@ async function handler25(req, res) {
 
 // server/_handlers/products/[id].ts
 var updateSchema3 = external_exports.object({
-  sku: external_exports.string().min(1).max(64).optional(),
+  sku: external_exports.string().max(64).nullable().optional(),
   name: external_exports.string().min(1).max(200).optional(),
   barcode: external_exports.string().max(64).nullable().optional(),
   category: external_exports.string().max(100).nullable().optional(),
@@ -26966,7 +27023,12 @@ async function handler26(req, res) {
       const { data: before } = await supabase.from("products").select("*").eq("id", id).single();
       const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
       if (error) {
-        if (error.code === "23505") throw Errors.conflict("SKU \u5DF2\u5B58\u5728");
+        if (error.code === "23505") {
+          const msg = String(error.message || "");
+          throw Errors.conflict(
+            msg.includes("idx_products_code_unique") ? "\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728" : "SKU \u5DF2\u5B58\u5728"
+          );
+        }
         if (error.code === "PGRST116") throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
         throw error;
       }
@@ -26989,6 +27051,9 @@ async function handler26(req, res) {
 
 // server/_handlers/purchase-orders/[id].ts
 var PURCHASE_FLOW = {
+  // 拿货新版：仅 ARRIVED（已到货）-> RECEIVED（已入库）
+  ARRIVED: ["RECEIVED"],
+  // 旧流程兼容保留
   DRAFT: ["SUBMITTED", "CANCELLED"],
   SUBMITTED: ["APPROVED", "CANCELLED"],
   APPROVED: ["PURCHASING", "CANCELLED"],
@@ -26998,7 +27063,7 @@ var PURCHASE_FLOW = {
   CANCELLED: []
 };
 var updateSchema4 = external_exports.object({
-  status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED"]).optional(),
+  status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED", "ARRIVED"]).optional(),
   receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 }).refine((v) => v.status !== void 0 || v.receive_date !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
 async function handler27(req, res) {
@@ -27009,7 +27074,7 @@ async function handler27(req, res) {
     const supabase = getAdminClient();
     if (req.method === "GET") {
       requirePermission(ctx, "procurement.read");
-      const { data, error } = await supabase.from("purchase_orders").select("*, purchase_order_items(*)").eq("id", id).single();
+      const { data, error } = await supabase.from("purchase_orders").select("*, purchase_order_items(*, products(sku, code, name, image_text))").eq("id", id).single();
       if (error) {
         if (error.code === "PGRST116") throw Errors.notFound("\u91C7\u8D2D\u5355\u4E0D\u5B58\u5728");
         throw error;

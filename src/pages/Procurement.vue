@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h2>采购管理</h2>
+      <h2>采购管理（拿货）</h2>
       <div>
         <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
@@ -9,7 +9,7 @@
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
         <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
-        <el-button v-if="canWrite" type="primary" @click="openCreate">新增采购单</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">新增拿货</el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
     </div>
@@ -23,12 +23,31 @@
 
     <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
-      <el-table-column prop="order_no" label="采购单号" min-width="160" />
-      <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
-      <el-table-column label="仓库" min-width="140">
-        <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
+      <el-table-column label="编码" min-width="140">
+        <template #default="{ row }">{{ firstItem(row)?.products?.sku || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="total_amount" label="总金额" width="120" align="right" />
+      <el-table-column label="图片" min-width="200">
+        <template #default="{ row }">
+          <div class="prod-cell">
+            <el-image
+              v-if="firstItem(row)?.products?.image_text"
+              :src="firstItem(row).products.image_text"
+              :preview-src-list="[firstItem(row).products.image_text]"
+              preview-teleported
+              fit="cover"
+              class="prod-thumb"
+            />
+            <div v-else class="prod-thumb placeholder">图</div>
+            <span class="prod-name">{{ firstItem(row)?.products?.name || '-' }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="产品编码" min-width="140">
+        <template #default="{ row }">{{ firstItem(row)?.products?.code || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="拿货数量" width="110" align="right">
+        <template #default="{ row }">{{ firstItem(row)?.quantity ?? '-' }}</template>
+      </el-table-column>
       <el-table-column label="拿货日期" width="170">
         <template #default="{ row }">
           <el-date-picker
@@ -44,13 +63,10 @@
           <span v-else>{{ row.receive_date || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="110">
+      <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
         </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" min-width="170">
-        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
@@ -58,6 +74,7 @@
           <el-button v-if="canWrite && nextStatuses(row.status).length" link type="primary" @click="openFlow(row)">
             流转
           </el-button>
+          <el-button v-if="canWrite" link type="danger" @click="removeRow(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -73,40 +90,45 @@
       @size-change="onSizeChange"
     />
 
-    <el-dialog v-model="createVisible" title="新增采购单" width="860px" destroy-on-close>
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="采购单号" required>
-          <el-input v-model="form.order_no" placeholder="唯一采购单号" />
+    <!-- 新增拿货弹窗 -->
+    <el-dialog v-model="createVisible" title="新增拿货" width="520px" destroy-on-close>
+      <el-form :model="form" label-width="90px">
+        <el-form-item label="产品编码" required>
+          <el-input
+            v-model="form.product_code"
+            placeholder="输入产品编码，名称/图片自动带出"
+            @blur="lookupProduct"
+          />
         </el-form-item>
-        <el-form-item label="供应商">
-          <el-input v-model="form.supplier" placeholder="可选" />
+        <el-form-item label="拿货数量" required>
+          <el-input-number v-model="form.quantity" :min="1" :precision="0" style="width: 180px" />
         </el-form-item>
         <el-form-item label="拿货日期">
           <el-date-picker
             v-model="form.receive_date"
             type="date"
             value-format="YYYY-MM-DD"
-            placeholder="选择日期"
-            style="width: 100%"
+            placeholder="默认当天"
+            style="width: 180px"
           />
         </el-form-item>
-        <el-form-item label="仓库" required>
-          <el-select v-model="form.warehouse_id" placeholder="选择仓库" style="width: 100%">
-            <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="商品明细" required>
-          <div class="items-editor">
-            <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable placeholder="商品" style="width: 300px">
-                <el-option v-for="p in products" :key="p.id" :label="`${p.sku} - ${p.name}`" :value="p.id" />
-              </el-select>
-              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 130px" />
-              <el-input-number v-model="it.unit_price" :min="0" :precision="2" placeholder="单价" style="width: 140px" />
-              <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
+        <el-form-item v-if="form.productInfo" label="匹配商品">
+          <div class="match-box">
+            <el-image
+              v-if="form.productInfo.image_text"
+              :src="form.productInfo.image_text"
+              fit="cover"
+              class="match-thumb"
+            />
+            <div v-else class="match-thumb placeholder">图</div>
+            <div class="match-info">
+              <div class="match-name">{{ form.productInfo.name }}</div>
+              <div class="match-sub">编码：{{ form.productInfo.sku }} · 产品编码：{{ form.productInfo.code }}</div>
             </div>
-            <el-button size="small" @click="addItem">添加明细</el-button>
           </div>
+        </el-form-item>
+        <el-form-item v-else-if="form.product_code && form.lookupMsg" label=" ">
+          <span style="color: #f56c6c; font-size: 12px">{{ form.lookupMsg }}</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -115,27 +137,36 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="采购单详情" width="760px">
-      <el-descriptions v-if="detail" :column="2" border>
-        <el-descriptions-item label="采购单号">{{ detail.order_no }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ detail.supplier || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="仓库">{{ warehouseName(detail.warehouse_id) }}</el-descriptions-item>
-        <el-descriptions-item label="拿货日期">{{ detail.receive_date || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">{{ detail.total_amount }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
-      </el-descriptions>
-      <el-table v-if="detail" :data="detail.purchase_order_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column prop="product_id" label="商品ID" min-width="240" show-overflow-tooltip />
-        <el-table-column prop="quantity" label="数量" width="90" align="right" />
-        <el-table-column prop="received_quantity" label="实收数量" width="90" align="right" />
-        <el-table-column prop="unit_price" label="单价" width="100" align="right" />
-        <el-table-column prop="subtotal" label="小计" width="100" align="right" />
-      </el-table>
+    <!-- 详情弹窗（含创建时间） -->
+    <el-dialog v-model="detailVisible" title="拿货详情" width="560px">
+      <div v-if="detail" class="detail-wrap">
+        <div class="match-box">
+          <el-image
+            v-if="firstItem(detail)?.products?.image_text"
+            :src="firstItem(detail).products.image_text"
+            fit="cover"
+            class="match-thumb"
+          />
+          <div v-else class="match-thumb placeholder">图</div>
+          <div class="match-info">
+            <div class="match-name">{{ firstItem(detail)?.products?.name || '-' }}</div>
+            <div class="match-sub">编码：{{ firstItem(detail)?.products?.sku || '-' }} · 产品编码：{{ firstItem(detail)?.products?.code || '-' }}</div>
+          </div>
+        </div>
+        <el-descriptions :column="2" border style="margin-top: 14px">
+          <el-descriptions-item label="拿货数量">{{ firstItem(detail)?.quantity ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="拿货日期">{{ detail.receive_date || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
     </el-dialog>
 
-    <el-dialog v-model="flowVisible" title="状态流转" width="420px" destroy-on-close>
-      <el-form label-width="100px">
+    <!-- 流转弹窗 -->
+    <el-dialog v-model="flowVisible" title="状态流转" width="440px" destroy-on-close>
+      <el-form label-width="90px">
         <el-form-item label="当前状态">
           <el-tag>{{ statusLabel(flowRow?.status) }}</el-tag>
         </el-form-item>
@@ -144,6 +175,7 @@
             <el-option v-for="s in nextStatuses(flowRow?.status)" :key="s" :label="statusLabel(s)" :value="s" />
           </el-select>
         </el-form-item>
+        <div class="flow-note">流转为「已入库」后，拿货数量将自动计入对应产品的国内库存，并在库存流水（采购入库）中留痕。</div>
       </el-form>
       <template #footer>
         <el-button @click="flowVisible = false">取消</el-button>
@@ -159,38 +191,29 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { exportTable, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('procurement.write'))
 
 const PURCHASE_FLOW: Record<string, string[]> = {
-  DRAFT: ['SUBMITTED', 'CANCELLED'],
-  SUBMITTED: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['PURCHASING', 'CANCELLED'],
-  PURCHASING: ['PARTIAL', 'RECEIVED', 'CANCELLED'],
-  PARTIAL: ['RECEIVED'],
+  ARRIVED: ['RECEIVED'],
   RECEIVED: [],
-  CANCELLED: [],
 }
 
 const statusOptions = [
-  { label: '草稿', value: 'DRAFT' },
-  { label: '已提交', value: 'SUBMITTED' },
-  { label: '已审批', value: 'APPROVED' },
-  { label: '采购中', value: 'PURCHASING' },
-  { label: '部分收货', value: 'PARTIAL' },
-  { label: '已收货', value: 'RECEIVED' },
-  { label: '已取消', value: 'CANCELLED' },
+  { label: '已到货', value: 'ARRIVED' },
+  { label: '已入库', value: 'RECEIVED' },
 ]
 
 const statusMap: Record<string, { label: string; type: string }> = {
+  ARRIVED: { label: '已到货', type: 'warning' },
+  RECEIVED: { label: '已入库', type: 'success' },
   DRAFT: { label: '草稿', type: 'info' },
   SUBMITTED: { label: '已提交', type: 'primary' },
   APPROVED: { label: '已审批', type: 'primary' },
   PURCHASING: { label: '采购中', type: 'warning' },
   PARTIAL: { label: '部分收货', type: 'warning' },
-  RECEIVED: { label: '已收货', type: 'success' },
   CANCELLED: { label: '已取消', type: 'danger' },
 }
 
@@ -206,6 +229,9 @@ function nextStatuses(s?: string) {
 function formatDate(v: string) {
   if (!v) return ''
   return new Date(v).toLocaleString('zh-CN', { hour12: false })
+}
+function firstItem(row: any) {
+  return row?.purchase_order_items?.[0] || null
 }
 
 const rows = ref<any[]>([])
@@ -232,18 +258,26 @@ function onSizeChange() {
 }
 
 const products = ref<any[]>([])
-const warehouses = ref<any[]>([])
-function warehouseName(id: string) {
-  return warehouses.value.find((w) => w.id === id)?.name || id
-}
+const codeMap = new Map<string, any>()
+const skuMap = new Map<string, any>()
 async function loadOptions() {
   try {
-    const [prodRes, whRes] = await Promise.all([
-      api.get('/products', { params: { page: 1, pageSize: 200 } }),
-      api.get('/warehouses'),
-    ])
-    products.value = prodRes.data.data ?? []
-    warehouses.value = whRes.data.data ?? []
+    const whRes = await api.get('/warehouses')
+    const allProducts: any[] = []
+    let page = 1
+    for (;;) {
+      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+      ;(data.data ?? []).forEach((p: any) => allProducts.push(p))
+      if (page * 200 >= (data.total ?? 0)) break
+      page++
+    }
+    products.value = allProducts
+    codeMap.clear()
+    skuMap.clear()
+    allProducts.forEach((p) => {
+      if (p.code) codeMap.set(p.code, p)
+      if (p.sku) skuMap.set(p.sku, p)
+    })
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }
@@ -252,59 +286,58 @@ async function loadOptions() {
 const createVisible = ref(false)
 const saving = ref(false)
 const form = reactive({
-  order_no: '',
-  supplier: '',
-  warehouse_id: '',
+  product_code: '',
+  quantity: 1,
   receive_date: '',
-  items: [] as any[],
+  productInfo: null as any,
+  lookupMsg: '',
 })
 
-function addItem() {
-  form.items.push({ product_id: '', quantity: 1, unit_price: 0 })
-}
-function removeItem(idx: number) {
-  form.items.splice(idx, 1)
-}
-
 function openCreate() {
-  form.order_no = ''
-  form.supplier = ''
-  form.warehouse_id = ''
+  form.product_code = ''
+  form.quantity = 1
   form.receive_date = ''
-  form.items = []
-  addItem()
+  form.productInfo = null
+  form.lookupMsg = ''
   createVisible.value = true
 }
 
+function lookupProduct() {
+  const code = form.product_code.trim()
+  if (!code) {
+    form.productInfo = null
+    form.lookupMsg = ''
+    return
+  }
+  const p = codeMap.get(code) || skuMap.get(code)
+  if (p) {
+    form.productInfo = p
+    form.lookupMsg = ''
+  } else {
+    form.productInfo = null
+    form.lookupMsg = `未找到产品编码「${code}」，请确认后重试`
+  }
+}
+
 async function save() {
-  if (!form.order_no.trim()) {
-    ElMessage.warning('请填写采购单号')
+  const code = form.product_code.trim()
+  if (!code) {
+    ElMessage.warning('请填写产品编码')
     return
   }
-  if (!form.warehouse_id) {
-    ElMessage.warning('请选择仓库')
-    return
-  }
-  const items = form.items.filter((it) => it.product_id)
-  if (!items.length) {
-    ElMessage.warning('请至少添加一条商品明细')
+  if (!form.quantity || form.quantity <= 0) {
+    ElMessage.warning('请填写拿货数量')
     return
   }
   const payload: any = {
-    order_no: form.order_no,
-    warehouse_id: form.warehouse_id,
-    items: items.map((it) => ({
-      product_id: it.product_id,
-      quantity: it.quantity,
-      unit_price: it.unit_price,
-    })),
+    product_code: code,
+    quantity: form.quantity,
   }
-  if (form.supplier.trim()) payload.supplier = form.supplier.trim()
   if (form.receive_date) payload.receive_date = form.receive_date
   saving.value = true
   try {
     await api.post('/purchase-orders', payload)
-    ElMessage.success('创建成功')
+    ElMessage.success('创建成功，状态：已到货')
     createVisible.value = false
     load()
   } catch (e: any) {
@@ -341,13 +374,32 @@ async function submitFlow() {
   saving.value = true
   try {
     await api.patch(`/purchase-orders/${flowRow.value.id}`, { status: flowTarget.value })
-    ElMessage.success('状态更新成功')
+    ElMessage.success('已入库，库存已计入对应产品国内库存')
     flowVisible.value = false
     load()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '状态更新失败')
   } finally {
     saving.value = false
+  }
+}
+
+async function removeRow(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除该拿货记录（${firstItem(row)?.products?.name || row.order_no}）吗？此操作不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/purchase-orders/${row.id}`)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
   }
 }
 
@@ -362,15 +414,12 @@ const importFile = ref<any>(null)
 function downloadTpl() {
   downloadTemplate(
     [
-      { label: '采购单号', sample: 'PO-IMP001' },
-      { label: '供应商', sample: '示例供应商' },
-      { label: '仓库', sample: '默认仓库' },
-      { label: '商品SKU', sample: 'SKU-DLB-001' },
-      { label: '数量', sample: 5 },
-      { label: '单价', sample: 199 },
+      { label: '产品编码', sample: 'D-2024-0088' },
+      { label: '数量', sample: 100 },
+      { label: '拿货日期', sample: '2026-08-17' },
     ],
-    '采购导入模板',
-    '采购批量导入模板.xlsx'
+    '拿货导入模板',
+    '拿货批量导入模板.xlsx'
   )
 }
 
@@ -387,100 +436,43 @@ async function onImportFile(e: Event) {
   try {
     const { headers, rows } = await readExcelFile(file)
     const col = buildColMap(headers, {
-      order_no: ['采购单号', '订单号', 'order_no', 'orderNo'],
-      supplier: ['供应商', 'supplier'],
-      warehouse: ['仓库', '仓库名称', 'warehouse', 'warehouseName'],
-      sku: ['商品SKU', 'SKU', '产品编码', '编码', 'code', 'sku'],
+      product_code: ['产品编码', '编码', 'code'],
       quantity: ['数量', 'quantity', 'qty'],
-      unit_price: ['单价', 'price', 'unit_price'],
+      receive_date: ['拿货日期', '日期', '时间', 'receive_date', 'date'],
     })
-    if (col.sku === undefined || col.quantity === undefined || col.warehouse === undefined) {
-      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品SKU"、"数量"和"仓库"列')
+    if (col.product_code === undefined || col.quantity === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"和"数量"列')
       return
     }
-    const skuMap: Record<string, any> = {}
-    let page = 1
-    for (;;) {
-      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
-      ;(data.data ?? []).forEach((p: any) => {
-        if (p.sku) skuMap[p.sku] = p
-        if (p.code) skuMap[p.code] = p
-      })
-      if (page * 200 >= (data.total ?? 0)) break
-      page++
-    }
-    const whNameMap: Record<string, any> = {}
-    warehouses.value.forEach((w) => {
-      whNameMap[w.name] = w
-      whNameMap[w.id] = w
-    })
-    const groups = new Map<string, { order_no: string; supplier: string; warehouse_id: string; rows: any[][] }>()
-    let autoSeq = 0
+    let ok = 0
     const failures: string[] = []
-    rows.forEach((row, idx) => {
-      const lineNo = idx + 2
-      const sku = cellStr(row, col.sku)
+    for (let i = 0; i < rows.length; i++) {
+      const lineNo = i + 2
+      const row = rows[i]
+      const code = cellStr(row, col.product_code)
       const qty = cellNum(row, col.quantity)
-      const whName = cellStr(row, col.warehouse)
-      if (!sku) {
-        failures.push(`第${lineNo}行：商品SKU为空`)
-        return
+      const dateStr = col.receive_date !== undefined ? cellStr(row, col.receive_date) : ''
+      if (!code) {
+        failures.push(`第${lineNo}行：产品编码为空`)
+        continue
       }
       if (qty <= 0) {
         failures.push(`第${lineNo}行：数量必须大于 0`)
-        return
+        continue
       }
-      if (!whName) {
-        failures.push(`第${lineNo}行：仓库为空`)
-        return
-      }
-      const product = skuMap[sku]
-      if (!product) {
-        failures.push(`第${lineNo}行：SKU「${sku}」未匹配到商品`)
-        return
-      }
-      const wh = whNameMap[whName]
-      if (!wh) {
-        failures.push(`第${lineNo}行：仓库「${whName}」未匹配到仓库`)
-        return
-      }
-      const rawNo = cellStr(row, col.order_no)
-      const orderNo = rawNo || autoNo('PO-IMP', ++autoSeq)
-      const key = `${orderNo}|${wh.id}`
-      if (!groups.has(key)) {
-        groups.set(key, { order_no: orderNo, supplier: cellStr(row, col.supplier), warehouse_id: wh.id, rows: [] })
-      }
-      groups.get(key)!.rows.push(row)
-    })
-    let ok = 0
-    const errLines: string[] = []
-    for (const g of groups.values()) {
-      const items = g.rows
-        .map((row) => {
-          const product = skuMap[cellStr(row, col.sku)]
-          return {
-            product_id: product.id,
-            quantity: cellNum(row, col.quantity),
-            unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : undefined,
-          }
-        })
-        .filter((it) => it.quantity > 0)
-      for (let i = 0; i < items.length; i += 200) {
-        const payload: any = { order_no: g.order_no, warehouse_id: g.warehouse_id, items: items.slice(i, i + 200) }
-        if (g.supplier) payload.supplier = g.supplier
-        try {
-          await api.post('/purchase-orders', payload)
-          ok++
-        } catch (err: any) {
-          errLines.push(`单号${g.order_no}：${err?.response?.data?.error?.message || '创建失败'}`)
-        }
+      const payload: any = { product_code: code, quantity: qty }
+      if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) payload.receive_date = dateStr
+      try {
+        await api.post('/purchase-orders', payload)
+        ok++
+      } catch (err: any) {
+        failures.push(`第${lineNo}行：${err?.response?.data?.error?.message || '创建失败'}`)
       }
     }
-    if (failures.length) errLines.push(...failures)
-    if (errLines.length) {
-      ElMessage.warning(`成功导入 ${ok} 单，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+    if (failures.length) {
+      ElMessage.warning(`成功导入 ${ok} 条，失败 ${failures.length} 条：` + failures.slice(0, 5).join('；') + (failures.length > 5 ? ` 等 ${failures.length} 条` : ''))
     } else {
-      ElMessage.success(`成功导入 ${ok} 单`)
+      ElMessage.success(`成功导入 ${ok} 条`)
     }
     load()
   } catch (err: any) {
@@ -491,7 +483,6 @@ async function onImportFile(e: Event) {
 }
 
 const exporting = ref(false)
-// 拿货日期内联编辑：PATCH /purchase-orders/[id]
 async function updateReceiveDate(row: any, val: any) {
   try {
     const { data } = await api.patch(`/purchase-orders/${row.id}`, { receive_date: val || null })
@@ -504,11 +495,11 @@ async function updateReceiveDate(row: any, val: any) {
 }
 function exportRows() {
   const columns = [
-    { key: 'order_no', label: '采购单号' },
-    { key: 'supplier', label: '供应商' },
-    { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
+    { key: 'sku', label: '编码', value: (r: any) => firstItem(r)?.products?.sku || '-' },
+    { key: 'code', label: '产品编码', value: (r: any) => firstItem(r)?.products?.code || '-' },
+    { key: 'name', label: '产品名称', value: (r: any) => firstItem(r)?.products?.name || '-' },
+    { key: 'quantity', label: '拿货数量', value: (r: any) => firstItem(r)?.quantity ?? '-' },
     { key: 'receive_date', label: '拿货日期', value: (r: any) => r.receive_date || '-' },
-    { key: 'total_amount', label: '总金额' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
     { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
   ]
@@ -526,7 +517,7 @@ async function batchRemove() {
   if (!selected.value.length) return
   try {
     await ElMessageBox.confirm(
-      `确定删除选中的 ${selected.value.length} 个采购单吗？此操作不可恢复。`,
+      `确定删除选中的 ${selected.value.length} 个拿货记录吗？此操作不可恢复。`,
       '批量删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
     )
@@ -571,13 +562,75 @@ onMounted(() => {
   margin-top: 16px;
   justify-content: flex-end;
 }
-.items-editor {
+.prod-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.prod-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.prod-thumb.placeholder {
+  background: #f5f7fa;
+  color: #909399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+.prod-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.match-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px dashed #e4e7ed;
+  border-radius: 6px;
+  padding: 10px;
   width: 100%;
 }
-.item-row {
+.match-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.match-thumb.placeholder {
+  background: #f5f7fa;
+  color: #909399;
   display: flex;
-  gap: 8px;
   align-items: center;
-  margin-bottom: 8px;
+  justify-content: center;
+  font-size: 10px;
+}
+.match-info {
+  min-width: 0;
+}
+.match-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.match-sub {
+  color: #909399;
+  font-size: 12px;
+}
+.detail-wrap {
+  padding: 4px 0;
+}
+.flow-note {
+  font-size: 12px;
+  color: #909399;
+  background: rgba(64, 158, 255, 0.08);
+  border: 1px solid rgba(64, 158, 255, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 1.7;
+  margin-left: 90px;
 }
 </style>
