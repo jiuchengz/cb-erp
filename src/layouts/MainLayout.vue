@@ -307,7 +307,8 @@ async function onSignOut() {
   border-radius: var(--radius-lg);
 }
 
-.sidebar { width: 200px; display: flex; flex-direction: column; padding: 20px 12px; overflow: hidden; flex-shrink: 0; }
+.sidebar { width: 200px; display: flex; flex-direction: column; padding: 20px 12px; overflow: hidden; flex-shrink: 0; box-shadow: 0 20px 50px -18px rgba(40, 60, 120, 0.20), inset 0 1px 0 var(--glass-highlight); }
+html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 1px 0 var(--glass-highlight); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
 .brand-icon { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; }
 .brand-name { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
