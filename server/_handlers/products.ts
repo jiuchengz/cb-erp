@@ -9,7 +9,7 @@ import { handleError, Errors } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
 
 const createSchema = z.object({
-  sku: z.string().min(1).max(64),
+  sku: z.string().max(64).nullable().optional(),
   name: z.string().min(1).max(200),
   barcode: z.string().max(64).nullable().optional(),
   category: z.string().max(100).nullable().optional(),
@@ -33,7 +33,7 @@ const createSchema = z.object({
 });
 
 // 上传图片到 Supabase Storage（public bucket: product-images），返回公开 URL
-async function uploadProductImage(supabase: any, base64: string, sku: string): Promise<string> {
+async function uploadProductImage(supabase: any, base64: string, sku: string | null): Promise<string> {
   const bucket = 'product-images';
   const { data: buckets } = await supabase.storage.listBuckets();
   if (!(buckets || []).some((b: any) => b.name === bucket)) {
@@ -46,7 +46,7 @@ async function uploadProductImage(supabase: any, base64: string, sku: string): P
   const buffer = Buffer.from(b64, 'base64');
   if (!buffer.length) throw new Error('图片数据为空');
   const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '');
-  const safeSku = sku.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'img';
+  const safeSku = String(sku || 'img').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'img';
   const path = `${safeSku}_${Date.now()}.${ext}`;
   const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
     contentType: mime,
@@ -86,19 +86,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'products.write');
       const body: any = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+      // 产品编码唯一性兜底（前端已去重，此处防止并发/绕过前端直连）
+      if (body.code) {
+        const { data: dup } = await supabase
+          .from('products')
+          .select('id')
+          .eq('code', body.code)
+          .limit(1);
+        if (dup && dup.length) throw Errors.conflict(`产品编码已存在：${body.code}`);
+      }
       // 内联图片：后端上传 Storage 后写入 image_text；上传失败不阻塞商品创建
       const imgB64 = body.image_base64 as string | undefined;
       delete body.image_base64;
       if (imgB64) {
         try {
-          body.image_text = await uploadProductImage(supabase, imgB64, body.sku);
+          body.image_text = await uploadProductImage(supabase, imgB64, body.sku || body.code);
         } catch (imgErr: any) {
           console.error('[products] inline image upload failed:', imgErr?.message || imgErr);
         }
       }
       const { data, error } = await supabase.from('products').insert(body).select().single();
       if (error) {
-        if (error.code === '23505') throw Errors.conflict(`SKU 已存在：${body.sku}`);
+        if (error.code === '23505') {
+          const msg = String(error.message || '');
+          throw Errors.conflict(
+            msg.includes('idx_products_code_unique') ? `产品编码已存在：${body.code}` : `SKU 已存在：${body.sku || ''}`
+          );
+        }
         throw error;
       }
       await writeAudit(ctx, req, 'create', 'product', data.id, null, data);

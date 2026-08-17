@@ -9,7 +9,7 @@ import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 
 const updateSchema = z.object({
-  sku: z.string().min(1).max(64).optional(),
+  sku: z.string().max(64).nullable().optional(),
   name: z.string().min(1).max(200).optional(),
   barcode: z.string().max(64).nullable().optional(),
   category: z.string().max(100).nullable().optional(),
@@ -54,7 +54,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: before } = await supabase.from('products').select('*').eq('id', id).single();
       const { data, error } = await supabase.from('products').update(body).eq('id', id).select().single();
       if (error) {
-        if (error.code === '23505') throw Errors.conflict('SKU 已存在');
+        if (error.code === '23505') {
+          const msg = String(error.message || '');
+          throw Errors.conflict(
+            msg.includes('idx_products_code_unique') ? '产品编码已存在' : 'SKU 已存在'
+          );
+        }
         if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
         throw error;
       }

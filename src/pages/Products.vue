@@ -605,17 +605,17 @@ async function onImportFile(e: Event) {
       status: ['状态', 'status'],
       image_text: ['图片链接', 'image_text', '图片'],
     })
-    if (col.sku === undefined || col.name === undefined) {
-      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"SKU"和"名称"列')
+    if (col.code === undefined || col.name === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编号"和"名称"列')
       return
     }
-    // 拉取全量已存在 SKU，避免重复创建
+    // 拉取全量已存在产品编码，避免重复创建
     const exist = new Set<string>()
     let page = 1
     for (;;) {
       const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
       ;(data.data ?? []).forEach((p: any) => {
-        if (p.sku) exist.add(p.sku)
+        if (p.code) exist.add(p.code)
       })
       if (page * 200 >= (data.total ?? 0)) break
       page++
@@ -623,24 +623,25 @@ async function onImportFile(e: Event) {
     const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s)
     const seen = new Set<string>()
     const skipLines: string[] = []
-    const items: { payload: Record<string, unknown>; lineNo: number; sku: string }[] = []
+    const items: { payload: Record<string, unknown>; lineNo: number; code: string }[] = []
     rows.forEach((row, idx) => {
       const lineNo = idx + 2
-      const sku = cut(cellStr(row, col.sku), 64)
+      const code = cut(cellStr(row, col.code), 255)
       const name = cut(cellStr(row, col.name), 200)
-      if (!sku) {
-        skipLines.push(`第${lineNo}行：SKU为空`)
+      const sku = cut(cellStr(row, col.sku), 64)
+      if (!code) {
+        skipLines.push(`第${lineNo}行：产品编码为空`)
         return
       }
       if (!name) {
         skipLines.push(`第${lineNo}行：名称为空`)
         return
       }
-      if (exist.has(sku) || seen.has(sku)) {
-        skipLines.push(`第${lineNo}行：SKU「${sku}」已存在，跳过`)
+      if (exist.has(code) || seen.has(code)) {
+        skipLines.push(`第${lineNo}行：产品编码「${code}」已存在，跳过`)
         return
       }
-      seen.add(sku)
+      seen.add(code)
       // 佣金率宽容处理：>1 视为百分数（如 16.5 -> 0.165），越界回默认
       let ml = col.ml_commission_rate !== undefined ? cellNum(row, col.ml_commission_rate, 0.165) : 0.165
       if (ml > 1) ml = ml / 100
@@ -651,9 +652,9 @@ async function onImportFile(e: Event) {
       const floatImg = cellImages?.[idx + 1] ? Object.values(cellImages[idx + 1])[0] : ''
       items.push({
         payload: {
-          sku,
+          sku: sku || null,
           name,
-          code: cut(cellStr(row, col.code), 255),
+          code,
           barcode: cut(cellStr(row, col.barcode), 64),
           category: cut(cellStr(row, col.category), 100),
           listing_time: cut(cellStr(row, col.listing_time), 255),
@@ -673,7 +674,7 @@ async function onImportFile(e: Event) {
           image_base64: floatImg && !urlText ? floatImg : '',
         },
         lineNo,
-        sku,
+        code,
       })
     })
     // 分批并行创建：按批次首元素是否有图动态切批——无图每批 50 条并发，含图每批 20 条（避免大请求体触发 Vercel 限制），失败逐条记录完整原因
@@ -690,7 +691,7 @@ async function onImportFile(e: Event) {
             ok++
           } catch (err: any) {
             errLines.push(
-              `第${item.lineNo}行 SKU ${item.sku}：${err?.response?.data?.error?.message || err?.message || '创建失败'}`
+              `第${item.lineNo}行 产品编码 ${item.code}：${err?.response?.data?.error?.message || err?.message || '创建失败'}`
             )
           }
         })
