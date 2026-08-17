@@ -329,7 +329,7 @@ async function onSignOut() {
 .drawer-mask { position: fixed; inset: 0; z-index: 90; background: rgba(10,15,30,.35); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 .layout:has(.drawer-mask) { position: relative; }
 
-.main { flex: 1; display: flex; flex-direction: column; gap: 22px; overflow: hidden; min-width: 0; }
+.main { flex: 1; display: flex; flex-direction: column; gap: 22px; overflow: hidden; min-width: 0; border-radius: var(--radius-lg); }
 .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; flex-shrink: 0; }
 .header-left { display: flex; align-items: center; min-width: 0; }
 .header-right { display: flex; align-items: center; gap: 12px; }
