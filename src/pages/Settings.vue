@@ -140,6 +140,11 @@
         <el-table v-loading="whLoading" :data="warehouses" border stripe>
           <el-table-column prop="name" label="仓库名称" min-width="180" />
           <el-table-column prop="code" label="编码" min-width="120" />
+          <el-table-column label="仓库类型" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.wh_type === 'overseas' ? 'warning' : 'primary'">{{ row.wh_type === 'overseas' ? '海外仓' : '国内仓库' }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
@@ -251,6 +256,12 @@
         </el-form-item>
         <el-form-item label="编码">
           <el-input v-model="whForm.code" />
+        </el-form-item>
+        <el-form-item label="仓库类型" required>
+          <el-radio-group v-model="whForm.wh_type">
+            <el-radio value="domestic">国内仓库</el-radio>
+            <el-radio value="overseas">海外仓</el-radio>
+          </el-radio-group>
         </el-form-item>
         <el-form-item label="地址">
           <el-input v-model="whForm.address" type="textarea" :rows="2" maxlength="256" />
@@ -650,6 +661,7 @@ const whForm = reactive({
   code: '',
   address: '',
   is_active: true,
+  wh_type: 'domestic',
 })
 
 function openWhCreate() {
@@ -658,6 +670,7 @@ function openWhCreate() {
   whForm.code = ''
   whForm.address = ''
   whForm.is_active = true
+  whForm.wh_type = 'domestic'
   whVisible.value = true
 }
 
@@ -667,6 +680,7 @@ function openWhEdit(row: any) {
   whForm.code = row.code || ''
   whForm.address = row.address || ''
   whForm.is_active = row.is_active !== false
+  whForm.wh_type = row.wh_type === 'overseas' ? 'overseas' : 'domestic'
   whVisible.value = true
 }
 
@@ -681,6 +695,7 @@ async function saveWh() {
       name: whForm.name,
       code: whForm.code,
       address: whForm.address,
+      wh_type: whForm.wh_type,
     }
     if (whEditing.value) {
       payload.is_active = whForm.is_active

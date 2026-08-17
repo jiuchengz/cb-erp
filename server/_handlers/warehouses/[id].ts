@@ -13,6 +13,7 @@ const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   address: z.string().max(300).nullable().optional(),
   is_active: z.boolean().optional(),
+  wh_type: z.enum(['domestic', 'overseas']).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

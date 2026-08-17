@@ -8,11 +8,12 @@ import { writeAudit } from './_lib/audit';
 import { handleError, Errors } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
 
-// 拿货记录版创建：只填产品编码 + 数量（+ 可选拿货日期）
+// 拿货记录版创建：只填产品编码 + 数量（+ 可选拿货日期 / 入库仓库）
 const createSchema = z.object({
   product_code: z.string().min(1).max(64),
   quantity: z.coerce.number().positive(),
   receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  warehouse_id: z.string().uuid().optional(),
 });
 
 function todayStr(d = new Date()) {
@@ -65,15 +66,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (prodErr) throw prodErr;
       if (!product) throw Errors.conflict(`产品编码不存在：${body.product_code.trim()}`);
 
-      // 仓库取第一个
-      const { data: warehouse, error: whErr } = await supabase
-        .from('warehouses')
-        .select('id')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (whErr) throw whErr;
-      if (!warehouse) throw Errors.conflict('暂无仓库，请先创建仓库');
+      // 仓库：指定时校验必须是国内仓；未指定取第一个国内仓
+      let warehouseId: string;
+      if (body.warehouse_id) {
+        const { data: wh, error: whErr } = await supabase
+          .from('warehouses')
+          .select('id, wh_type')
+          .eq('id', body.warehouse_id)
+          .maybeSingle();
+        if (whErr) throw whErr;
+        if (!wh) throw Errors.conflict('仓库不存在');
+        if (wh.wh_type !== 'domestic') throw Errors.conflict('拿货只能选择国内仓库入库');
+        warehouseId = wh.id;
+      } else {
+        const { data: warehouse, error: whErr } = await supabase
+          .from('warehouses')
+          .select('id')
+          .eq('wh_type', 'domestic')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (whErr) throw whErr;
+        if (!warehouse) throw Errors.conflict('暂无国内仓库，请先创建国内仓库');
+        warehouseId = warehouse.id;
+      }
 
       const receiveDate = body.receive_date || todayStr();
       const orderNo = genOrderNo();
@@ -83,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert({
           order_no: orderNo,
           supplier: null,
-          warehouse_id: warehouse.id,
+          warehouse_id: warehouseId,
           receive_date: receiveDate,
           status: 'ARRIVED',
           total_amount: 0,
@@ -100,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .insert({
               order_no: retryNo,
               supplier: null,
-              warehouse_id: warehouse.id,
+              warehouse_id: warehouseId,
               receive_date: receiveDate,
               status: 'ARRIVED',
               total_amount: 0,

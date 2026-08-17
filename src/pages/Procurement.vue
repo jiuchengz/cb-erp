@@ -112,6 +112,14 @@
             style="width: 180px"
           />
         </el-form-item>
+        <el-form-item label="入库仓库" required>
+          <el-select v-model="form.warehouse_id" placeholder="选择国内仓库" style="width: 100%">
+            <el-option v-for="w in domesticWarehouses" :key="w.id" :label="w.name" :value="w.id" />
+          </el-select>
+          <div v-if="domesticWarehouses.length === 0" style="color: #f56c6c; font-size: 12px; line-height: 1.5">
+            暂无国内仓库，请先在「设置-仓库管理」创建国内仓库
+          </div>
+        </el-form-item>
         <el-form-item v-if="form.productInfo" label="匹配商品">
           <div class="match-box">
             <el-image
@@ -258,11 +266,13 @@ function onSizeChange() {
 }
 
 const products = ref<any[]>([])
+const domesticWarehouses = ref<any[]>([])
 const codeMap = new Map<string, any>()
 const skuMap = new Map<string, any>()
 async function loadOptions() {
   try {
     const whRes = await api.get('/warehouses')
+    domesticWarehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
     const allProducts: any[] = []
     let page = 1
     for (;;) {
@@ -289,6 +299,7 @@ const form = reactive({
   product_code: '',
   quantity: 1,
   receive_date: '',
+  warehouse_id: '',
   productInfo: null as any,
   lookupMsg: '',
 })
@@ -297,6 +308,7 @@ function openCreate() {
   form.product_code = ''
   form.quantity = 1
   form.receive_date = ''
+  form.warehouse_id = domesticWarehouses.value[0]?.id ?? ''
   form.productInfo = null
   form.lookupMsg = ''
   createVisible.value = true
@@ -334,6 +346,7 @@ async function save() {
     quantity: form.quantity,
   }
   if (form.receive_date) payload.receive_date = form.receive_date
+  if (form.warehouse_id) payload.warehouse_id = form.warehouse_id
   saving.value = true
   try {
     await api.post('/purchase-orders', payload)

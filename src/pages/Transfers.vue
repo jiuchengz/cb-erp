@@ -218,7 +218,7 @@ async function loadOptions() {
       api.get('/warehouses'),
     ])
     products.value = prodRes.data.data ?? []
-    warehouses.value = whRes.data.data ?? []
+    warehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }

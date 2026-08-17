@@ -12,6 +12,7 @@ const createSchema = z.object({
   code: z.string().min(1).max(32),
   name: z.string().min(1).max(100),
   address: z.string().max(300).nullable().optional(),
+  wh_type: z.enum(['domestic', 'overseas']).optional().default('domestic'),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
