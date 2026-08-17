@@ -26924,6 +26924,7 @@ async function handler25(req, res) {
 
 // server/_handlers/products/[id].ts
 var updateSchema3 = external_exports.object({
+  sku: external_exports.string().min(1).max(64).optional(),
   name: external_exports.string().min(1).max(200).optional(),
   barcode: external_exports.string().max(64).nullable().optional(),
   category: external_exports.string().max(100).nullable().optional(),
@@ -26965,6 +26966,7 @@ async function handler26(req, res) {
       const { data: before } = await supabase.from("products").select("*").eq("id", id).single();
       const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
       if (error) {
+        if (error.code === "23505") throw Errors.conflict("SKU \u5DF2\u5B58\u5728");
         if (error.code === "PGRST116") throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
         throw error;
       }

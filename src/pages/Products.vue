@@ -30,7 +30,13 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+    <div class="profit-bar">
+      <span class="profit-label">汇率（RMB/比索）</span>
+      <el-input-number v-model="rate" :min="0.01" :max="10" :precision="4" :step="0.01" size="small" />
+      <span class="profit-tip">修改汇率后利润列实时重算（只读联动）</span>
+    </div>
+
+    <el-table v-loading="loading" :data="rows" border stripe max-height="480" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column label="图片" width="90">
         <template #default="{ row }">
@@ -51,8 +57,21 @@
       <el-table-column prop="category" label="分类" min-width="120" />
       <el-table-column prop="listing_time" label="上新时间" width="110" />
       <el-table-column prop="unit" label="单位" width="80" />
-      <el-table-column prop="unit_price" label="售价" width="120" align="right" />
-      <el-table-column prop="purchase_cost" label="采购成本" width="120" align="right" />
+      <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
+      <el-table-column label="售价元" width="100" align="right">
+        <template #default="{ row }">{{ money(Number(row.unit_price ?? 0) * rate) }}</template>
+      </el-table-column>
+      <el-table-column prop="purchase_cost" label="不含税采购成本" width="130" align="right" />
+      <el-table-column prop="first_leg_freight" label="头程运费" width="100" align="right" />
+      <el-table-column prop="last_mile_delivery_peso" label="尾程派送(比索)" width="130" align="right" />
+      <el-table-column label="ML佣金比例" width="110" align="right">
+        <template #default="{ row }">{{ pct(row.ml_commission_rate) }}</template>
+      </el-table-column>
+      <el-table-column label="平台利润(元)" width="120" align="right">
+        <template #default="{ row }">
+          <span :class="profit(row) >= 0 ? 'profit-pos' : 'profit-neg'">{{ money(profit(row)) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="shipping_mode" label="空海运" width="100" />
       <el-table-column prop="competitor_id" label="竞品ID" min-width="120" show-overflow-tooltip />
       <el-table-column prop="link_id" label="链接ID" min-width="120" show-overflow-tooltip />
@@ -91,7 +110,7 @@
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
       <el-form :model="form" label-width="110px">
         <el-form-item label="SKU" required>
-          <el-input v-model="form.sku" placeholder="唯一编码" :disabled="!!editing" />
+          <el-input v-model="form.sku" placeholder="唯一编码" />
         </el-form-item>
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
@@ -219,6 +238,7 @@ const loading = ref(false)
 const previewVisible = ref(false)
 const previewUrl = ref('')
 const query = reactive({ page: 1, pageSize: 20, search: '', status: '' })
+const rate = ref(0.38)
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
 watch(
@@ -235,6 +255,37 @@ watch(
 function formatDate(v: string) {
   if (!v) return ''
   return new Date(v).toLocaleString('zh-CN', { hour12: false })
+}
+
+function money(v: number) {
+  return Number.isFinite(v) ? v.toFixed(2) : '0.00'
+}
+
+function pct(v: unknown) {
+  const n = Number(v ?? 0.165)
+  return `${(n * 100).toFixed(1)}%`
+}
+
+// 平台利润(元) = (售价比索 - 总成本比索) × 汇率
+// 总成本比索 = 货值 + 尾程 + 仓储 + 实操 + 佣金 + 广告 + 扣税 + 补偿
+function profit(row: Product) {
+  const r = rate.value || 0.38
+  const sellingPeso = Number(row.unit_price ?? 0)
+  const purchase = Number(row.purchase_cost ?? 0)
+  const freight = Number(row.first_leg_freight ?? 0)
+  const lastMile = Number(row.last_mile_delivery_peso ?? 0)
+  const ml = Number(row.ml_commission_rate ?? 0.165) || 0.165
+  const taxedPeso = (purchase * 1.13) / r
+  const freightPeso = freight / r
+  const goodsValue = taxedPeso + freightPeso
+  const storage = goodsValue * 0.008
+  const operation = goodsValue * 0.05
+  const commission = sellingPeso * ml
+  const ad = sellingPeso * 0.08
+  const tax = sellingPeso * 0.09
+  const compensation = sellingPeso * 0.07
+  const totalCost = goodsValue + lastMile + storage + operation + commission + ad + tax + compensation
+  return (sellingPeso - totalCost) * r
 }
 
 function isImageUrl(v: unknown): v is string {
@@ -365,7 +416,6 @@ async function save() {
     }
     if (editing.value) {
       const payload: Record<string, unknown> = { ...form, image_text: imageText }
-      delete payload.sku // PATCH schema 不允许更新 sku
       await api.patch(`/products/${editing.value.id}`, payload)
       addLog('success', '编辑商品', form.name)
       ElMessage.success('修改成功')
@@ -684,6 +734,33 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+}
+.profit-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 8px);
+  background: var(--color-card);
+}
+.profit-label {
+  font-size: 13px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.profit-tip {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.profit-pos {
+  color: #16a34a;
+  font-weight: 600;
+}
+.profit-neg {
+  color: #dc2626;
+  font-weight: 600;
 }
 .el-pagination {
   margin-top: 16px;
