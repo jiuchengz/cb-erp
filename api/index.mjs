@@ -27080,10 +27080,14 @@ var PURCHASE_FLOW = {
 var updateSchema4 = external_exports.object({
   status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED", "ARRIVED"]).optional(),
   receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  remark: external_exports.string().max(500).nullable().optional()
-}).refine((v) => v.status !== void 0 || v.receive_date !== void 0 || v.remark !== void 0, {
-  message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
-});
+  remark: external_exports.string().max(500).nullable().optional(),
+  quantity: external_exports.coerce.number().positive().optional()
+}).refine(
+  (v) => v.status !== void 0 || v.receive_date !== void 0 || v.remark !== void 0 || v.quantity !== void 0,
+  {
+    message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
+  }
+);
 async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -27115,6 +27119,30 @@ async function handler27(req, res) {
       const allowed = PURCHASE_FLOW[before.status] || [];
       if (isStatusUpdate && !allowed.includes(body.status)) {
         throw Errors.conflict(`\u975E\u6CD5\u72B6\u6001\u8F6C\u6362\uFF1A${before.status} -> ${body.status}`);
+      }
+      const firstItem = items[0];
+      if (body.quantity !== void 0 && firstItem) {
+        const newQty = Number(body.quantity);
+        const oldQty = Number(firstItem.quantity ?? 0);
+        const { error: qtyErr } = await supabase.from("purchase_order_items").update({ quantity: newQty }).eq("id", firstItem.id);
+        if (qtyErr) throw qtyErr;
+        firstItem.quantity = newQty;
+        if (before.status === "RECEIVED") {
+          const diff = newQty - oldQty;
+          if (diff !== 0) {
+            const { error: invErr } = await supabase.rpc("adjust_inventory", {
+              p_product_id: firstItem.product_id,
+              p_warehouse_id: before.warehouse_id,
+              p_quantity: diff,
+              p_type: "purchase_in",
+              p_reference_type: "purchase_order",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u91C7\u8D2D\u5165\u5E93\u8C03\u6574 ${before.order_no}`
+            });
+            if (invErr) throw invErr;
+          }
+        }
       }
       if (isStatusUpdate && body.status === "RECEIVED" && before.status !== "RECEIVED") {
         for (const it of items) {

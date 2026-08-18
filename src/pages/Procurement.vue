@@ -175,7 +175,10 @@
             <div class="match-sub">编码：{{ firstItem(detail)?.products?.sku || '-' }} · 产品编码：{{ firstItem(detail)?.products?.code || '-' }}</div>
           </div>
         </div>
-        <el-descriptions :column="2" border style="margin-top: 14px">
+        <div v-if="!detailEditing" class="detail-actions">
+          <el-button v-if="canWrite" type="primary" size="small" plain @click="startDetailEdit">编辑</el-button>
+        </div>
+        <el-descriptions v-if="!detailEditing" :column="2" border style="margin-top: 14px">
           <el-descriptions-item label="拿货数量">{{ firstItem(detail)?.quantity ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="拿货日期">{{ detail.receive_date || '-' }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
@@ -184,6 +187,32 @@
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
         </el-descriptions>
+        <el-form v-else label-width="90px" style="margin-top: 14px">
+          <el-form-item label="拿货数量">
+            <el-input-number v-model="detailForm.quantity" :min="1" :precision="0" style="width: 180px" />
+          </el-form-item>
+          <el-form-item label="拿货日期">
+            <el-date-picker
+              v-model="detailForm.receive_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              placeholder="选择日期"
+              style="width: 180px"
+            />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="detailForm.remark" maxlength="500" placeholder="请输入备注" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="detailForm.status" style="width: 180px">
+              <el-option v-for="s in detailStatusOptions" :key="s" :label="statusLabel(s)" :value="s" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div v-if="detailEditing" class="detail-edit-footer">
+          <el-button @click="cancelDetailEdit">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="saveDetailEdit">保存</el-button>
+        </div>
       </div>
     </el-dialog>
 
@@ -380,13 +409,56 @@ async function save() {
 
 const detailVisible = ref(false)
 const detail = ref<any>(null)
+const detailEditing = ref(false)
+const detailForm = reactive({ quantity: 1, receive_date: '', remark: '', status: '' })
+const detailStatusOptions = computed(() => {
+  if (!detail.value) return []
+  const cur = detail.value.status
+  return Array.from(new Set([cur, ...nextStatuses(cur)]))
+})
 async function openDetail(id: string) {
   try {
     const { data } = await api.get(`/purchase-orders/${id}`)
     detail.value = data.data
+    detailEditing.value = false
     detailVisible.value = true
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载详情失败')
+  }
+}
+function startDetailEdit() {
+  const it = firstItem(detail.value)
+  detailForm.quantity = it?.quantity ?? 1
+  detailForm.receive_date = detail.value.receive_date || ''
+  detailForm.remark = detail.value.remark || ''
+  detailForm.status = detail.value.status
+  detailEditing.value = true
+}
+function cancelDetailEdit() {
+  detailEditing.value = false
+}
+async function saveDetailEdit() {
+  const payload: any = {}
+  const it = firstItem(detail.value)
+  if (detailForm.quantity !== (it?.quantity ?? 1)) payload.quantity = detailForm.quantity
+  if ((detailForm.receive_date || '') !== (detail.value.receive_date || '')) payload.receive_date = detailForm.receive_date || null
+  if ((detailForm.remark || '') !== (detail.value.remark || '')) payload.remark = detailForm.remark || null
+  if (detailForm.status !== detail.value.status) payload.status = detailForm.status
+  if (!Object.keys(payload).length) {
+    detailEditing.value = false
+    return
+  }
+  saving.value = true
+  try {
+    await api.patch(`/purchase-orders/${detail.value.id}`, payload)
+    ElMessage.success('保存成功')
+    detailEditing.value = false
+    await openDetail(detail.value.id)
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -674,6 +746,14 @@ onMounted(() => {
 }
 .detail-wrap {
   padding: 4px 0;
+}
+.detail-actions {
+  text-align: right;
+  margin-top: 10px;
+}
+.detail-edit-footer {
+  text-align: right;
+  margin-top: 14px;
 }
 .flow-note {
   font-size: 12px;

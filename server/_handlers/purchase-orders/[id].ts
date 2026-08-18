@@ -28,10 +28,14 @@ const updateSchema = z
       .optional(),
     receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     remark: z.string().max(500).nullable().optional(),
+    quantity: z.coerce.number().positive().optional(),
   })
-  .refine((v) => v.status !== undefined || v.receive_date !== undefined || v.remark !== undefined, {
-    message: '至少提供一个更新字段',
-  });
+  .refine(
+    (v) => v.status !== undefined || v.receive_date !== undefined || v.remark !== undefined || v.quantity !== undefined,
+    {
+      message: '至少提供一个更新字段',
+    }
+  );
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -78,7 +82,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
       }
 
-      // 采购入库：RECEIVED 时按明细数量入库
+      const firstItem = items[0];
+      // 拿货记录仅一条明细；数量变更先更新明细，已入库记录按差额同步库存
+      if (body.quantity !== undefined && firstItem) {
+        const newQty = Number(body.quantity);
+        const oldQty = Number(firstItem.quantity ?? 0);
+        const { error: qtyErr } = await supabase
+          .from('purchase_order_items')
+          .update({ quantity: newQty })
+          .eq('id', firstItem.id);
+        if (qtyErr) throw qtyErr;
+        firstItem.quantity = newQty;
+        if (before.status === 'RECEIVED') {
+          const diff = newQty - oldQty;
+          if (diff !== 0) {
+            const { error: invErr } = await supabase.rpc('adjust_inventory', {
+              p_product_id: firstItem.product_id,
+              p_warehouse_id: before.warehouse_id,
+              p_quantity: diff,
+              p_type: 'purchase_in',
+              p_reference_type: 'purchase_order',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `采购入库调整 ${before.order_no}`,
+            });
+            if (invErr) throw invErr;
+          }
+        }
+      }
+
+      // 采购入库：RECEIVED 时按明细最新数量入库
       if (isStatusUpdate && body.status === 'RECEIVED' && before.status !== 'RECEIVED') {
         for (const it of items) {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
