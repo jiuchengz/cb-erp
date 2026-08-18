@@ -106,6 +106,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
 import { addLog, getLogs, type OpLogEntry } from '@/utils/log'
+import { createIdleWatcher, IDLE_TIMEOUT_MS } from '@/utils/idle-logout'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -229,9 +230,20 @@ onMounted(() => {
   isDark.value = document.documentElement.classList.contains('dark')
   refreshLocalLogs()
   window.addEventListener('keydown', onGlobalKeydown)
+  // 启动空闲自动退出监听（整个系统 3 小时无操作自动登出）
+  idleWatcher.start()
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
+  idleWatcher.stop()
+})
+
+/* ---------- 空闲自动退出（3 小时无操作） ---------- */
+const idleWatcher = createIdleWatcher(IDLE_TIMEOUT_MS, async () => {
+  addLog('info', '自动退出', auth.user?.email || '')
+  ElMessage.warning('长时间无操作，已自动退出登录')
+  await auth.signOut()
+  router.replace('/login')
 })
 
 /* ---------- 日志入口 ---------- */
