@@ -22,6 +22,33 @@ function clientIp(req: VercelRequest): string {
   return (req.headers['x-real-ip'] as string) || 'unknown';
 }
 
+// 服务端自验 Cloudflare Turnstile token。
+// 说明：Supabase Attack Protection 的 CAPTCHA 校验对 service_role（admin）凭据的请求会直接跳过，
+// 代理登录用的是 service_role key，因此必须在这里自行调用 siteverify，否则 Turnstile 形同虚设。
+async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) {
+    console.error('Missing TURNSTILE_SECRET_KEY');
+    return false;
+  }
+  const form = new URLSearchParams();
+  form.set('secret', secret);
+  form.set('response', token);
+  if (ip && ip !== 'unknown') form.set('remoteip', ip);
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+    const data = (await resp.json()) as { success?: boolean; 'error-codes'?: string[] };
+    return data.success === true;
+  } catch (e) {
+    console.error('Turnstile siteverify error', e);
+    return false;
+  }
+}
+
 async function loadUserAccess(supabase: any, userId: string): Promise<{ roles: string[]; permissions: string[] }> {
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
@@ -73,7 +100,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Cloudflare Turnstile 验证：token 由 Supabase 侧校验（服务端已启用 CAPTCHA 保护）
+    // Cloudflare Turnstile 服务端强制校验（代理层自验，Supabase 对 service_role 请求会跳过其 CAPTCHA）
+    const captchaOk = await verifyTurnstile(captchaToken, ip);
+    if (!captchaOk) {
+      return res.status(400).json({
+        error: { code: 'CAPTCHA_INVALID', message: '人机验证失败，请刷新页面后重试' },
+      });
+    }
+
     // 代理登录 Supabase Auth（服务端凭据，不再由前端直连绕过）
     const supabase = getAdminClient();
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
