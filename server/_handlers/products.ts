@@ -9,7 +9,7 @@ import { handleError, Errors } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
 
 const createSchema = z.object({
-  sku: z.string().max(64).nullable().optional(),
+  sku: z.string().max(200).nullable().optional(),
   name: z.string().min(1).max(200),
   barcode: z.string().max(64).nullable().optional(),
   category: z.string().max(100).nullable().optional(),

@@ -25971,7 +25971,7 @@ async function handler7(req, res) {
 
 // server/_handlers/products.ts
 var createSchema2 = external_exports.object({
-  sku: external_exports.string().max(64).nullable().optional(),
+  sku: external_exports.string().max(200).nullable().optional(),
   name: external_exports.string().min(1).max(200),
   barcode: external_exports.string().max(64).nullable().optional(),
   category: external_exports.string().max(100).nullable().optional(),
@@ -26139,7 +26139,7 @@ async function handler9(req, res) {
 // server/_handlers/upload-image.ts
 var schema = external_exports.object({
   base64: external_exports.string().min(20).max(6e6),
-  sku: external_exports.string().max(64).optional().default("img")
+  sku: external_exports.string().max(200).optional().default("img")
 });
 async function handler10(req, res) {
   try {

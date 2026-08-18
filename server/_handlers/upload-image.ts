@@ -9,7 +9,7 @@ import { rateLimit } from './_lib/rate-limit';
 
 const schema = z.object({
   base64: z.string().min(20).max(6_000_000),
-  sku: z.string().max(64).optional().default('img'),
+  sku: z.string().max(200).optional().default('img'),
 });
 
 // 上传商品图片到 Supabase Storage（public bucket: product-images），返回公开 URL

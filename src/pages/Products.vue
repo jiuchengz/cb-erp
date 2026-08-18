@@ -640,7 +640,7 @@ async function onImportFile(e: Event) {
       const lineNo = idx + 2
       const code = cut(cellStr(row, col.code), 255)
       const name = cut(cellStr(row, col.name), 200)
-      const sku = cut(cellStr(row, col.sku), 64)
+      const sku = cut(cellStr(row, col.sku), 200)
       if (!code) {
         skipLines.push(`第${lineNo}行：产品编码为空`)
         return
