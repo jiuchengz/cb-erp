@@ -25795,6 +25795,29 @@ function clientIp(req) {
   if (typeof fwd === "string" && fwd) return fwd.split(",")[0].trim();
   return req.headers["x-real-ip"] || "unknown";
 }
+async function verifyTurnstile(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) {
+    console.error("Missing TURNSTILE_SECRET_KEY");
+    return false;
+  }
+  const form = new URLSearchParams();
+  form.set("secret", secret);
+  form.set("response", token);
+  if (ip && ip !== "unknown") form.set("remoteip", ip);
+  try {
+    const resp = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString()
+    });
+    const data = await resp.json();
+    return data.success === true;
+  } catch (e) {
+    console.error("Turnstile siteverify error", e);
+    return false;
+  }
+}
 async function loadUserAccess(supabase, userId) {
   const roles = [];
   const permissionsSet = /* @__PURE__ */ new Set();
@@ -25832,6 +25855,12 @@ async function handler3(req, res) {
           code: "ACCOUNT_LOCKED",
           message: "\u5BC6\u7801\u9519\u8BEF " + MAX_FAILS + " \u6B21\uFF0C\u8D26\u53F7\u5DF2\u9501\u5B9A\uFF0C\u8BF7 " + Math.ceil(lockRemain / 6e4) + " \u5206\u949F\u540E\u518D\u8BD5"
         }
+      });
+    }
+    const captchaOk = await verifyTurnstile(captchaToken, ip);
+    if (!captchaOk) {
+      return res.status(400).json({
+        error: { code: "CAPTCHA_INVALID", message: "\u4EBA\u673A\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u540E\u91CD\u8BD5" }
       });
     }
     const supabase = getAdminClient();
