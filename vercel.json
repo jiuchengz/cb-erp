@@ -45,6 +45,10 @@
       "source": "/:path*",
       "headers": [
         {
+          "key": "X-Test-Marvis",
+          "value": "1"
+        },
+        {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
         },
