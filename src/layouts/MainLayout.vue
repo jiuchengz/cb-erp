@@ -1,5 +1,5 @@
 <template>
-  <div class="layout">
+  <div v-if="layoutReady" class="layout">
     <aside class="sidebar glass-panel" :class="{ open: drawerOpen }">
       <div class="brand">
         <div class="brand-icon">E</div>
@@ -112,7 +112,14 @@ const router = useRouter()
 const route = useRoute()
 
 // 恢复会话并加载角色权限：刷新后必须调用 init()，否则 roles/permissions 为空导致按钮不显示
-auth.init()
+// 登录态校验（双保险，主拦截在路由守卫）：init 完成前不渲染界面，确认无 session 时强制跳登录页
+const layoutReady = ref(false)
+auth.init().finally(() => {
+  layoutReady.value = true
+  if (!auth.user) {
+    router.replace('/login')
+  }
+})
 
 const soloMenus = [
   { path: '/dashboard', label: '首页', icon: HomeFilled }
