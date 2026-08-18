@@ -132,8 +132,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (isStatusUpdate) updatePayload.status = body.status;
-      const { data, error } = await supabase.from('purchase_orders').update(updatePayload).eq('id', id).select().single();
-      if (error) throw error;
+      let data = before;
+      if (Object.keys(updatePayload).length > 0) {
+        const { data: updated, error } = await supabase.from('purchase_orders').update(updatePayload).eq('id', id).select().single();
+        if (error) throw error;
+        data = updated;
+      }
 
       const action = isStatusUpdate ? (body.status === 'CANCELLED' ? 'cancel' : body.status!) : 'update';
       await writeAudit(ctx, req, action, 'purchase_order', id, before, data);
