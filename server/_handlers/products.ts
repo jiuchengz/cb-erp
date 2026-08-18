@@ -98,8 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for (const r of invRows || []) {
           const pid = r.product_id as string;
           const qty = Number(r.quantity || 0);
-          if (r.warehouses?.wh_type === 'domestic') domMap.set(pid, (domMap.get(pid) || 0) + qty);
-          else if (r.warehouses?.wh_type === 'overseas') ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
+          const whType = (r.warehouses as any)?.wh_type;
+          if (whType === 'domestic') domMap.set(pid, (domMap.get(pid) || 0) + qty);
+          else if (whType === 'overseas') ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
 
         // 在途：已到货未入库的拿货数量（purchase_orders.status = ARRIVED）

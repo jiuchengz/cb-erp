@@ -73,20 +73,36 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+  async function signIn(email: string, password: string, captchaId = '', captchaAnswer = 0) {
+    // 登录走服务端代理：验证码校验、限流、失败锁定均在服务端执行
+    const { data } = await api.post('/auth/login', { email, password, captchaId, captchaAnswer })
+    if (!data.session) throw new Error('登录失败：未返回会话')
+    const { error: setErr } = await supabase.auth.setSession(data.session)
+    if (setErr) throw setErr
     session.value = data.session
-    user.value = data.user
-    await loadProfile()
+    user.value = data.session?.user ?? null
+    roles.value = data.roles ?? []
+    permissions.value = data.permissions ?? []
+    user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      /* ignore */
+    }
     session.value = null
     user.value = null
     roles.value = []
     permissions.value = []
+    // 退出时清理本地业务日志，避免敏感信息残留在浏览器
+    try {
+      const { clearLogs } = await import('@/utils/log')
+      clearLogs()
+    } catch {
+      /* ignore */
+    }
   }
 
   function hasPermission(perm: string): boolean {

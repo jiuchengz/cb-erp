@@ -32,12 +32,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/.exec(body.base64);
-    const mime = match ? `image/${match[1]}` : 'image/png';
+    // MIME 白名单：仅允许常见位图格式，禁止 SVG/HTML 等可执行脚本类型
+    const ALLOWED_MIME: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+    };
+    const MAX_BYTES = 5 * 1024 * 1024; // 5MB
+
+    const rawMime = match ? match[1].toLowerCase() : 'png';
+    const mime = `image/${rawMime}`;
+    const ext = ALLOWED_MIME[mime];
+    if (!ext) {
+      return res.status(400).json({ error: { code: 'BAD_REQUEST', message: '仅支持 png/jpeg/gif/webp 图片' } });
+    }
     const b64 = match ? match[2] : body.base64.replace(/^data:[^;]+;base64,/, '');
     const buffer = Buffer.from(b64, 'base64');
     if (!buffer.length) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: '图片数据为空' } });
+    if (buffer.length > MAX_BYTES) {
+      return res.status(400).json({ error: { code: 'BAD_REQUEST', message: '图片不能超过 5MB' } });
+    }
 
-    const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/g, '');
     const safeSku = body.sku.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'img';
     const path = `${safeSku}_${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {

@@ -21657,6 +21657,9 @@ function rateLimit(key, limit = 120, windowMs = 6e4) {
     throw Errors.rateLimited();
   }
 }
+function loginRateLimit(key, limit = 10, windowMs = 5 * 6e4) {
+  return rateLimit(key, limit, windowMs);
+}
 
 // server/_handlers/auth.ts
 async function handler(req, res) {
@@ -21706,6 +21709,83 @@ async function handler2(req, res) {
       throw Errors.badRequest("\u5BC6\u7801\u4FEE\u6539\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
     }
     return res.status(200).json({ ok: true });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/_lib/captcha.ts
+var captchaMap = /* @__PURE__ */ new Map();
+var CAPTCHA_TTL_MS = 5 * 60 * 1e3;
+var failMap = /* @__PURE__ */ new Map();
+var MAX_FAILS = 5;
+var LOCK_MS = 15 * 60 * 1e3;
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function createCaptcha() {
+  const now = Date.now();
+  for (const [id, e] of captchaMap) {
+    if (e.expiresAt <= now) captchaMap.delete(id);
+  }
+  const ops = ["+", "-", "*"];
+  const op = ops[randomInt(0, 2)];
+  let a = 0;
+  let b = 0;
+  if (op === "+") {
+    a = randomInt(1, 20);
+    b = randomInt(1, 20);
+  } else if (op === "-") {
+    a = randomInt(10, 30);
+    b = randomInt(1, a);
+  } else {
+    a = randomInt(2, 9);
+    b = randomInt(2, 9);
+  }
+  const answer = op === "+" ? a + b : op === "-" ? a - b : a * b;
+  const captchaId = "c" + now.toString(36) + Math.random().toString(36).slice(2, 10);
+  captchaMap.set(captchaId, { answer, expiresAt: now + CAPTCHA_TTL_MS });
+  return { captchaId, a, b, op };
+}
+function verifyCaptcha(captchaId, answer) {
+  if (!captchaId) return false;
+  const entry = captchaMap.get(captchaId);
+  captchaMap.delete(captchaId);
+  if (!entry || entry.expiresAt <= Date.now()) return false;
+  return Number(answer) === entry.answer;
+}
+function getLockRemainMs(email) {
+  const key = email.trim().toLowerCase();
+  const e = failMap.get(key);
+  if (!e || !e.lockedUntil) return 0;
+  const remain = e.lockedUntil - Date.now();
+  return remain > 0 ? remain : 0;
+}
+function recordLoginFail(email) {
+  const key = email.trim().toLowerCase();
+  const now = Date.now();
+  const e = failMap.get(key);
+  if (e && e.lockedUntil && e.lockedUntil > now) {
+    return { locked: true, fails: e.fails };
+  }
+  const fails = (e ? e.fails : 0) + 1;
+  let lockedUntil = 0;
+  if (fails >= MAX_FAILS) lockedUntil = now + LOCK_MS;
+  failMap.set(key, { fails, lockedUntil });
+  return { locked: fails >= MAX_FAILS, fails };
+}
+function clearLoginFails(email) {
+  failMap.delete(email.trim().toLowerCase());
+}
+
+// server/_handlers/auth/captcha.ts
+async function handler3(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":captcha", 60, 6e4);
+    if (req.method !== "GET") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    return res.status(200).json(createCaptcha());
   } catch (e) {
     return handleError2(res, e);
   }
@@ -25752,6 +25832,100 @@ var coerce = {
 };
 var NEVER = INVALID;
 
+// server/_handlers/auth/login.ts
+var loginSchema = external_exports.object({
+  email: external_exports.string().email(),
+  password: external_exports.string().min(1).max(200),
+  captchaId: external_exports.string().min(1),
+  captchaAnswer: external_exports.coerce.number()
+});
+function clientIp(req) {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd) return fwd.split(",")[0].trim();
+  return req.headers["x-real-ip"] || "unknown";
+}
+async function loadUserAccess(supabase, userId) {
+  const roles = [];
+  const permissionsSet = /* @__PURE__ */ new Set();
+  const { data: userRoles } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  const roleIds = (userRoles || []).map((r) => r.role_id);
+  if (roleIds.length) {
+    const { data: roleData } = await supabase.from("roles").select("name").in("id", roleIds);
+    for (const r of roleData || []) if (r.name) roles.push(r.name);
+    const { data: rpData } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    const permIds = (rpData || []).map((r) => r.permission_id);
+    if (permIds.length) {
+      const { data: permData } = await supabase.from("permissions").select("code").in("id", permIds);
+      for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
+    }
+  }
+  return { roles, permissions: Array.from(permissionsSet) };
+}
+async function handler4(req, res) {
+  try {
+    rateLimit(clientIp(req) + ":" + (req.url || ""));
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    const ip = clientIp(req);
+    loginRateLimit("ip:" + ip, 20, 5 * 60 * 1e3);
+    const parsed = loginSchema.safeParse(req.body || {});
+    if (!parsed.success) throw Errors.badRequest("\u8BF7\u6C42\u53C2\u6570\u9519\u8BEF");
+    const { email, password, captchaId, captchaAnswer } = parsed.data;
+    const emailNorm = email.trim().toLowerCase();
+    loginRateLimit("email:" + emailNorm, 10, 5 * 60 * 1e3);
+    const lockRemain = getLockRemainMs(emailNorm);
+    if (lockRemain > 0) {
+      return res.status(429).json({
+        error: {
+          code: "ACCOUNT_LOCKED",
+          message: "\u5BC6\u7801\u9519\u8BEF " + MAX_FAILS + " \u6B21\uFF0C\u8D26\u53F7\u5DF2\u9501\u5B9A\uFF0C\u8BF7 " + Math.ceil(lockRemain / 6e4) + " \u5206\u949F\u540E\u518D\u8BD5"
+        }
+      });
+    }
+    if (!verifyCaptcha(captchaId, captchaAnswer)) {
+      return res.status(400).json({ error: { code: "CAPTCHA_INVALID", message: "\u9A8C\u8BC1\u7801\u9519\u8BEF\u6216\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u5237\u65B0\u91CD\u8BD5" } });
+    }
+    const supabase = getAdminClient();
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: emailNorm,
+      password
+    });
+    if (authErr) {
+      const msg = String(authErr.message || "");
+      if (/invalid login credentials|invalid email|password/i.test(msg)) {
+        const r = recordLoginFail(emailNorm);
+        if (r.locked) {
+          return res.status(429).json({
+            error: { code: "ACCOUNT_LOCKED", message: "\u5BC6\u7801\u9519\u8BEF " + MAX_FAILS + " \u6B21\uFF0C\u8D26\u53F7\u5DF2\u9501\u5B9A 15 \u5206\u949F" }
+          });
+        }
+        return res.status(401).json({
+          error: { code: "INVALID_CREDENTIALS", message: "\u7528\u6237\u540D\u6216\u5BC6\u7801\u9519\u8BEF\uFF0C" + r.fails + "/" + MAX_FAILS }
+        });
+      }
+      throw authErr;
+    }
+    clearLoginFails(emailNorm);
+    const session = authData.session;
+    const userId = authData.user?.id;
+    const { roles, permissions } = await loadUserAccess(supabase, userId);
+    const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+    return res.status(200).json({
+      session,
+      user: {
+        id: userId,
+        email: authData.user?.email || emailNorm,
+        name: profile?.display_name || ""
+      },
+      roles,
+      permissions
+    });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
 // server/_handlers/_lib/rbac.ts
 function requirePermission(ctx, permission) {
   if (ctx.roles.includes("super_admin")) return;
@@ -25814,7 +25988,7 @@ var createSchema = external_exports.object({
   result: external_exports.string().max(512).optional().default(""),
   items: external_exports.array(itemSchema).min(1).max(200)
 });
-async function handler3(req, res) {
+async function handler5(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -25862,7 +26036,7 @@ async function handler3(req, res) {
 }
 
 // server/_handlers/audit-logs.ts
-async function handler4(req, res) {
+async function handler6(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -25888,10 +26062,11 @@ async function handler4(req, res) {
 
 // server/_handlers/db-usage.ts
 var QUOTA_BYTES = 500 * 1024 * 1024;
-async function handler5(req, res) {
+async function handler7(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
-    await requireAuth(req);
+    const ctx = await requireAuth(req);
+    requirePermission(ctx, "system.manage");
     if (req.method === "GET") {
       const supabase = getAdminClient();
       const { data, error } = await supabase.rpc("get_db_size");
@@ -25922,7 +26097,7 @@ async function handler5(req, res) {
 }
 
 // server/_handlers/inventory.ts
-async function handler6(req, res) {
+async function handler8(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -25952,7 +26127,7 @@ async function handler6(req, res) {
 }
 
 // server/_handlers/permissions.ts
-async function handler7(req, res) {
+async function handler9(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26016,7 +26191,7 @@ async function uploadProductImage(supabase, base64, sku) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
-async function handler8(req, res) {
+async function handler10(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26046,8 +26221,9 @@ async function handler8(req, res) {
         for (const r of invRows || []) {
           const pid = r.product_id;
           const qty = Number(r.quantity || 0);
-          if (r.warehouses?.wh_type === "domestic") domMap.set(pid, (domMap.get(pid) || 0) + qty);
-          else if (r.warehouses?.wh_type === "overseas") ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
+          const whType = r.warehouses?.wh_type;
+          if (whType === "domestic") domMap.set(pid, (domMap.get(pid) || 0) + qty);
+          else if (whType === "overseas") ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
         const { data: transitRows, error: transitErr } = await supabase.from("purchase_order_items").select("product_id, quantity, purchase_orders!inner(status)").in("product_id", pageIds).eq("purchase_orders.status", "ARRIVED");
         if (transitErr) throw transitErr;
@@ -26111,7 +26287,7 @@ async function handler8(req, res) {
 var batchDeleteSchema = external_exports.object({
   ids: external_exports.array(external_exports.string().uuid()).min(1).max(500)
 });
-async function handler9(req, res) {
+async function handler11(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26141,7 +26317,7 @@ var schema = external_exports.object({
   base64: external_exports.string().min(20).max(6e6),
   sku: external_exports.string().max(200).optional().default("img")
 });
-async function handler10(req, res) {
+async function handler12(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26158,11 +26334,25 @@ async function handler10(req, res) {
       if (cbErr) throw cbErr;
     }
     const match = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/.exec(body.base64);
-    const mime = match ? `image/${match[1]}` : "image/png";
+    const ALLOWED_MIME = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/gif": "gif",
+      "image/webp": "webp"
+    };
+    const MAX_BYTES = 5 * 1024 * 1024;
+    const rawMime = match ? match[1].toLowerCase() : "png";
+    const mime = `image/${rawMime}`;
+    const ext = ALLOWED_MIME[mime];
+    if (!ext) {
+      return res.status(400).json({ error: { code: "BAD_REQUEST", message: "\u4EC5\u652F\u6301 png/jpeg/gif/webp \u56FE\u7247" } });
+    }
     const b64 = match ? match[2] : body.base64.replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(b64, "base64");
     if (!buffer.length) return res.status(400).json({ error: { code: "BAD_REQUEST", message: "\u56FE\u7247\u6570\u636E\u4E3A\u7A7A" } });
-    const ext = (mime.split("/")[1] || "png").replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "");
+    if (buffer.length > MAX_BYTES) {
+      return res.status(400).json({ error: { code: "BAD_REQUEST", message: "\u56FE\u7247\u4E0D\u80FD\u8D85\u8FC7 5MB" } });
+    }
     const safeSku = body.sku.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) || "img";
     const path = `${safeSku}_${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from(bucket).upload(path, buffer, {
@@ -26198,7 +26388,7 @@ function genOrderNo(d = /* @__PURE__ */ new Date()) {
   const rand = String(Math.floor(Math.random() * 9e3) + 1e3);
   return `CG-${y}${m}${day}-${rand}`;
 }
-async function handler11(req, res) {
+async function handler13(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26316,7 +26506,7 @@ var createSchema4 = external_exports.object({
   warehouse_id: external_exports.string().uuid(),
   items: external_exports.array(itemSchema2).min(1).max(200)
 });
-async function handler12(req, res) {
+async function handler14(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26360,7 +26550,7 @@ async function handler12(req, res) {
 }
 
 // server/_handlers/roles.ts
-async function handler13(req, res) {
+async function handler15(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26390,7 +26580,7 @@ var createSchema5 = external_exports.object({
   currency: external_exports.string().max(8).optional(),
   items: external_exports.array(itemSchema3).min(1).max(200)
 });
-async function handler14(req, res) {
+async function handler16(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26486,7 +26676,7 @@ var createSchema6 = external_exports.object({
   forwarder_id: external_exports.string().uuid().nullable().optional(),
   items: external_exports.array(itemSchema4).min(1).max(200)
 });
-async function handler15(req, res) {
+async function handler17(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26550,7 +26740,7 @@ var createSchema7 = external_exports.object({
   to_warehouse_id: external_exports.string().uuid(),
   items: external_exports.array(itemSchema5).min(1).max(200)
 }).refine((v) => v.from_warehouse_id !== v.to_warehouse_id, { message: "\u8C03\u51FA\u4E0E\u8C03\u5165\u4ED3\u5E93\u4E0D\u80FD\u76F8\u540C" });
-async function handler16(req, res) {
+async function handler18(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26611,7 +26801,7 @@ async function getProfileWithRoles(supabase, id) {
   }
   return data;
 }
-async function handler17(req, res) {
+async function handler19(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26668,7 +26858,7 @@ var createSchema9 = external_exports.object({
   address: external_exports.string().max(300).nullable().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional().default("domestic")
 });
-async function handler18(req, res) {
+async function handler20(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26698,7 +26888,7 @@ async function handler18(req, res) {
 }
 
 // server/_handlers/dashboard.ts
-async function handler19(req, res) {
+async function handler21(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26755,7 +26945,7 @@ var createSchema10 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler20(req, res) {
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26802,7 +26992,7 @@ var updateSchema = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler21(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26856,7 +27046,7 @@ var updateSchema2 = external_exports.object({
   status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED"]).optional(),
   result: external_exports.string().max(512).optional()
 }).refine((v) => v.status !== void 0 || v.result !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler22(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26928,7 +27118,7 @@ async function handler22(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler23(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26965,7 +27155,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler24(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27000,7 +27190,7 @@ async function handler24(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler25(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27051,7 +27241,7 @@ var updateSchema3 = external_exports.object({
   last_mile_delivery_peso: external_exports.coerce.number().min(0).optional(),
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional()
 });
-async function handler26(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27123,7 +27313,7 @@ var updateSchema4 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler27(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27242,7 +27432,7 @@ var updateSchema5 = external_exports.object({
 }).refine((v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0, {
   message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
 });
-async function handler28(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27328,7 +27518,7 @@ var updateSchema6 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler29(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27406,7 +27596,7 @@ var updateSchema7 = external_exports.object({
   bill_check_time: external_exports.string().datetime().nullable().optional(),
   appointment_time: external_exports.string().datetime().nullable().optional()
 });
-async function handler30(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27489,7 +27679,7 @@ var TRANSFER_FLOW = {
 var updateSchema8 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler31(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27598,7 +27788,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler32(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27666,7 +27856,7 @@ var updateSchema10 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler33(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27710,41 +27900,43 @@ async function handler33(req, res) {
 
 // server/index.ts
 var routes = [
+  { pattern: /^\/auth\/captcha$/, handler: handler3 },
+  { pattern: /^\/auth\/login$/, handler: handler4 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler19 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler21, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler20 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler22, params: ["id"] },
-  { pattern: /^\/after-sales$/, handler: handler3 },
-  { pattern: /^\/audit-logs$/, handler: handler4 },
-  { pattern: /^\/db-usage$/, handler: handler5 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler24 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler25 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler23, params: ["id"] },
-  { pattern: /^\/inventory$/, handler: handler6 },
-  { pattern: /^\/permissions$/, handler: handler7 },
-  { pattern: /^\/products\/batch-delete$/, handler: handler9 },
-  { pattern: /^\/products\/upload-image$/, handler: handler10 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler26, params: ["id"] },
-  { pattern: /^\/products$/, handler: handler8 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler27, params: ["id"] },
-  { pattern: /^\/purchase-orders$/, handler: handler11 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler28, params: ["id"] },
-  { pattern: /^\/replenishment$/, handler: handler12 },
-  { pattern: /^\/roles$/, handler: handler13 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler29, params: ["id"] },
-  { pattern: /^\/sales$/, handler: handler14 },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler30, params: ["id"] },
-  { pattern: /^\/shipments$/, handler: handler15 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler31, params: ["id"] },
-  { pattern: /^\/transfers$/, handler: handler16 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler32, params: ["id"] },
-  { pattern: /^\/users$/, handler: handler17 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler33, params: ["id"] },
-  { pattern: /^\/warehouses$/, handler: handler18 }
+  { pattern: /^\/dashboard\/stats$/, handler: handler21 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler23, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler22 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler24, params: ["id"] },
+  { pattern: /^\/after-sales$/, handler: handler5 },
+  { pattern: /^\/audit-logs$/, handler: handler6 },
+  { pattern: /^\/db-usage$/, handler: handler7 },
+  { pattern: /^\/inventory\/adjust$/, handler: handler26 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler27 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler25, params: ["id"] },
+  { pattern: /^\/inventory$/, handler: handler8 },
+  { pattern: /^\/permissions$/, handler: handler9 },
+  { pattern: /^\/products\/batch-delete$/, handler: handler11 },
+  { pattern: /^\/products\/upload-image$/, handler: handler12 },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler28, params: ["id"] },
+  { pattern: /^\/products$/, handler: handler10 },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler29, params: ["id"] },
+  { pattern: /^\/purchase-orders$/, handler: handler13 },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler30, params: ["id"] },
+  { pattern: /^\/replenishment$/, handler: handler14 },
+  { pattern: /^\/roles$/, handler: handler15 },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler31, params: ["id"] },
+  { pattern: /^\/sales$/, handler: handler16 },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/shipments$/, handler: handler17 },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler33, params: ["id"] },
+  { pattern: /^\/transfers$/, handler: handler18 },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/users$/, handler: handler19 },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler35, params: ["id"] },
+  { pattern: /^\/warehouses$/, handler: handler20 }
 ];
-async function handler34(req, res) {
+async function handler36(req, res) {
   try {
     const url2 = new URL(req.url || "/", "http://internal");
     const path = url2.pathname.replace(/^\/api/, "") || "/";
@@ -27767,5 +27959,5 @@ async function handler34(req, res) {
   }
 }
 export {
-  handler34 as default
+  handler36 as default
 };

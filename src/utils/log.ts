@@ -15,6 +15,14 @@ export function formatLogTime(d = new Date()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+// 对日志中的邮箱打码，避免敏感信息明文落 localStorage
+export function maskEmail(text: string): string {
+  return text.replace(/([a-zA-Z0-9._%+-])@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, (_m, u: string, d: string) => {
+    const head = u.slice(0, 2)
+    return head + '***@' + d
+  })
+}
+
 export function getLogs(): OpLogEntry[] {
   try {
     const raw = localStorage.getItem(KEY)
@@ -25,7 +33,7 @@ export function getLogs(): OpLogEntry[] {
 }
 
 export function addLog(type: OpLogEntry['type'], msg: string, detail = ''): void {
-  const entry: OpLogEntry = { time: formatLogTime(), type, msg, detail }
+  const entry: OpLogEntry = { time: formatLogTime(), type, msg: maskEmail(msg), detail: maskEmail(detail) }
   const logs = getLogs()
   logs.unshift(entry)
   if (logs.length > MAX) logs.length = MAX

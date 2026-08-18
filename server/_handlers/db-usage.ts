@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
+import { requirePermission } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
@@ -9,7 +10,8 @@ const QUOTA_BYTES = 500 * 1024 * 1024; // Supabase 免费版 500MB
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
-    await requireAuth(req);
+    const ctx = await requireAuth(req);
+    requirePermission(ctx, 'system.manage');
 
     if (req.method === 'GET') {
       const supabase = getAdminClient();
