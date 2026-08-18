@@ -17,7 +17,7 @@
     <div class="filters">
       <el-input
         v-model="query.search"
-        placeholder="搜索 SKU / 名称 / 条形码"
+        placeholder="搜索 SKU / 名称 / 产品编号 / 链接ID / 条形码"
         clearable
         style="width: 260px"
         @keyup.enter="load"
@@ -56,6 +56,10 @@
       <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
       <el-table-column prop="barcode" label="条形码" min-width="140" />
       <el-table-column prop="category" label="分类" min-width="120" />
+      <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
+      <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
+      <el-table-column prop="in_transit_qty" label="在途数量" width="100" align="right" />
+      <el-table-column prop="sales_qty" label="销量" width="90" align="right" />
       <el-table-column prop="listing_time" label="上新时间" width="110" />
       <el-table-column prop="unit" label="单位" width="80" />
       <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
@@ -468,6 +472,10 @@ function exportRows() {
     { key: 'name', label: '名称' },
     { key: 'barcode', label: '条形码' },
     { key: 'category', label: '分类' },
+    { key: 'domestic_stock', label: '国内库存' },
+    { key: 'overseas_stock', label: '国外库存' },
+    { key: 'in_transit_qty', label: '在途数量' },
+    { key: 'sales_qty', label: '销量' },
     { key: 'listing_time', label: '上新时间' },
     { key: 'unit', label: '单位' },
     { key: 'unit_price', label: '售价' },

@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const supabase = getAdminClient();
       let query: any = supabase.from('products').select('*', { count: 'exact' });
-      if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%`);
+      if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
       query = query.order('created_at', { ascending: false })
@@ -79,7 +79,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
+      const rows = data || [];
+      const pageIds = rows.map((r: any) => r.id);
+
+      // 当前页产品聚合：国内库存 / 国外库存 / 在途数量 / 销量
+      const domMap = new Map<string, number>();
+      const ovsMap = new Map<string, number>();
+      const transitMap = new Map<string, number>();
+      const salesMap = new Map<string, number>();
+
+      if (pageIds.length) {
+        // 库存：inventory join warehouses(wh_type)
+        const { data: invRows, error: invErr } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, warehouses!inner(wh_type)')
+          .in('product_id', pageIds);
+        if (invErr) throw invErr;
+        for (const r of invRows || []) {
+          const pid = r.product_id as string;
+          const qty = Number(r.quantity || 0);
+          if (r.warehouses?.wh_type === 'domestic') domMap.set(pid, (domMap.get(pid) || 0) + qty);
+          else if (r.warehouses?.wh_type === 'overseas') ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
+        }
+
+        // 在途：已到货未入库的拿货数量（purchase_orders.status = ARRIVED）
+        const { data: transitRows, error: transitErr } = await supabase
+          .from('purchase_order_items')
+          .select('product_id, quantity, purchase_orders!inner(status)')
+          .in('product_id', pageIds)
+          .eq('purchase_orders.status', 'ARRIVED');
+        if (transitErr) throw transitErr;
+        for (const r of transitRows || []) {
+          const pid = r.product_id as string;
+          transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
+        }
+
+        // 销量：销售明细累计（排除已取消订单）
+        const { data: salesRows, error: salesErr } = await supabase
+          .from('sales_order_items')
+          .select('product_id, quantity, sales_orders!inner(status)')
+          .in('product_id', pageIds)
+          .neq('sales_orders.status', 'CANCELLED');
+        if (salesErr) throw salesErr;
+        for (const r of salesRows || []) {
+          const pid = r.product_id as string;
+          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
+        }
+      }
+
+      const enriched = rows.map((r: any) => ({
+        ...r,
+        domestic_stock: domMap.get(r.id) || 0,
+        overseas_stock: ovsMap.get(r.id) || 0,
+        in_transit_qty: transitMap.get(r.id) || 0,
+        sales_qty: salesMap.get(r.id) || 0,
+      }));
+
+      return res.status(200).json({ data: enriched, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }
 
     if (req.method === 'POST') {

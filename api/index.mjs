@@ -26028,13 +26028,48 @@ async function handler8(req, res) {
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
       const supabase = getAdminClient();
       let query = supabase.from("products").select("*", { count: "exact" });
-      if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%`);
+      if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq("category", category);
       if (status) query = query.eq("status", status);
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
-      return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
+      const rows = data || [];
+      const pageIds = rows.map((r) => r.id);
+      const domMap = /* @__PURE__ */ new Map();
+      const ovsMap = /* @__PURE__ */ new Map();
+      const transitMap = /* @__PURE__ */ new Map();
+      const salesMap = /* @__PURE__ */ new Map();
+      if (pageIds.length) {
+        const { data: invRows, error: invErr } = await supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)").in("product_id", pageIds);
+        if (invErr) throw invErr;
+        for (const r of invRows || []) {
+          const pid = r.product_id;
+          const qty = Number(r.quantity || 0);
+          if (r.warehouses?.wh_type === "domestic") domMap.set(pid, (domMap.get(pid) || 0) + qty);
+          else if (r.warehouses?.wh_type === "overseas") ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
+        }
+        const { data: transitRows, error: transitErr } = await supabase.from("purchase_order_items").select("product_id, quantity, purchase_orders!inner(status)").in("product_id", pageIds).eq("purchase_orders.status", "ARRIVED");
+        if (transitErr) throw transitErr;
+        for (const r of transitRows || []) {
+          const pid = r.product_id;
+          transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
+        }
+        const { data: salesRows, error: salesErr } = await supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(status)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
+        if (salesErr) throw salesErr;
+        for (const r of salesRows || []) {
+          const pid = r.product_id;
+          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
+        }
+      }
+      const enriched = rows.map((r) => ({
+        ...r,
+        domestic_stock: domMap.get(r.id) || 0,
+        overseas_stock: ovsMap.get(r.id) || 0,
+        in_transit_qty: transitMap.get(r.id) || 0,
+        sales_qty: salesMap.get(r.id) || 0
+      }));
+      return res.status(200).json({ data: enriched, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }
     if (req.method === "POST") {
       requirePermission(ctx, "products.write");
