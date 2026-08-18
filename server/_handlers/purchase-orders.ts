@@ -14,6 +14,7 @@ const createSchema = z.object({
   quantity: z.coerce.number().positive(),
   receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   warehouse_id: z.string().uuid().optional(),
+  remark: z.string().max(500).optional(),
 });
 
 function todayStr(d = new Date()) {
@@ -101,6 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           supplier: null,
           warehouse_id: warehouseId,
           receive_date: receiveDate,
+          remark: body.remark || null,
           status: 'ARRIVED',
           total_amount: 0,
           created_by: ctx.userId,
@@ -118,6 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               supplier: null,
               warehouse_id: warehouseId,
               receive_date: receiveDate,
+              remark: body.remark || null,
               status: 'ARRIVED',
               total_amount: 0,
               created_by: ctx.userId,

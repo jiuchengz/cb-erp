@@ -62,6 +62,18 @@
           <span v-else>{{ row.receive_date || '-' }}</span>
         </template>
       </el-table-column>
+      <el-table-column label="备注" min-width="160">
+        <template #default="{ row }">
+          <el-input
+            v-if="canWrite"
+            v-model="row.remark"
+            size="small"
+            placeholder="点击填写备注"
+            @change="(v: any) => updateRemark(row, v)"
+          />
+          <span v-else>{{ row.remark || '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
@@ -110,6 +122,9 @@
             placeholder="默认当天"
             style="width: 180px"
           />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" maxlength="500" placeholder="选填，手动填写备注" />
         </el-form-item>
         <el-form-item label="入库仓库" required>
           <el-select v-model="form.warehouse_id" placeholder="选择国内仓库" style="width: 100%">
@@ -163,6 +178,7 @@
         <el-descriptions :column="2" border style="margin-top: 14px">
           <el-descriptions-item label="拿货数量">{{ firstItem(detail)?.quantity ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="拿货日期">{{ detail.receive_date || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
           </el-descriptions-item>
@@ -299,6 +315,7 @@ const form = reactive({
   quantity: 1,
   receive_date: '',
   warehouse_id: '',
+  remark: '',
   productInfo: null as any,
   lookupMsg: '',
 })
@@ -308,6 +325,7 @@ function openCreate() {
   form.quantity = 1
   form.receive_date = ''
   form.warehouse_id = domesticWarehouses.value[0]?.id ?? ''
+  form.remark = ''
   form.productInfo = null
   form.lookupMsg = ''
   createVisible.value = true
@@ -346,6 +364,7 @@ async function save() {
   }
   if (form.receive_date) payload.receive_date = form.receive_date
   if (form.warehouse_id) payload.warehouse_id = form.warehouse_id
+  if (form.remark) payload.remark = form.remark
   saving.value = true
   try {
     await api.post('/purchase-orders', payload)
@@ -429,6 +448,7 @@ function downloadTpl() {
       { label: '产品编码', sample: 'D-2024-0088' },
       { label: '数量', sample: 100 },
       { label: '拿货日期', sample: '2026-08-17' },
+      { label: '备注', sample: '选填' },
     ],
     '拿货导入模板',
     '拿货批量导入模板.xlsx'
@@ -451,6 +471,7 @@ async function onImportFile(e: Event) {
       product_code: ['产品编码', '编码', 'code'],
       quantity: ['数量', 'quantity', 'qty'],
       receive_date: ['拿货日期', '日期', '时间', 'receive_date', 'date'],
+      remark: ['备注', 'remark', 'note'],
     })
     if (col.product_code === undefined || col.quantity === undefined) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"和"数量"列')
@@ -464,6 +485,7 @@ async function onImportFile(e: Event) {
       const code = cellStr(row, col.product_code)
       const qty = cellNum(row, col.quantity)
       const dateStr = col.receive_date !== undefined ? cellStr(row, col.receive_date) : ''
+      const remarkStr = col.remark !== undefined ? cellStr(row, col.remark) : ''
       if (!code) {
         failures.push(`第${lineNo}行：产品编码为空`)
         continue
@@ -474,6 +496,7 @@ async function onImportFile(e: Event) {
       }
       const payload: any = { product_code: code, quantity: qty }
       if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) payload.receive_date = dateStr
+      if (remarkStr) payload.remark = remarkStr
       try {
         await api.post('/purchase-orders', payload)
         ok++
@@ -505,6 +528,16 @@ async function updateReceiveDate(row: any, val: any) {
     load()
   }
 }
+async function updateRemark(row: any, val: any) {
+  try {
+    const { data } = await api.patch(`/purchase-orders/${row.id}`, { remark: val || null })
+    if (data?.data) Object.assign(row, data.data)
+    ElMessage.success('已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+    load()
+  }
+}
 function exportRows() {
   const columns = [
     { key: 'sku', label: '编码', value: (r: any) => firstItem(r)?.products?.sku || '-' },
@@ -512,6 +545,7 @@ function exportRows() {
     { key: 'name', label: '产品名称', value: (r: any) => firstItem(r)?.products?.name || '-' },
     { key: 'quantity', label: '拿货数量', value: (r: any) => firstItem(r)?.quantity ?? '-' },
     { key: 'receive_date', label: '拿货日期', value: (r: any) => r.receive_date || '-' },
+    { key: 'remark', label: '备注', value: (r: any) => r.remark || '-' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
     { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
   ]

@@ -27,8 +27,11 @@ const updateSchema = z
       .enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PURCHASING', 'PARTIAL', 'RECEIVED', 'CANCELLED', 'ARRIVED'])
       .optional(),
     receive_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    remark: z.string().max(500).nullable().optional(),
   })
-  .refine((v) => v.status !== undefined || v.receive_date !== undefined, { message: '至少提供一个更新字段' });
+  .refine((v) => v.status !== undefined || v.receive_date !== undefined || v.remark !== undefined, {
+    message: '至少提供一个更新字段',
+  });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -66,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const updatePayload: any = {};
       if (body.receive_date !== undefined) updatePayload.receive_date = body.receive_date;
+      if (body.remark !== undefined) updatePayload.remark = body.remark;
 
       const items = before.purchase_order_items || [];
       const isStatusUpdate = body.status !== undefined;
