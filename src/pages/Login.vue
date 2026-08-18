@@ -5,13 +5,8 @@
       <input v-model="email" type="email" placeholder="邮箱" required autocomplete="username" />
       <input v-model="password" type="password" placeholder="密码" required autocomplete="current-password" />
 
-      <!-- 服务端算术验证码 -->
-      <div class="captcha-row">
-        <span class="captcha-expr" title="点击换一题" @click="generateCaptcha">
-          {{ captchaA }} {{ op === '+' ? '+' : op === '-' ? '−' : '×' }} {{ captchaB }} = ?
-        </span>
-        <input v-model="captchaInput" type="text" placeholder="验证码结果" class="captcha-input" />
-      </div>
+      <!-- Cloudflare Turnstile 人机验证 -->
+      <div ref="turnstileEl" class="turnstile-wrap"></div>
 
       <label class="remember">
         <input v-model="rememberMe" type="checkbox" />
@@ -25,11 +20,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { api } from '@/services/api'
 import { addLog } from '@/utils/log'
 
 const auth = useAuthStore()
@@ -42,23 +36,55 @@ const rememberMe = ref(false)
 
 const REMEMBER_KEY = 'cb_remembered_email'
 
-// ---- 服务端算术验证码（答案只在服务端，一次性） ----
-const captchaId = ref('')
-const captchaA = ref(0)
-const captchaB = ref(0)
-const op = ref<'+' | '-' | '*'>('+')
-const captchaInput = ref('')
+// ---- Cloudflare Turnstile 人机验证 ----
+const TURNSTILE_SITE_KEY = '0x4AAAAAAET5sL5IBFTnS8m-'
+const turnstileEl = ref<HTMLElement | null>(null)
+const turnstileToken = ref('')
+let turnstileWidgetId: string | null = null
 
-async function generateCaptcha() {
-  captchaInput.value = ''
-  try {
-    const { data } = await api.get('/auth/captcha')
-    captchaId.value = data.captchaId
-    captchaA.value = data.a
-    captchaB.value = data.b
-    op.value = data.op
-  } catch {
-    error.value = '验证码加载失败，请检查网络'
+declare global {
+  interface Window {
+    turnstile?: any
+  }
+}
+
+function loadTurnstileScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.turnstile) {
+      resolve()
+      return
+    }
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    s.async = true
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('验证码组件加载失败，请刷新重试'))
+    document.head.appendChild(s)
+  })
+}
+
+function renderTurnstile() {
+  if (!window.turnstile || !turnstileEl.value) return
+  turnstileWidgetId = window.turnstile.render(turnstileEl.value, {
+    sitekey: TURNSTILE_SITE_KEY,
+    callback: (token: string) => {
+      turnstileToken.value = token
+    },
+    'expired-callback': () => {
+      turnstileToken.value = ''
+    },
+    'error-callback': () => {
+      turnstileToken.value = ''
+    },
+  })
+}
+
+function resetTurnstile() {
+  turnstileToken.value = ''
+  if (window.turnstile && turnstileWidgetId) {
+    window.turnstile.reset(turnstileWidgetId)
+  } else if (window.turnstile && turnstileEl.value) {
+    renderTurnstile()
   }
 }
 
@@ -80,11 +106,21 @@ function saveRememberedEmail(emailVal: string) {
 }
 
 onMounted(() => {
-  generateCaptcha()
+  loadTurnstileScript()
+    .then(() => renderTurnstile())
+    .catch((e) => {
+      error.value = e?.message || '验证码组件加载失败'
+    })
   const saved = loadRememberedEmail()
   if (saved) {
     email.value = saved
     rememberMe.value = true
+  }
+})
+
+onUnmounted(() => {
+  if (window.turnstile && turnstileWidgetId) {
+    window.turnstile.remove(turnstileWidgetId)
   }
 })
 
@@ -98,14 +134,14 @@ async function onSubmit() {
     error.value = '请输入密码'
     return
   }
-  if (!captchaInput.value) {
-    error.value = '请输入验证码结果'
+  if (!turnstileToken.value) {
+    error.value = '请完成人机验证'
     return
   }
 
   loading.value = true
   try {
-    await auth.signIn(email.value.trim(), password.value, captchaId.value, parseInt(captchaInput.value, 10) || 0)
+    await auth.signIn(email.value.trim(), password.value, turnstileToken.value)
     if (rememberMe.value) {
       saveRememberedEmail(email.value)
     } else {
@@ -128,14 +164,14 @@ async function onSubmit() {
     } else if (code === 'INVALID_CREDENTIALS') {
       error.value = msg
       ElMessage.error('用户名或密码错误')
-    } else if (code === 'CAPTCHA_INVALID') {
-      error.value = '验证码错误或已过期，请重试'
+    } else if (code === 'CAPTCHA_INVALID' || /captcha/i.test(msg)) {
+      error.value = '人机验证失败，请重试'
     } else if (code === 'RATE_LIMITED') {
       error.value = '请求过于频繁，请稍后再试'
     } else {
       error.value = msg
     }
-    generateCaptcha()
+    resetTurnstile()
   } finally {
     loading.value = false
   }
@@ -161,9 +197,7 @@ button { padding: 11px; background: linear-gradient(135deg, #38bdf8, #6366f1); c
 button:hover { opacity: .95; }
 button:disabled { opacity: .6; cursor: not-allowed; }
 .error { color: #e5484d; font-size: 13px; margin: 0; }
-.captcha-row { display: flex; gap: 10px; align-items: center; }
-.captcha-expr { flex-shrink: 0; background: rgba(255,255,255,.55); padding: 9px 14px; border-radius: var(--radius-sm); font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer; user-select: none; color: var(--ink); }
-.captcha-input { flex: 1; min-width: 0; }
+.turnstile-wrap { min-height: 65px; display: flex; justify-content: center; }
 .remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); cursor: pointer; }
 .remember input { width: 14px; height: 14px; }
 </style>

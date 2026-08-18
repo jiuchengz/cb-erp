@@ -4,7 +4,6 @@ import { getAdminClient } from '../_lib/db';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit, loginRateLimit } from '../_lib/rate-limit';
 import {
-  verifyCaptcha,
   getLockRemainMs,
   recordLoginFail,
   clearLoginFails,
@@ -14,8 +13,7 @@ import {
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(200),
-  captchaId: z.string().min(1),
-  captchaAnswer: z.coerce.number(),
+  captchaToken: z.string().min(1),
 });
 
 function clientIp(req: VercelRequest): string {
@@ -58,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const parsed = loginSchema.safeParse(req.body || {});
     if (!parsed.success) throw Errors.badRequest('请求参数错误');
-    const { email, password, captchaId, captchaAnswer } = parsed.data;
+    const { email, password, captchaToken } = parsed.data;
     const emailNorm = email.trim().toLowerCase();
 
     // 账号维度限流：10 次 / 5 分钟
@@ -75,16 +73,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 服务端验证码校验（一次性）
-    if (!verifyCaptcha(captchaId, captchaAnswer)) {
-      return res.status(400).json({ error: { code: 'CAPTCHA_INVALID', message: '验证码错误或已过期，请刷新重试' } });
-    }
-
+    // Cloudflare Turnstile 验证：token 由 Supabase 侧校验（服务端已启用 CAPTCHA 保护）
     // 代理登录 Supabase Auth（服务端凭据，不再由前端直连绕过）
     const supabase = getAdminClient();
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email: emailNorm,
       password,
+      options: {
+        captchaToken,
+      },
     });
 
     if (authErr) {

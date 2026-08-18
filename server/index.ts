@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import authMe from './_handlers/auth';
 import authPassword from './_handlers/auth/password';
-import authCaptcha from './_handlers/auth/captcha';
 import authLogin from './_handlers/auth/login';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
@@ -44,7 +43,6 @@ interface Route {
 }
 
 const routes: Route[] = [
-  { pattern: /^\/auth\/captcha$/, handler: authCaptcha },
   { pattern: /^\/auth\/login$/, handler: authLogin },
   { pattern: /^\/auth\/password$/, handler: authPassword },
   { pattern: /^\/auth\/me$/, handler: authMe },

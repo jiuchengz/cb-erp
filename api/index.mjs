@@ -21714,83 +21714,6 @@ async function handler2(req, res) {
   }
 }
 
-// server/_handlers/_lib/captcha.ts
-var captchaMap = /* @__PURE__ */ new Map();
-var CAPTCHA_TTL_MS = 5 * 60 * 1e3;
-var failMap = /* @__PURE__ */ new Map();
-var MAX_FAILS = 5;
-var LOCK_MS = 15 * 60 * 1e3;
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-function createCaptcha() {
-  const now = Date.now();
-  for (const [id, e] of captchaMap) {
-    if (e.expiresAt <= now) captchaMap.delete(id);
-  }
-  const ops = ["+", "-", "*"];
-  const op = ops[randomInt(0, 2)];
-  let a = 0;
-  let b = 0;
-  if (op === "+") {
-    a = randomInt(1, 20);
-    b = randomInt(1, 20);
-  } else if (op === "-") {
-    a = randomInt(10, 30);
-    b = randomInt(1, a);
-  } else {
-    a = randomInt(2, 9);
-    b = randomInt(2, 9);
-  }
-  const answer = op === "+" ? a + b : op === "-" ? a - b : a * b;
-  const captchaId = "c" + now.toString(36) + Math.random().toString(36).slice(2, 10);
-  captchaMap.set(captchaId, { answer, expiresAt: now + CAPTCHA_TTL_MS });
-  return { captchaId, a, b, op };
-}
-function verifyCaptcha(captchaId, answer) {
-  if (!captchaId) return false;
-  const entry = captchaMap.get(captchaId);
-  captchaMap.delete(captchaId);
-  if (!entry || entry.expiresAt <= Date.now()) return false;
-  return Number(answer) === entry.answer;
-}
-function getLockRemainMs(email) {
-  const key = email.trim().toLowerCase();
-  const e = failMap.get(key);
-  if (!e || !e.lockedUntil) return 0;
-  const remain = e.lockedUntil - Date.now();
-  return remain > 0 ? remain : 0;
-}
-function recordLoginFail(email) {
-  const key = email.trim().toLowerCase();
-  const now = Date.now();
-  const e = failMap.get(key);
-  if (e && e.lockedUntil && e.lockedUntil > now) {
-    return { locked: true, fails: e.fails };
-  }
-  const fails = (e ? e.fails : 0) + 1;
-  let lockedUntil = 0;
-  if (fails >= MAX_FAILS) lockedUntil = now + LOCK_MS;
-  failMap.set(key, { fails, lockedUntil });
-  return { locked: fails >= MAX_FAILS, fails };
-}
-function clearLoginFails(email) {
-  failMap.delete(email.trim().toLowerCase());
-}
-
-// server/_handlers/auth/captcha.ts
-async function handler3(req, res) {
-  try {
-    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":captcha", 60, 6e4);
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
-    }
-    return res.status(200).json(createCaptcha());
-  } catch (e) {
-    return handleError2(res, e);
-  }
-}
-
 // node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -25832,12 +25755,40 @@ var coerce = {
 };
 var NEVER = INVALID;
 
+// server/_handlers/_lib/captcha.ts
+var CAPTCHA_TTL_MS = 5 * 60 * 1e3;
+var failMap = /* @__PURE__ */ new Map();
+var MAX_FAILS = 5;
+var LOCK_MS = 15 * 60 * 1e3;
+function getLockRemainMs(email) {
+  const key = email.trim().toLowerCase();
+  const e = failMap.get(key);
+  if (!e || !e.lockedUntil) return 0;
+  const remain = e.lockedUntil - Date.now();
+  return remain > 0 ? remain : 0;
+}
+function recordLoginFail(email) {
+  const key = email.trim().toLowerCase();
+  const now = Date.now();
+  const e = failMap.get(key);
+  if (e && e.lockedUntil && e.lockedUntil > now) {
+    return { locked: true, fails: e.fails };
+  }
+  const fails = (e ? e.fails : 0) + 1;
+  let lockedUntil = 0;
+  if (fails >= MAX_FAILS) lockedUntil = now + LOCK_MS;
+  failMap.set(key, { fails, lockedUntil });
+  return { locked: fails >= MAX_FAILS, fails };
+}
+function clearLoginFails(email) {
+  failMap.delete(email.trim().toLowerCase());
+}
+
 // server/_handlers/auth/login.ts
 var loginSchema = external_exports.object({
   email: external_exports.string().email(),
   password: external_exports.string().min(1).max(200),
-  captchaId: external_exports.string().min(1),
-  captchaAnswer: external_exports.coerce.number()
+  captchaToken: external_exports.string().min(1)
 });
 function clientIp(req) {
   const fwd = req.headers["x-forwarded-for"];
@@ -25861,7 +25812,7 @@ async function loadUserAccess(supabase, userId) {
   }
   return { roles, permissions: Array.from(permissionsSet) };
 }
-async function handler4(req, res) {
+async function handler3(req, res) {
   try {
     rateLimit(clientIp(req) + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -25871,7 +25822,7 @@ async function handler4(req, res) {
     loginRateLimit("ip:" + ip, 20, 5 * 60 * 1e3);
     const parsed = loginSchema.safeParse(req.body || {});
     if (!parsed.success) throw Errors.badRequest("\u8BF7\u6C42\u53C2\u6570\u9519\u8BEF");
-    const { email, password, captchaId, captchaAnswer } = parsed.data;
+    const { email, password, captchaToken } = parsed.data;
     const emailNorm = email.trim().toLowerCase();
     loginRateLimit("email:" + emailNorm, 10, 5 * 60 * 1e3);
     const lockRemain = getLockRemainMs(emailNorm);
@@ -25883,13 +25834,13 @@ async function handler4(req, res) {
         }
       });
     }
-    if (!verifyCaptcha(captchaId, captchaAnswer)) {
-      return res.status(400).json({ error: { code: "CAPTCHA_INVALID", message: "\u9A8C\u8BC1\u7801\u9519\u8BEF\u6216\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u5237\u65B0\u91CD\u8BD5" } });
-    }
     const supabase = getAdminClient();
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email: emailNorm,
-      password
+      password,
+      options: {
+        captchaToken
+      }
     });
     if (authErr) {
       const msg = String(authErr.message || "");
@@ -25988,7 +25939,7 @@ var createSchema = external_exports.object({
   result: external_exports.string().max(512).optional().default(""),
   items: external_exports.array(itemSchema).min(1).max(200)
 });
-async function handler5(req, res) {
+async function handler4(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26036,7 +25987,7 @@ async function handler5(req, res) {
 }
 
 // server/_handlers/audit-logs.ts
-async function handler6(req, res) {
+async function handler5(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26062,7 +26013,7 @@ async function handler6(req, res) {
 
 // server/_handlers/db-usage.ts
 var QUOTA_BYTES = 500 * 1024 * 1024;
-async function handler7(req, res) {
+async function handler6(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26097,7 +26048,7 @@ async function handler7(req, res) {
 }
 
 // server/_handlers/inventory.ts
-async function handler8(req, res) {
+async function handler7(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26127,7 +26078,7 @@ async function handler8(req, res) {
 }
 
 // server/_handlers/permissions.ts
-async function handler9(req, res) {
+async function handler8(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26191,7 +26142,7 @@ async function uploadProductImage(supabase, base64, sku) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
-async function handler10(req, res) {
+async function handler9(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26287,7 +26238,7 @@ async function handler10(req, res) {
 var batchDeleteSchema = external_exports.object({
   ids: external_exports.array(external_exports.string().uuid()).min(1).max(500)
 });
-async function handler11(req, res) {
+async function handler10(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26317,7 +26268,7 @@ var schema = external_exports.object({
   base64: external_exports.string().min(20).max(6e6),
   sku: external_exports.string().max(200).optional().default("img")
 });
-async function handler12(req, res) {
+async function handler11(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26388,7 +26339,7 @@ function genOrderNo(d = /* @__PURE__ */ new Date()) {
   const rand = String(Math.floor(Math.random() * 9e3) + 1e3);
   return `CG-${y}${m}${day}-${rand}`;
 }
-async function handler13(req, res) {
+async function handler12(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26506,7 +26457,7 @@ var createSchema4 = external_exports.object({
   warehouse_id: external_exports.string().uuid(),
   items: external_exports.array(itemSchema2).min(1).max(200)
 });
-async function handler14(req, res) {
+async function handler13(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26550,7 +26501,7 @@ async function handler14(req, res) {
 }
 
 // server/_handlers/roles.ts
-async function handler15(req, res) {
+async function handler14(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26580,7 +26531,7 @@ var createSchema5 = external_exports.object({
   currency: external_exports.string().max(8).optional(),
   items: external_exports.array(itemSchema3).min(1).max(200)
 });
-async function handler16(req, res) {
+async function handler15(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26676,7 +26627,7 @@ var createSchema6 = external_exports.object({
   forwarder_id: external_exports.string().uuid().nullable().optional(),
   items: external_exports.array(itemSchema4).min(1).max(200)
 });
-async function handler17(req, res) {
+async function handler16(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26740,7 +26691,7 @@ var createSchema7 = external_exports.object({
   to_warehouse_id: external_exports.string().uuid(),
   items: external_exports.array(itemSchema5).min(1).max(200)
 }).refine((v) => v.from_warehouse_id !== v.to_warehouse_id, { message: "\u8C03\u51FA\u4E0E\u8C03\u5165\u4ED3\u5E93\u4E0D\u80FD\u76F8\u540C" });
-async function handler18(req, res) {
+async function handler17(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26801,7 +26752,7 @@ async function getProfileWithRoles(supabase, id) {
   }
   return data;
 }
-async function handler19(req, res) {
+async function handler18(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26858,7 +26809,7 @@ var createSchema9 = external_exports.object({
   address: external_exports.string().max(300).nullable().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional().default("domestic")
 });
-async function handler20(req, res) {
+async function handler19(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26888,7 +26839,7 @@ async function handler20(req, res) {
 }
 
 // server/_handlers/dashboard.ts
-async function handler21(req, res) {
+async function handler20(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26945,7 +26896,7 @@ var createSchema10 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler22(req, res) {
+async function handler21(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -26992,7 +26943,7 @@ var updateSchema = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler23(req, res) {
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27046,7 +26997,7 @@ var updateSchema2 = external_exports.object({
   status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED"]).optional(),
   result: external_exports.string().max(512).optional()
 }).refine((v) => v.status !== void 0 || v.result !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler24(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27118,7 +27069,7 @@ async function handler24(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler25(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27155,7 +27106,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler26(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27190,7 +27141,7 @@ async function handler26(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler27(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27241,7 +27192,7 @@ var updateSchema3 = external_exports.object({
   last_mile_delivery_peso: external_exports.coerce.number().min(0).optional(),
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional()
 });
-async function handler28(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27313,7 +27264,7 @@ var updateSchema4 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler29(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27432,7 +27383,7 @@ var updateSchema5 = external_exports.object({
 }).refine((v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0, {
   message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
 });
-async function handler30(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27518,7 +27469,7 @@ var updateSchema6 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler31(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27596,7 +27547,7 @@ var updateSchema7 = external_exports.object({
   bill_check_time: external_exports.string().datetime().nullable().optional(),
   appointment_time: external_exports.string().datetime().nullable().optional()
 });
-async function handler32(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27679,7 +27630,7 @@ var TRANSFER_FLOW = {
 var updateSchema8 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler33(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27788,7 +27739,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler34(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27856,7 +27807,7 @@ var updateSchema10 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler35(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27900,43 +27851,42 @@ async function handler35(req, res) {
 
 // server/index.ts
 var routes = [
-  { pattern: /^\/auth\/captcha$/, handler: handler3 },
-  { pattern: /^\/auth\/login$/, handler: handler4 },
+  { pattern: /^\/auth\/login$/, handler: handler3 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler21 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler23, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler22 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler24, params: ["id"] },
-  { pattern: /^\/after-sales$/, handler: handler5 },
-  { pattern: /^\/audit-logs$/, handler: handler6 },
-  { pattern: /^\/db-usage$/, handler: handler7 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler26 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler27 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler25, params: ["id"] },
-  { pattern: /^\/inventory$/, handler: handler8 },
-  { pattern: /^\/permissions$/, handler: handler9 },
-  { pattern: /^\/products\/batch-delete$/, handler: handler11 },
-  { pattern: /^\/products\/upload-image$/, handler: handler12 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler28, params: ["id"] },
-  { pattern: /^\/products$/, handler: handler10 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler29, params: ["id"] },
-  { pattern: /^\/purchase-orders$/, handler: handler13 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler30, params: ["id"] },
-  { pattern: /^\/replenishment$/, handler: handler14 },
-  { pattern: /^\/roles$/, handler: handler15 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler31, params: ["id"] },
-  { pattern: /^\/sales$/, handler: handler16 },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler32, params: ["id"] },
-  { pattern: /^\/shipments$/, handler: handler17 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler33, params: ["id"] },
-  { pattern: /^\/transfers$/, handler: handler18 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler34, params: ["id"] },
-  { pattern: /^\/users$/, handler: handler19 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler35, params: ["id"] },
-  { pattern: /^\/warehouses$/, handler: handler20 }
+  { pattern: /^\/dashboard\/stats$/, handler: handler20 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler22, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler21 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler23, params: ["id"] },
+  { pattern: /^\/after-sales$/, handler: handler4 },
+  { pattern: /^\/audit-logs$/, handler: handler5 },
+  { pattern: /^\/db-usage$/, handler: handler6 },
+  { pattern: /^\/inventory\/adjust$/, handler: handler25 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler26 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler24, params: ["id"] },
+  { pattern: /^\/inventory$/, handler: handler7 },
+  { pattern: /^\/permissions$/, handler: handler8 },
+  { pattern: /^\/products\/batch-delete$/, handler: handler10 },
+  { pattern: /^\/products\/upload-image$/, handler: handler11 },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler27, params: ["id"] },
+  { pattern: /^\/products$/, handler: handler9 },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler28, params: ["id"] },
+  { pattern: /^\/purchase-orders$/, handler: handler12 },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler29, params: ["id"] },
+  { pattern: /^\/replenishment$/, handler: handler13 },
+  { pattern: /^\/roles$/, handler: handler14 },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler30, params: ["id"] },
+  { pattern: /^\/sales$/, handler: handler15 },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler31, params: ["id"] },
+  { pattern: /^\/shipments$/, handler: handler16 },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/transfers$/, handler: handler17 },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler33, params: ["id"] },
+  { pattern: /^\/users$/, handler: handler18 },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/warehouses$/, handler: handler19 }
 ];
-async function handler36(req, res) {
+async function handler35(req, res) {
   try {
     const url2 = new URL(req.url || "/", "http://internal");
     const path = url2.pathname.replace(/^\/api/, "") || "/";
@@ -27959,5 +27909,5 @@ async function handler36(req, res) {
   }
 }
 export {
-  handler36 as default
+  handler35 as default
 };

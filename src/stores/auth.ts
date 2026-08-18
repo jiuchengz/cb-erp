@@ -73,9 +73,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function signIn(email: string, password: string, captchaId = '', captchaAnswer = 0) {
-    // 登录走服务端代理：验证码校验、限流、失败锁定均在服务端执行
-    const { data } = await api.post('/auth/login', { email, password, captchaId, captchaAnswer })
+  async function signIn(email: string, password: string, captchaToken = '') {
+    // 登录走服务端代理：Turnstile 人机验证、限流、失败锁定均在服务端执行
+    const { data } = await api.post('/auth/login', { email, password, captchaToken })
     if (!data.session) throw new Error('登录失败：未返回会话')
     const { error: setErr } = await supabase.auth.setSession(data.session)
     if (setErr) throw setErr
