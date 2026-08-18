@@ -23,27 +23,26 @@
 
     <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
-      <el-table-column label="编码" min-width="140">
-        <template #default="{ row }">{{ firstItem(row)?.products?.sku || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="图片" min-width="200">
-        <template #default="{ row }">
-          <div class="prod-cell">
-            <el-image
-              v-if="firstItem(row)?.products?.image_text"
-              :src="firstItem(row).products.image_text"
-              :preview-src-list="[firstItem(row).products.image_text]"
-              preview-teleported
-              fit="cover"
-              class="prod-thumb"
-            />
-            <div v-else class="prod-thumb placeholder">图</div>
-            <span class="prod-name">{{ firstItem(row)?.products?.name || '-' }}</span>
-          </div>
-        </template>
-      </el-table-column>
       <el-table-column label="产品编码" min-width="140">
         <template #default="{ row }">{{ firstItem(row)?.products?.code || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="图片" min-width="100">
+        <template #default="{ row }">
+          <el-image
+            v-if="firstItem(row)?.products?.image_text"
+            :src="firstItem(row).products.image_text"
+            :preview-src-list="[firstItem(row).products.image_text]"
+            preview-teleported
+            fit="cover"
+            class="prod-thumb"
+          />
+          <div v-else class="prod-thumb placeholder">图</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="产品名称" min-width="180">
+        <template #default="{ row }">
+          <span class="prod-name-cell">{{ firstItem(row)?.products?.name || '-' }}</span>
+        </template>
       </el-table-column>
       <el-table-column label="拿货数量" width="110" align="right">
         <template #default="{ row }">{{ firstItem(row)?.quantity ?? '-' }}</template>
@@ -598,6 +597,12 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.prod-name-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 .match-box {
   display: flex;
