@@ -51,7 +51,9 @@
           <div v-else class="img-fallback">无图片</div>
         </template>
       </el-table-column>
-      <el-table-column prop="sku" label="SKU" min-width="140" />
+      <el-table-column label="SKU" min-width="140">
+        <template #default="{ row }">{{ row.sku || '—' }}</template>
+      </el-table-column>
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
       <el-table-column prop="barcode" label="条形码" min-width="140" />
@@ -115,11 +117,11 @@
 
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
       <el-form :model="form" label-width="110px">
-        <el-form-item label="SKU" required>
-          <el-input v-model="form.sku" placeholder="唯一编码" />
+        <el-form-item label="SKU">
+          <el-input v-model="form.sku" placeholder="选填，可后续补充" />
         </el-form-item>
         <el-form-item label="名称" required>
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" placeholder="必填" />
         </el-form-item>
         <el-form-item label="图片">
           <el-input v-model="form.image_text" placeholder="粘贴图片URL或点击本地上传" />
@@ -404,8 +406,8 @@ function onImageFileChange(e: Event) {
 }
 
 async function save() {
-  if (!form.sku.trim() || !form.name.trim()) {
-    ElMessage.warning('请填写 SKU 和名称')
+  if (!form.name.trim()) {
+    ElMessage.warning('请填写名称')
     return
   }
   saving.value = true
@@ -414,19 +416,21 @@ async function save() {
     let imageText = form.image_text.trim()
     if (imageText.startsWith('data:image/')) {
       try {
-        const up = await api.post('/products/upload-image', { base64: imageText, sku: form.sku })
+        const up = await api.post('/products/upload-image', { base64: imageText, sku: form.sku || 'img' })
         imageText = up.data?.url || imageText
       } catch {
         // 上传失败则保留原值，由后端 schema 长度校验兜底提示
       }
     }
+    const payload: Record<string, unknown> = { ...form, image_text: imageText }
+    // SKU 未填时以 null 入库（数据库已允许空 SKU），避免空字符串歧义
+    if (!payload.sku) payload.sku = null
     if (editing.value) {
-      const payload: Record<string, unknown> = { ...form, image_text: imageText }
       await api.patch(`/products/${editing.value.id}`, payload)
       addLog('success', '编辑商品', form.name)
       ElMessage.success('修改成功')
     } else {
-      await api.post('/products', { ...form, image_text: imageText })
+      await api.post('/products', payload)
       addLog('success', '新增商品', form.name)
       ElMessage.success('创建成功')
     }

@@ -25,7 +25,7 @@ export interface Permission extends BaseEntity {
 }
 
 export interface Product extends BaseEntity {
-  sku: string
+  sku: string | null
   name: string
   barcode: string | null
   category: string | null
