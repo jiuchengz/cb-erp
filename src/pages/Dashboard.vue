@@ -89,7 +89,16 @@ async function load() {
     const { data } = await api.get('/dashboard/stats')
     stats.value = data.data ?? stats.value
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '加载统计失败')
+    // 首次失败自动重试一次（应对后端偶发瞬时错误，如 Supabase 查询抖动误报 403）
+    try {
+      await new Promise((r) => setTimeout(r, 1500))
+      const { data: retryData } = await api.get('/dashboard/stats')
+      stats.value = retryData.data ?? stats.value
+      return
+    } catch (e2: any) {
+      ElMessage.error(e2?.response?.data?.error?.message || '加载统计失败')
+      return
+    }
   } finally {
     loading.value = false
   }

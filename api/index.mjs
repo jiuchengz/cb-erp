@@ -21619,18 +21619,22 @@ async function requireAuth(req) {
   const userId = authData.user.id;
   const { data: profile } = await supabase.from("profiles").select("id, email, display_name").eq("id", userId).maybeSingle();
   const roles = [];
-  const { data: userRoles } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
   const roleIds = (userRoles || []).map((r) => r.role_id);
   if (roleIds.length) {
-    const { data: roleData } = await supabase.from("roles").select("name").in("id", roleIds);
+    const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
+    if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
   }
   const permissions = /* @__PURE__ */ new Set();
   if (roleIds.length) {
-    const { data: rpData } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
     const permIds = (rpData || []).map((r) => r.permission_id);
     if (permIds.length) {
-      const { data: permData } = await supabase.from("permissions").select("code").in("id", permIds);
+      const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
+      if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
       for (const p of permData || []) if (p.code) permissions.add(p.code);
     }
   }
@@ -25821,15 +25825,19 @@ async function verifyTurnstile(token, ip) {
 async function loadUserAccess(supabase, userId) {
   const roles = [];
   const permissionsSet = /* @__PURE__ */ new Set();
-  const { data: userRoles } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
   const roleIds = (userRoles || []).map((r) => r.role_id);
   if (roleIds.length) {
-    const { data: roleData } = await supabase.from("roles").select("name").in("id", roleIds);
+    const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
+    if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
-    const { data: rpData } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
     const permIds = (rpData || []).map((r) => r.permission_id);
     if (permIds.length) {
-      const { data: permData } = await supabase.from("permissions").select("code").in("id", permIds);
+      const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
+      if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
     }
   }

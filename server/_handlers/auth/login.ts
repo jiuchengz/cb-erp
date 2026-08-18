@@ -52,18 +52,23 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 async function loadUserAccess(supabase: any, userId: string): Promise<{ roles: string[]; permissions: string[] }> {
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
-  const { data: userRoles } = await supabase.from('user_roles').select('role_id').eq('user_id', userId);
+  // 查询失败必须显性报错，禁止静默当成"无角色"（否则登录响应权限为空）
+  const { data: userRoles, error: userRolesErr } = await supabase.from('user_roles').select('role_id').eq('user_id', userId);
+  if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
   const roleIds = (userRoles || []).map((r: any) => r.role_id);
   if (roleIds.length) {
-    const { data: roleData } = await supabase.from('roles').select('name').in('id', roleIds);
+    const { data: roleData, error: roleErr } = await supabase.from('roles').select('name').in('id', roleIds);
+    if (roleErr) throw new Error('加载角色定义失败: ' + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
-    const { data: rpData } = await supabase
+    const { data: rpData, error: rpErr } = await supabase
       .from('role_permissions')
       .select('permission_id')
       .in('role_id', roleIds);
+    if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
     const permIds = (rpData || []).map((r: any) => r.permission_id);
     if (permIds.length) {
-      const { data: permData } = await supabase.from('permissions').select('code').in('id', permIds);
+      const { data: permData, error: permErr } = await supabase.from('permissions').select('code').in('id', permIds);
+      if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
     }
   }
