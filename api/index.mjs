@@ -26146,7 +26146,9 @@ async function handler10(req, res) {
 var createSchema3 = external_exports.object({
   product_code: external_exports.string().min(1).max(64),
   quantity: external_exports.coerce.number().positive(),
-  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  warehouse_id: external_exports.string().uuid().optional(),
+  remark: external_exports.string().max(500).optional()
 });
 function todayStr(d = /* @__PURE__ */ new Date()) {
   const y = d.getFullYear();
@@ -26184,16 +26186,27 @@ async function handler11(req, res) {
       const { data: product, error: prodErr } = await supabase.from("products").select("id, sku, code, name").eq("code", body.product_code.trim()).limit(1).maybeSingle();
       if (prodErr) throw prodErr;
       if (!product) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u4E0D\u5B58\u5728\uFF1A${body.product_code.trim()}`);
-      const { data: warehouse, error: whErr } = await supabase.from("warehouses").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
-      if (whErr) throw whErr;
-      if (!warehouse) throw Errors.conflict("\u6682\u65E0\u4ED3\u5E93\uFF0C\u8BF7\u5148\u521B\u5EFA\u4ED3\u5E93");
+      let warehouseId;
+      if (body.warehouse_id) {
+        const { data: wh, error: whErr } = await supabase.from("warehouses").select("id, wh_type").eq("id", body.warehouse_id).maybeSingle();
+        if (whErr) throw whErr;
+        if (!wh) throw Errors.conflict("\u4ED3\u5E93\u4E0D\u5B58\u5728");
+        if (wh.wh_type !== "domestic") throw Errors.conflict("\u62FF\u8D27\u53EA\u80FD\u9009\u62E9\u56FD\u5185\u4ED3\u5E93\u5165\u5E93");
+        warehouseId = wh.id;
+      } else {
+        const { data: warehouse, error: whErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (whErr) throw whErr;
+        if (!warehouse) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u8BF7\u5148\u521B\u5EFA\u56FD\u5185\u4ED3\u5E93");
+        warehouseId = warehouse.id;
+      }
       const receiveDate = body.receive_date || todayStr();
       const orderNo = genOrderNo();
       const { data: order, error: orderErr } = await supabase.from("purchase_orders").insert({
         order_no: orderNo,
         supplier: null,
-        warehouse_id: warehouse.id,
+        warehouse_id: warehouseId,
         receive_date: receiveDate,
+        remark: body.remark || null,
         status: "ARRIVED",
         total_amount: 0,
         created_by: ctx.userId
@@ -26204,8 +26217,9 @@ async function handler11(req, res) {
           const { data: retryOrder, error: retryErr } = await supabase.from("purchase_orders").insert({
             order_no: retryNo,
             supplier: null,
-            warehouse_id: warehouse.id,
+            warehouse_id: warehouseId,
             receive_date: receiveDate,
+            remark: body.remark || null,
             status: "ARRIVED",
             total_amount: 0,
             created_by: ctx.userId
@@ -26616,7 +26630,8 @@ async function handler17(req, res) {
 var createSchema9 = external_exports.object({
   code: external_exports.string().min(1).max(32),
   name: external_exports.string().min(1).max(100),
-  address: external_exports.string().max(300).nullable().optional()
+  address: external_exports.string().max(300).nullable().optional(),
+  wh_type: external_exports.enum(["domestic", "overseas"]).optional().default("domestic")
 });
 async function handler18(req, res) {
   try {
@@ -27064,8 +27079,11 @@ var PURCHASE_FLOW = {
 };
 var updateSchema4 = external_exports.object({
   status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED", "ARRIVED"]).optional(),
-  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
-}).refine((v) => v.status !== void 0 || v.receive_date !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
+  receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  remark: external_exports.string().max(500).nullable().optional()
+}).refine((v) => v.status !== void 0 || v.receive_date !== void 0 || v.remark !== void 0, {
+  message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
+});
 async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -27091,6 +27109,7 @@ async function handler27(req, res) {
       requirePermission(ctx, "procurement.write");
       const updatePayload = {};
       if (body.receive_date !== void 0) updatePayload.receive_date = body.receive_date;
+      if (body.remark !== void 0) updatePayload.remark = body.remark;
       const items = before.purchase_order_items || [];
       const isStatusUpdate = body.status !== void 0;
       const allowed = PURCHASE_FLOW[before.status] || [];
@@ -27577,7 +27596,8 @@ var updateSchema10 = external_exports.object({
   code: external_exports.string().min(1).max(32).optional(),
   name: external_exports.string().min(1).max(100).optional(),
   address: external_exports.string().max(300).nullable().optional(),
-  is_active: external_exports.boolean().optional()
+  is_active: external_exports.boolean().optional(),
+  wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
 async function handler33(req, res) {
   try {
