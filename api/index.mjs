@@ -21602,6 +21602,10 @@ var Errors = {
 };
 
 // server/_handlers/_lib/auth.ts
+function extractUrlRef(u) {
+  const m = u.match(/^https?:\/\/([a-z0-9]+)\.supabase\.co\/?$/i);
+  return m ? m[1] : `unexpected:${u.slice(0, 60)}`;
+}
 function decodeJwtRole(token) {
   if (!token) return "missing";
   const head2 = token.slice(0, 40);
@@ -21692,7 +21696,10 @@ async function requireAuth(req) {
     roles,
     permissions: Array.from(permissions),
     diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || ""),
-    diagEnvUrl: process.env.SUPABASE_URL || "missing"
+    diagEnvUrlMatch: (() => {
+      const ref = extractUrlRef(process.env.SUPABASE_URL || "");
+      return ref === "lytbkusovltcgwmsikgp" ? "OK" : `WRONG(ref=${ref})`;
+    })()
   };
 }
 
@@ -25953,7 +25960,7 @@ function requireAnyPermission(ctx, permissions) {
   if (ctx.roles.includes("super_admin")) return;
   if (!permissions.some((p) => ctx.permissions.includes(p))) {
     throw Errors.forbidden(
-      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF0Cenv-key-role:${ctx.diagEnvKeyRole}\uFF0Cenv-url:${ctx.diagEnvUrl}\uFF09`
+      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF0Cenv-key-role:${ctx.diagEnvKeyRole}\uFF0Cenv-url:${ctx.diagEnvUrlMatch}\uFF09`
     );
   }
 }

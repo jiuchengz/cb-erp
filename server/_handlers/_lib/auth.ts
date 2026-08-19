@@ -9,7 +9,13 @@ export interface AuthContext {
   roles: string[];
   permissions: string[];
   diagEnvKeyRole: string;
-  diagEnvUrl: string;
+  diagEnvUrlMatch: string;
+}
+
+// 提取 Supabase URL 中的项目 ref，用于诊断 SUPABASE_URL 是否指向正确项目
+function extractUrlRef(u: string): string {
+  const m = u.match(/^https?:\/\/([a-z0-9]+)\.supabase\.co\/?$/i);
+  return m ? m[1] : `unexpected:${u.slice(0, 60)}`;
 }
 
 // 解码 JWT 的 role 字段，用于诊断线上函数实际读到的 service key 身份（仅截取前 40 字符，不泄露完整 key）
@@ -155,6 +161,9 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     roles,
     permissions: Array.from(permissions),
     diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || ''),
-    diagEnvUrl: process.env.SUPABASE_URL || 'missing',
+    diagEnvUrlMatch: (() => {
+      const ref = extractUrlRef(process.env.SUPABASE_URL || '');
+      return ref === 'lytbkusovltcgwmsikgp' ? 'OK' : `WRONG(ref=${ref})`;
+    })(),
   };
 }
