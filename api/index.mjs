@@ -21638,9 +21638,9 @@ async function loadUserAccessOnce(supabase, userId) {
   let rpRows = 0;
   let permCodes = [];
   console.log("[DIAG] loadUserAccessOnce userId=", userId);
-  const { count: urAll, error: urAllErr } = await supabase.from("user_roles").select("*", { count: "exact", head: true });
-  console.log("[DIAG] user_roles total count=", urAll, "error=", urAllErr ? urAllErr.message : "null");
-  if (urAllErr) throw new Error("\u7EDF\u8BA1\u7528\u6237\u89D2\u8272\u8868\u5931\u8D25: " + urAllErr.message);
+  const { data: urAllRows, error: urAllErr } = await supabase.from("user_roles").select("user_id, role_id");
+  console.log("[DIAG] user_roles all rows=", JSON.stringify(urAllRows), "error=", urAllErr ? urAllErr.message : "null");
+  if (urAllErr) throw new Error("\u8BFB\u53D6\u7528\u6237\u89D2\u8272\u8868\u5931\u8D25: " + urAllErr.message);
   const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
   console.log("[DIAG] user_roles query done rows=", (userRoles || []).length, "error=", userRolesErr ? userRolesErr.message : "null");
   if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
@@ -21668,7 +21668,7 @@ async function loadUserAccessOnce(supabase, userId) {
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    diag: `uid=${userId};urAll=${urAll};ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`
+    diag: `uid=${userId};urAll=${JSON.stringify(urAllRows || [])};ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`
   };
 }
 async function loadUserAccess(supabase, userId) {
