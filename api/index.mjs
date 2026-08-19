@@ -21619,8 +21619,20 @@ async function requireAuth(req) {
   const userId = authData.user.id;
   const { data: profile } = await supabase.from("profiles").select("id, email, display_name").eq("id", userId).maybeSingle();
   const roles = [];
-  const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  let { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
   if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
+  if (!userRoles || userRoles.length === 0) {
+    const retryDelays = [500, 1500, 3e3];
+    for (const delay of retryDelays) {
+      await new Promise((r) => setTimeout(r, delay));
+      const retry = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+      if (retry.error) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + retry.error.message);
+      if (retry.data && retry.data.length > 0) {
+        userRoles = retry.data;
+        break;
+      }
+    }
+  }
   const roleIds = (userRoles || []).map((r) => r.role_id);
   if (roleIds.length) {
     const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
@@ -25825,8 +25837,20 @@ async function verifyTurnstile(token, ip) {
 async function loadUserAccess(supabase, userId) {
   const roles = [];
   const permissionsSet = /* @__PURE__ */ new Set();
-  const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  let { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
   if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
+  if (!userRoles || userRoles.length === 0) {
+    const retryDelays = [500, 1500, 3e3];
+    for (const delay of retryDelays) {
+      await new Promise((r) => setTimeout(r, delay));
+      const retry = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+      if (retry.error) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + retry.error.message);
+      if (retry.data && retry.data.length > 0) {
+        userRoles = retry.data;
+        break;
+      }
+    }
+  }
   const roleIds = (userRoles || []).map((r) => r.role_id);
   if (roleIds.length) {
     const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
