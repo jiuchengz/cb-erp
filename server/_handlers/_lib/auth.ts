@@ -59,6 +59,8 @@ const CACHE_TTL_MS = 60 * 1000;
 async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAccess> {
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
+  let rpRows = 0;
+  let permCodes: string[] = [];
 
   console.log('[DIAG] loadUserAccessOnce userId=', userId);
   const { data: userRoles, error: userRolesErr } = await supabase
@@ -84,8 +86,9 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       .select('permission_id')
       .in('role_id', roleIds);
     if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
+    rpRows = (rpData || []).length;
     const permIds = (rpData || []).map((r: any) => r.permission_id);
-    console.log('[DIAG] role_permissions rows=', (rpData || []).length, 'permIds=', JSON.stringify(permIds));
+    console.log('[DIAG] role_permissions rows=', rpRows, 'permIds=', JSON.stringify(permIds));
     if (permIds.length) {
       const { data: permData, error: permErr } = await supabase
         .from('permissions')
@@ -93,7 +96,8 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
         .in('id', permIds);
       if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
-      console.log('[DIAG] permissions resolved=', JSON.stringify(Array.from(permissionsSet)));
+      permCodes = Array.from(permissionsSet);
+      console.log('[DIAG] permissions resolved=', JSON.stringify(permCodes));
     }
   }
 
@@ -101,7 +105,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${(rpData || []).length};perms=${JSON.stringify(Array.from(permissionsSet))}`,
+    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`,
   };
 }
 

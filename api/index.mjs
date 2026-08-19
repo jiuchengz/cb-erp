@@ -21631,6 +21631,8 @@ var CACHE_TTL_MS = 60 * 1e3;
 async function loadUserAccessOnce(supabase, userId) {
   const roles = [];
   const permissionsSet = /* @__PURE__ */ new Set();
+  let rpRows = 0;
+  let permCodes = [];
   console.log("[DIAG] loadUserAccessOnce userId=", userId);
   const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
   console.log("[DIAG] user_roles query done rows=", (userRoles || []).length, "error=", userRolesErr ? userRolesErr.message : "null");
@@ -21642,22 +21644,24 @@ async function loadUserAccessOnce(supabase, userId) {
     if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
     console.log("[DIAG] roles=", JSON.stringify(roles));
-    const { data: rpData2, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
     if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
-    const permIds = (rpData2 || []).map((r) => r.permission_id);
-    console.log("[DIAG] role_permissions rows=", (rpData2 || []).length, "permIds=", JSON.stringify(permIds));
+    rpRows = (rpData || []).length;
+    const permIds = (rpData || []).map((r) => r.permission_id);
+    console.log("[DIAG] role_permissions rows=", rpRows, "permIds=", JSON.stringify(permIds));
     if (permIds.length) {
       const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
       if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
-      console.log("[DIAG] permissions resolved=", JSON.stringify(Array.from(permissionsSet)));
+      permCodes = Array.from(permissionsSet);
+      console.log("[DIAG] permissions resolved=", JSON.stringify(permCodes));
     }
   }
   console.log("[DIAG] FINAL once roles=", JSON.stringify(roles), "permissions=", JSON.stringify(Array.from(permissionsSet)));
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${(rpData || []).length};perms=${JSON.stringify(Array.from(permissionsSet))}`
+    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`
   };
 }
 async function loadUserAccess(supabase, userId) {
