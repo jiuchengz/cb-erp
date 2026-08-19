@@ -34,13 +34,16 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
 
+  console.log('[DIAG] loadUserAccessOnce userId=', userId);
   const { data: userRoles, error: userRolesErr } = await supabase
     .from('user_roles')
     .select('role_id')
     .eq('user_id', userId);
+  console.log('[DIAG] user_roles query done rows=', (userRoles || []).length, 'error=', userRolesErr ? userRolesErr.message : 'null');
   if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
 
   const roleIds = (userRoles || []).map((r: any) => r.role_id);
+  console.log('[DIAG] roleIds=', JSON.stringify(roleIds));
   if (roleIds.length) {
     const { data: roleData, error: roleErr } = await supabase
       .from('roles')
@@ -48,6 +51,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       .in('id', roleIds);
     if (roleErr) throw new Error('加载角色定义失败: ' + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
+    console.log('[DIAG] roles=', JSON.stringify(roles));
 
     const { data: rpData, error: rpErr } = await supabase
       .from('role_permissions')
@@ -55,6 +59,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       .in('role_id', roleIds);
     if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
     const permIds = (rpData || []).map((r: any) => r.permission_id);
+    console.log('[DIAG] role_permissions rows=', (rpData || []).length, 'permIds=', JSON.stringify(permIds));
     if (permIds.length) {
       const { data: permData, error: permErr } = await supabase
         .from('permissions')
@@ -62,9 +67,11 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
         .in('id', permIds);
       if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
+      console.log('[DIAG] permissions resolved=', JSON.stringify(Array.from(permissionsSet)));
     }
   }
 
+  console.log('[DIAG] FINAL once roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(Array.from(permissionsSet)));
   return { roles, permissions: Array.from(permissionsSet) };
 }
 
@@ -121,6 +128,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
 
   // 加载角色与权限（带缓存 + 空结果抖动退避重试，见 loadUserAccess）
   const { roles, permissions } = await loadUserAccess(supabase, userId);
+  console.log('[DIAG] requireAuth email=', authData.user.email, 'userId=', userId, 'roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(permissions));
 
   return {
     userId,
