@@ -21602,6 +21602,17 @@ var Errors = {
 };
 
 // server/_handlers/_lib/auth.ts
+function decodeJwtRole(token) {
+  if (!token) return "missing";
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return "malformed";
+    const p = parts[1] + "=".repeat(-parts[1].length % 4);
+    return JSON.parse(Buffer.from(p, "base64").toString("utf8")).role || "no-role-field";
+  } catch {
+    return "parse-fail";
+  }
+}
 function extractToken(req) {
   const h = req.headers.authorization;
   if (!h) return null;
@@ -21676,7 +21687,8 @@ async function requireAuth(req) {
     email: authData.user.email || profile?.email || "",
     displayName: profile?.display_name || "",
     roles,
-    permissions: Array.from(permissions)
+    permissions: Array.from(permissions),
+    diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || "")
   };
 }
 
@@ -25937,7 +25949,7 @@ function requireAnyPermission(ctx, permissions) {
   if (ctx.roles.includes("super_admin")) return;
   if (!permissions.some((p) => ctx.permissions.includes(p))) {
     throw Errors.forbidden(
-      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF09`
+      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF0Cenv-key-role:${ctx.diagEnvKeyRole}\uFF09`
     );
   }
 }

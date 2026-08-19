@@ -8,6 +8,20 @@ export interface AuthContext {
   displayName: string;
   roles: string[];
   permissions: string[];
+  diagEnvKeyRole: string;
+}
+
+// 解码 JWT 的 role 字段，用于诊断线上函数实际读到的 service key 身份（不泄露完整 key）
+function decodeJwtRole(token: string): string {
+  if (!token) return 'missing';
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return 'malformed';
+    const p = parts[1] + '='.repeat(-parts[1].length % 4);
+    return JSON.parse(Buffer.from(p, 'base64').toString('utf8')).role || 'no-role-field';
+  } catch {
+    return 'parse-fail';
+  }
 }
 
 function extractToken(req: VercelRequest): string | null {
@@ -136,5 +150,6 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     displayName: (profile as any)?.display_name || '',
     roles,
     permissions: Array.from(permissions),
+    diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || ''),
   };
 }
