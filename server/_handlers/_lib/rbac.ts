@@ -14,6 +14,8 @@ export function requirePermission(ctx: AuthContext, permission: string) {
 export function requireAnyPermission(ctx: AuthContext, permissions: string[]) {
   if (ctx.roles.includes('super_admin')) return;
   if (!permissions.some((p) => ctx.permissions.includes(p))) {
-    throw Errors.forbidden(`无权限：${permissions.join(' 或 ')}`);
+    throw Errors.forbidden(
+      `无权限：${permissions.join(' 或 ')}（当前角色:${ctx.roles.join(',') || '空'}，权限:${ctx.permissions.join(',') || '空'}）`
+    );
   }
 }
