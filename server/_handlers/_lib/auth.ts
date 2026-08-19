@@ -38,12 +38,23 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     .maybeSingle();
 
   // 加载角色：查询失败必须显性报错，禁止静默当成"无角色"（否则会误报 403 无权限）
+  // 空结果抖动防护：Supabase 偶发在冷启动/连接建立初期返回空数组（非报错），
+  // 若直接当"无角色"会误报 403；此处空结果短暂重试一次。
   const roles: string[] = [];
-  const { data: userRoles, error: userRolesErr } = await supabase
+  let { data: userRoles, error: userRolesErr } = await supabase
     .from('user_roles')
     .select('role_id')
     .eq('user_id', userId);
   if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
+  if (!userRoles || userRoles.length === 0) {
+    await new Promise((r) => setTimeout(r, 800));
+    const retry = await supabase
+      .from('user_roles')
+      .select('role_id')
+      .eq('user_id', userId);
+    if (retry.error) throw new Error('加载用户角色失败: ' + retry.error.message);
+    userRoles = retry.data || [];
+  }
   const roleIds = (userRoles || []).map((r) => r.role_id);
   if (roleIds.length) {
     const { data: roleData, error: roleErr } = await supabase
