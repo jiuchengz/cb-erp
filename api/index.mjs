@@ -676,8 +676,8 @@ var require_FunctionsClient = __commonJS({
        * })
        * ```
        */
-      constructor(url2, { headers = {}, customFetch, region = types_1.FunctionRegion.Any } = {}) {
-        this.url = url2;
+      constructor(url, { headers = {}, customFetch, region = types_1.FunctionRegion.Any } = {}) {
+        this.url = url;
         this.headers = headers;
         this.region = region;
         this.fetch = (0, helper_1.resolveFetch)(customFetch);
@@ -836,10 +836,10 @@ var require_FunctionsClient = __commonJS({
             if (!region) {
               region = this.region;
             }
-            const url2 = new URL(`${this.url}/${functionName}`);
+            const url = new URL(`${this.url}/${functionName}`);
             if (region && region !== "any") {
               _headers["x-region"] = region;
-              url2.searchParams.set("forceFunctionRegion", region);
+              url.searchParams.set("forceFunctionRegion", region);
             }
             let body;
             const hasContentTypeHeader = !!headers && Object.keys(headers).some((key) => key.toLowerCase() === "content-type");
@@ -875,7 +875,7 @@ var require_FunctionsClient = __commonJS({
                 effectiveSignal = timeoutController.signal;
               }
             }
-            const response = yield this.fetch(url2.toString(), {
+            const response = yield this.fetch(url.toString(), {
               method: method || "POST",
               // headers priority is (high to low):
               // 1. invoke-level headers
@@ -2106,12 +2106,12 @@ var require_phoenix_cjs = __commonJS({
         }
         return queryStr.join("&");
       }
-      static appendParams(url2, params) {
+      static appendParams(url, params) {
         if (Object.keys(params).length === 0) {
-          return url2;
+          return url;
         }
-        let prefix = url2.match(/\?/) ? "&" : "?";
-        return `${url2}${prefix}${this.serialize(params)}`;
+        let prefix = url.match(/\?/) ? "&" : "?";
+        return `${url}${prefix}${this.serialize(params)}`;
       }
     };
     var arrayBufferToBase64 = (buffer) => {
@@ -4155,17 +4155,17 @@ var require_RealtimeChannel = __commonJS({
         if (this.socket.accessTokenValue) {
           headers["Authorization"] = `Bearer ${this.socket.accessTokenValue}`;
         }
-        const url2 = new URL(this.broadcastEndpointURL);
-        url2.pathname += `/${encodeURIComponent(this.subTopic)}/events/${encodeURIComponent(event)}`;
+        const url = new URL(this.broadcastEndpointURL);
+        url.pathname += `/${encodeURIComponent(this.subTopic)}/events/${encodeURIComponent(event)}`;
         if (this.private) {
-          url2.searchParams.set("private", "true");
+          url.searchParams.set("private", "true");
         }
         const options = {
           method: "POST",
           headers,
           body: isBinary ? payload : JSON.stringify(payload)
         };
-        const response = await this._fetchWithTimeout(url2.toString(), options, (_a = opts.timeout) !== null && _a !== void 0 ? _a : this.timeout);
+        const response = await this._fetchWithTimeout(url.toString(), options, (_a = opts.timeout) !== null && _a !== void 0 ? _a : this.timeout);
         if (response.status === 202) {
           return { success: true };
         }
@@ -4312,10 +4312,10 @@ var require_RealtimeChannel = __commonJS({
         this.channelAdapter.teardown();
       }
       /** @internal */
-      async _fetchWithTimeout(url2, options, timeout) {
+      async _fetchWithTimeout(url, options, timeout) {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
-        const response = await this.socket.fetch(url2, Object.assign(Object.assign({}, options), { signal: controller.signal }));
+        const response = await this.socket.fetch(url, Object.assign(Object.assign({}, options), { signal: controller.signal }));
         clearTimeout(id);
         return response;
       }
@@ -5175,10 +5175,10 @@ var require_RealtimeClient = __commonJS({
         }
       }
       /** @internal */
-      _workerObjectUrl(url2) {
+      _workerObjectUrl(url) {
         let result_url;
-        if (url2) {
-          result_url = url2;
+        if (url) {
+          result_url = url;
         } else {
           const blob = new Blob([WORKER_SCRIPT], { type: "application/javascript" });
           result_url = URL.createObjectURL(blob);
@@ -5759,17 +5759,17 @@ var require_helpers = __commonJS({
     exports.supportsLocalStorage = supportsLocalStorage;
     function parseParametersFromURL(href) {
       const result = {};
-      const url2 = new URL(href);
-      if (url2.hash && url2.hash[0] === "#") {
+      const url = new URL(href);
+      if (url.hash && url.hash[0] === "#") {
         try {
-          const hashSearchParams = new URLSearchParams(url2.hash.substring(1));
+          const hashSearchParams = new URLSearchParams(url.hash.substring(1));
           hashSearchParams.forEach((value, key) => {
             result[key] = value;
           });
         } catch (_e) {
         }
       }
-      url2.searchParams.forEach((value, key) => {
+      url.searchParams.forEach((value, key) => {
         result[key] = value;
       });
       return result;
@@ -6193,7 +6193,7 @@ var require_fetch = __commonJS({
       params.body = JSON.stringify(body);
       return Object.assign(Object.assign({}, params), parameters);
     };
-    async function _request(fetcher, method, url2, options) {
+    async function _request(fetcher, method, url, options) {
       var _a;
       const headers = Object.assign({}, options === null || options === void 0 ? void 0 : options.headers);
       if (!headers[constants_1.API_VERSION_HEADER_NAME]) {
@@ -6207,17 +6207,17 @@ var require_fetch = __commonJS({
         qs["redirect_to"] = options.redirectTo;
       }
       const queryString = Object.keys(qs).length ? "?" + new URLSearchParams(qs).toString() : "";
-      const data = await _handleRequest2(fetcher, method, url2 + queryString, {
+      const data = await _handleRequest2(fetcher, method, url + queryString, {
         headers,
         noResolveJson: options === null || options === void 0 ? void 0 : options.noResolveJson
       }, {}, options === null || options === void 0 ? void 0 : options.body);
       return (options === null || options === void 0 ? void 0 : options.xform) ? options === null || options === void 0 ? void 0 : options.xform(data) : { data: Object.assign({}, data), error: null };
     }
-    async function _handleRequest2(fetcher, method, url2, options, parameters, body) {
+    async function _handleRequest2(fetcher, method, url, options, parameters, body) {
       const requestParams = _getRequestParams2(method, options, parameters, body);
       let result;
       try {
-        result = await fetcher(url2, Object.assign({}, requestParams));
+        result = await fetcher(url, Object.assign({}, requestParams));
       } catch (e) {
         throw new errors_1.AuthRetryableFetchError(_getErrorMessage2(e), 0);
       }
@@ -6329,8 +6329,8 @@ var require_GoTrueAdminApi = __commonJS({
        * })
        * ```
        */
-      constructor({ url: url2 = "", headers = {}, fetch: fetch2, experimental }) {
-        this.url = url2;
+      constructor({ url = "", headers = {}, fetch: fetch2, experimental }) {
+        this.url = url;
         this.headers = headers;
         this.fetch = (0, helpers_1.resolveFetch)(fetch2);
         this.experimental = experimental !== null && experimental !== void 0 ? experimental : {};
@@ -9697,7 +9697,7 @@ var require_GoTrueClient = __commonJS({
               throw new Error(`@supabase/auth-js: No compatible Ethereum wallet interface on the window object (window.ethereum) detected. Make sure the user already has a wallet installed and connected for this app. Prefer passing the wallet interface object directly to signInWithWeb3({ chain: 'ethereum', wallet: resolvedUserWallet }) instead.`);
             }
           }
-          const url2 = new URL((_a = options === null || options === void 0 ? void 0 : options.url) !== null && _a !== void 0 ? _a : window.location.href);
+          const url = new URL((_a = options === null || options === void 0 ? void 0 : options.url) !== null && _a !== void 0 ? _a : window.location.href);
           const accounts = await resolvedWallet.request({
             method: "eth_requestAccounts"
           }).then((accs) => accs).catch(() => {
@@ -9715,10 +9715,10 @@ var require_GoTrueClient = __commonJS({
             chainId = (0, ethereum_1.fromHex)(chainIdHex);
           }
           const siweMessage = {
-            domain: url2.host,
+            domain: url.host,
             address,
             statement,
-            uri: url2.href,
+            uri: url.href,
             version: "1",
             chainId,
             nonce: (_c = options === null || options === void 0 ? void 0 : options.signInWithEthereum) === null || _c === void 0 ? void 0 : _c.nonce,
@@ -9788,13 +9788,13 @@ var require_GoTrueClient = __commonJS({
               throw new Error(`@supabase/auth-js: No compatible Solana wallet interface on the window object (window.solana) detected. Make sure the user already has a wallet installed and connected for this app. Prefer passing the wallet interface object directly to signInWithWeb3({ chain: 'solana', wallet: resolvedUserWallet }) instead.`);
             }
           }
-          const url2 = new URL((_a = options === null || options === void 0 ? void 0 : options.url) !== null && _a !== void 0 ? _a : window.location.href);
+          const url = new URL((_a = options === null || options === void 0 ? void 0 : options.url) !== null && _a !== void 0 ? _a : window.location.href);
           if ("signIn" in resolvedWallet && resolvedWallet.signIn) {
             const output = await resolvedWallet.signIn(Object.assign(Object.assign(Object.assign({ issuedAt: (/* @__PURE__ */ new Date()).toISOString() }, options === null || options === void 0 ? void 0 : options.signInWithSolana), {
               // non-overridable properties
               version: "1",
-              domain: url2.host,
-              uri: url2.href
+              domain: url.host,
+              uri: url.href
             }), statement ? { statement } : null));
             let outputToProcess;
             if (Array.isArray(output) && output[0] && typeof output[0] === "object") {
@@ -9815,11 +9815,11 @@ var require_GoTrueClient = __commonJS({
               throw new Error("@supabase/auth-js: Wallet does not have a compatible signMessage() and publicKey.toBase58() API");
             }
             message = [
-              `${url2.host} wants you to sign in with your Solana account:`,
+              `${url.host} wants you to sign in with your Solana account:`,
               resolvedWallet.publicKey.toBase58(),
               ...statement ? ["", statement, ""] : [""],
               "Version: 1",
-              `URI: ${url2.href}`,
+              `URI: ${url.href}`,
               `Issued At: ${(_c = (_b = options === null || options === void 0 ? void 0 : options.signInWithSolana) === null || _b === void 0 ? void 0 : _b.issuedAt) !== null && _c !== void 0 ? _c : (/* @__PURE__ */ new Date()).toISOString()}`,
               ...((_d = options === null || options === void 0 ? void 0 : options.signInWithSolana) === null || _d === void 0 ? void 0 : _d.notBefore) ? [`Not Before: ${options.signInWithSolana.notBefore}`] : [],
               ...((_f = options === null || options === void 0 ? void 0 : options.signInWithSolana) === null || _f === void 0 ? void 0 : _f.expirationTime) ? [`Expiration Time: ${options.signInWithSolana.expirationTime}`] : [],
@@ -11457,10 +11457,10 @@ var require_GoTrueClient = __commonJS({
             });
             if (error2)
               throw error2;
-            const url2 = new URL(window.location.href);
-            url2.searchParams.delete("code");
-            url2.searchParams.delete(constants_1.PKCE_FLOW_ID_PARAM);
-            window.history.replaceState(window.history.state, "", url2.toString());
+            const url = new URL(window.location.href);
+            url.searchParams.delete("code");
+            url.searchParams.delete(constants_1.PKCE_FLOW_ID_PARAM);
+            window.history.replaceState(window.history.state, "", url.toString());
             return {
               data: { session: data2.session, redirectType: (_a = data2.redirectType) !== null && _a !== void 0 ? _a : null },
               error: null
@@ -12029,14 +12029,14 @@ var require_GoTrueClient = __commonJS({
             const { data: data2, error: error2 } = result;
             if (error2)
               throw error2;
-            const { url: url2, flowId: urlFlowId } = await this._getUrlForProvider(`${this.url}/user/identities/authorize`, credentials.provider, {
+            const { url, flowId: urlFlowId } = await this._getUrlForProvider(`${this.url}/user/identities/authorize`, credentials.provider, {
               redirectTo: (_a2 = credentials.options) === null || _a2 === void 0 ? void 0 : _a2.redirectTo,
               scopes: (_b = credentials.options) === null || _b === void 0 ? void 0 : _b.scopes,
               queryParams: (_c = credentials.options) === null || _c === void 0 ? void 0 : _c.queryParams,
               skipBrowserRedirect: true
             });
             flowId = urlFlowId;
-            return await (0, fetch_1._request)(this.fetch, "GET", url2, {
+            return await (0, fetch_1._request)(this.fetch, "GET", url, {
               headers: this.headers,
               jwt: (_f = (_d = data2.session) === null || _d === void 0 ? void 0 : _d.access_token) !== null && _f !== void 0 ? _f : void 0
             });
@@ -12188,16 +12188,16 @@ var require_GoTrueClient = __commonJS({
         return isValidSession;
       }
       async _handleProviderSignIn(provider, options) {
-        const { url: url2, flowId } = await this._getUrlForProvider(`${this.url}/authorize`, provider, {
+        const { url, flowId } = await this._getUrlForProvider(`${this.url}/authorize`, provider, {
           redirectTo: options.redirectTo,
           scopes: options.scopes,
           queryParams: options.queryParams
         });
-        this._debug("#_handleProviderSignIn()", "provider", provider, "options", options, "url", url2);
+        this._debug("#_handleProviderSignIn()", "provider", provider, "options", options, "url", url);
         if ((0, helpers_1.isBrowser)() && !options.skipBrowserRedirect) {
-          window.location.assign(url2);
+          window.location.assign(url);
         }
-        return { data: { provider, url: url2, flowId }, error: null };
+        return { data: { provider, url, flowId }, error: null };
       }
       /**
        * Recovers the session from LocalStorage and refreshes the token
@@ -12744,7 +12744,7 @@ var require_GoTrueClient = __commonJS({
        * @param options.scopes A space-separated list of scopes granted to the OAuth application.
        * @param options.queryParams An object of key-value pairs containing query parameters granted to the OAuth application.
        */
-      async _getUrlForProvider(url2, provider, options) {
+      async _getUrlForProvider(url, provider, options) {
         let redirectTo = options === null || options === void 0 ? void 0 : options.redirectTo;
         let codeChallenge = null;
         let codeChallengeMethod = null;
@@ -12775,7 +12775,7 @@ var require_GoTrueClient = __commonJS({
         if (options === null || options === void 0 ? void 0 : options.skipBrowserRedirect) {
           urlParams.push(`skip_http_redirect=${options.skipBrowserRedirect}`);
         }
-        return { url: `${url2}?${urlParams.join("&")}`, flowId };
+        return { url: `${url}?${urlParams.join("&")}`, flowId };
       }
       /**
        * Appends the reserved flow id parameter to a redirect URL so the callback
@@ -15672,8 +15672,8 @@ var PostgrestQueryBuilder = class {
   * )
   * ```
   */
-  constructor(url2, { headers = {}, schema: schema2, fetch: fetch$1, urlLengthLimit = 8e3, retry }) {
-    this.url = url2;
+  constructor(url, { headers = {}, schema: schema2, fetch: fetch$1, urlLengthLimit = 8e3, retry }) {
+    this.url = url;
     this.headers = new Headers(headers);
     this.schema = schema2;
     this.fetch = fetch$1;
@@ -16504,12 +16504,12 @@ var PostgrestQueryBuilder = class {
       if (c === '"') quoted = !quoted;
       return c;
     }).join("");
-    const { url: url2, headers } = this.cloneRequestState();
-    url2.searchParams.set("select", cleanedColumns);
+    const { url, headers } = this.cloneRequestState();
+    url.searchParams.set("select", cleanedColumns);
     if (count) headers.append("Prefer", `count=${count}`);
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schema,
       fetch: this.fetch,
@@ -16640,19 +16640,19 @@ var PostgrestQueryBuilder = class {
   insert(values, { count, defaultToNull = true } = {}) {
     var _this$fetch;
     const method = "POST";
-    const { url: url2, headers } = this.cloneRequestState();
+    const { url, headers } = this.cloneRequestState();
     if (count) headers.append("Prefer", `count=${count}`);
     if (!defaultToNull) headers.append("Prefer", `missing=default`);
     if (Array.isArray(values)) {
       const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
       if (columns.length > 0) {
         const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
-        url2.searchParams.set("columns", uniqueColumns.join(","));
+        url.searchParams.set("columns", uniqueColumns.join(","));
       }
     }
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schema,
       body: values,
@@ -16881,21 +16881,21 @@ var PostgrestQueryBuilder = class {
   upsert(values, { onConflict, ignoreDuplicates = false, count, defaultToNull = true } = {}) {
     var _this$fetch2;
     const method = "POST";
-    const { url: url2, headers } = this.cloneRequestState();
+    const { url, headers } = this.cloneRequestState();
     headers.append("Prefer", `resolution=${ignoreDuplicates ? "ignore" : "merge"}-duplicates`);
-    if (onConflict !== void 0) url2.searchParams.set("on_conflict", onConflict);
+    if (onConflict !== void 0) url.searchParams.set("on_conflict", onConflict);
     if (count) headers.append("Prefer", `count=${count}`);
     if (!defaultToNull) headers.append("Prefer", "missing=default");
     if (Array.isArray(values)) {
       const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
       if (columns.length > 0) {
         const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
-        url2.searchParams.set("columns", uniqueColumns.join(","));
+        url.searchParams.set("columns", uniqueColumns.join(","));
       }
     }
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schema,
       body: values,
@@ -17055,11 +17055,11 @@ var PostgrestQueryBuilder = class {
   update(values, { count } = {}) {
     var _this$fetch3;
     const method = "PATCH";
-    const { url: url2, headers } = this.cloneRequestState();
+    const { url, headers } = this.cloneRequestState();
     if (count) headers.append("Prefer", `count=${count}`);
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schema,
       body: values,
@@ -17198,11 +17198,11 @@ var PostgrestQueryBuilder = class {
   delete({ count } = {}) {
     var _this$fetch4;
     const method = "DELETE";
-    const { url: url2, headers } = this.cloneRequestState();
+    const { url, headers } = this.cloneRequestState();
     if (count) headers.append("Prefer", `count=${count}`);
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schema,
       fetch: (_this$fetch4 = this.fetch) !== null && _this$fetch4 !== void 0 ? _this$fetch4 : fetch,
@@ -17251,8 +17251,8 @@ var PostgrestClient = class PostgrestClient2 {
   * })
   * ```
   */
-  constructor(url2, { headers = {}, schema: schema2, fetch: fetch$1, timeout, urlLengthLimit = 8e3, retry } = {}) {
-    this.url = url2;
+  constructor(url, { headers = {}, schema: schema2, fetch: fetch$1, timeout, urlLengthLimit = 8e3, retry } = {}) {
+    this.url = url;
     this.headers = new Headers(headers);
     this.schemaName = schema2;
     this.urlLengthLimit = urlLengthLimit;
@@ -17477,7 +17477,7 @@ var PostgrestClient = class PostgrestClient2 {
   rpc(fn, args = {}, { head: head2 = false, get: get2 = false, count } = {}) {
     var _this$fetch;
     let method;
-    const url2 = new URL(`${this.url}/rpc/${fn}`);
+    const url = new URL(`${this.url}/rpc/${fn}`);
     let body;
     const _isObject = (v) => v !== null && typeof v === "object" && (!Array.isArray(v) || v.some(_isObject));
     const _hasObjectArg = head2 && Object.values(args).some(_isObject);
@@ -17487,7 +17487,7 @@ var PostgrestClient = class PostgrestClient2 {
     } else if (head2 || get2) {
       method = head2 ? "HEAD" : "GET";
       Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
-        url2.searchParams.append(name, value);
+        url.searchParams.append(name, value);
       });
     } else {
       method = "POST";
@@ -17498,7 +17498,7 @@ var PostgrestClient = class PostgrestClient2 {
     else if (count) headers.set("Prefer", `count=${count}`);
     return new PostgrestFilterBuilder({
       method,
-      url: url2,
+      url,
       headers,
       schema: this.schemaName,
       body,
@@ -17543,15 +17543,15 @@ var IcebergError = class extends Error {
   }
 };
 function buildUrl(baseUrl, path, query) {
-  const url2 = new URL(path, baseUrl);
+  const url = new URL(path, baseUrl);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== void 0) {
-        url2.searchParams.set(key, value);
+        url.searchParams.set(key, value);
       }
     }
   }
-  return url2.toString();
+  return url.toString();
 }
 async function buildAuthHeaders(auth) {
   if (!auth || auth.type === "none") {
@@ -17578,9 +17578,9 @@ function createFetchClient(options) {
       body,
       headers
     }) {
-      const url2 = buildUrl(options.baseUrl, path, query);
+      const url = buildUrl(options.baseUrl, path, query);
       const authHeaders = await buildAuthHeaders(options.auth);
-      const res = await fetchFn(url2, {
+      const res = await fetchFn(url, {
         method,
         headers: {
           ...body ? { "Content-Type": "application/json" } : {},
@@ -18221,9 +18221,9 @@ var _getRequestParams = (method, options, parameters, body) => {
   if (options === null || options === void 0 ? void 0 : options.duplex) params.duplex = options.duplex;
   return _objectSpread22(_objectSpread22({}, params), parameters);
 };
-async function _handleRequest(fetcher, method, url2, options, parameters, body, namespace) {
+async function _handleRequest(fetcher, method, url, options, parameters, body, namespace) {
   return new Promise((resolve, reject) => {
-    fetcher(url2, _getRequestParams(method, options, parameters, body)).then((result) => {
+    fetcher(url, _getRequestParams(method, options, parameters, body)).then((result) => {
       if (!result.ok) throw result;
       if (options === null || options === void 0 ? void 0 : options.noResolveJson) return result;
       if (namespace === "vectors") {
@@ -18237,20 +18237,20 @@ async function _handleRequest(fetcher, method, url2, options, parameters, body, 
 }
 function createFetchApi(namespace = "storage") {
   return {
-    get: async (fetcher, url2, options, parameters) => {
-      return _handleRequest(fetcher, "GET", url2, options, parameters, void 0, namespace);
+    get: async (fetcher, url, options, parameters) => {
+      return _handleRequest(fetcher, "GET", url, options, parameters, void 0, namespace);
     },
-    post: async (fetcher, url2, body, options, parameters) => {
-      return _handleRequest(fetcher, "POST", url2, options, parameters, body, namespace);
+    post: async (fetcher, url, body, options, parameters) => {
+      return _handleRequest(fetcher, "POST", url, options, parameters, body, namespace);
     },
-    put: async (fetcher, url2, body, options, parameters) => {
-      return _handleRequest(fetcher, "PUT", url2, options, parameters, body, namespace);
+    put: async (fetcher, url, body, options, parameters) => {
+      return _handleRequest(fetcher, "PUT", url, options, parameters, body, namespace);
     },
-    head: async (fetcher, url2, options, parameters) => {
-      return _handleRequest(fetcher, "HEAD", url2, _objectSpread22(_objectSpread22({}, options), {}, { noResolveJson: true }), parameters, void 0, namespace);
+    head: async (fetcher, url, options, parameters) => {
+      return _handleRequest(fetcher, "HEAD", url, _objectSpread22(_objectSpread22({}, options), {}, { noResolveJson: true }), parameters, void 0, namespace);
     },
-    remove: async (fetcher, url2, body, options, parameters) => {
-      return _handleRequest(fetcher, "DELETE", url2, options, parameters, body, namespace);
+    remove: async (fetcher, url, body, options, parameters) => {
+      return _handleRequest(fetcher, "DELETE", url, options, parameters, body, namespace);
     }
   };
 }
@@ -18265,9 +18265,9 @@ var BaseApiClient = class {
   * @param fetch - Optional custom fetch implementation
   * @param namespace - Error namespace ('storage' or 'vectors')
   */
-  constructor(url2, headers = {}, fetch$1, namespace = "storage") {
+  constructor(url, headers = {}, fetch$1, namespace = "storage") {
     this.shouldThrowOnError = false;
-    this.url = url2;
+    this.url = url;
     this.headers = normalizeHeaders(headers);
     this.fetch = resolveFetch(fetch$1);
     this.namespace = namespace;
@@ -18431,8 +18431,8 @@ var DEFAULT_FILE_OPTIONS = {
   upsert: false
 };
 var StorageFileApi = class extends BaseApiClient {
-  constructor(url2, headers = {}, bucketId, fetch$1) {
-    super(url2, headers, fetch$1, "storage");
+  constructor(url, headers = {}, bucketId, fetch$1) {
+    super(url, headers, fetch$1, "storage");
     this.bucketId = bucketId;
   }
   /**
@@ -18588,8 +18588,8 @@ var StorageFileApi = class extends BaseApiClient {
     var _this3 = this;
     const cleanPath = _this3._removeEmptyFolders(path);
     const _path = _this3._getFinalPath(cleanPath);
-    const url2 = new URL(_this3.url + `/object/upload/sign/${_path}`);
-    url2.searchParams.set("token", token);
+    const url = new URL(_this3.url + `/object/upload/sign/${_path}`);
+    url.searchParams.set("token", token);
     return _this3.handleOperation(async () => {
       let body;
       const options = _objectSpread22(_objectSpread22({}, DEFAULT_FILE_OPTIONS), fileOptions);
@@ -18614,7 +18614,7 @@ var StorageFileApi = class extends BaseApiClient {
       if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) for (const [key, value] of Object.entries(fileOptions.headers)) headers = setHeader(headers, key, value);
       return {
         path: cleanPath,
-        fullPath: (await put(_this3.fetch, url2.toString(), body, _objectSpread22({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}))).Key
+        fullPath: (await put(_this3.fetch, url.toString(), body, _objectSpread22({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}))).Key
       };
     });
   }
@@ -18662,11 +18662,11 @@ var StorageFileApi = class extends BaseApiClient {
       const headers = _objectSpread22({}, _this4.headers);
       if (options === null || options === void 0 ? void 0 : options.upsert) headers["x-upsert"] = "true";
       const data = await post(_this4.fetch, `${_this4.url}/object/upload/sign/${_path}`, {}, { headers });
-      const url2 = new URL(_this4.url + data.url);
-      const token = url2.searchParams.get("token");
+      const url = new URL(_this4.url + data.url);
+      const token = url.searchParams.get("token");
       if (!token) throw new StorageError("No token returned by API");
       return {
-        signedUrl: url2.toString(),
+        signedUrl: url.toString(),
         path,
         token
       };
@@ -19440,8 +19440,8 @@ var StorageFileApi = class extends BaseApiClient {
 var version = "2.112.3";
 var DEFAULT_HEADERS = { "X-Client-Info": `storage-js/${version}` };
 var StorageBucketApi = class extends BaseApiClient {
-  constructor(url2, headers = {}, fetch$1, opts) {
-    const baseUrl = new URL(url2);
+  constructor(url, headers = {}, fetch$1, opts) {
+    const baseUrl = new URL(url);
     if (opts === null || opts === void 0 ? void 0 : opts.useNewHostname) {
       if (/supabase\.(co|in|red)$/.test(baseUrl.hostname) && !baseUrl.hostname.includes("storage.supabase.")) baseUrl.hostname = baseUrl.hostname.replace("supabase.", "storage.supabase.");
     }
@@ -19813,8 +19813,8 @@ var StorageAnalyticsClient = class extends BaseApiClient {
   * const client = new StorageAnalyticsClient(url, headers)
   * ```
   */
-  constructor(url2, headers = {}, fetch$1) {
-    const finalUrl = url2.replace(/\/$/, "");
+  constructor(url, headers = {}, fetch$1) {
+    const finalUrl = url.replace(/\/$/, "");
     const finalHeaders = _objectSpread22(_objectSpread22({}, DEFAULT_HEADERS), headers);
     super(finalUrl, finalHeaders, fetch$1, "storage");
   }
@@ -19924,8 +19924,8 @@ var StorageAnalyticsClient = class extends BaseApiClient {
       if (options === null || options === void 0 ? void 0 : options.sortOrder) queryParams.set("sortOrder", options.sortOrder);
       if (options === null || options === void 0 ? void 0 : options.search) queryParams.set("search", options.search);
       const queryString = queryParams.toString();
-      const url2 = queryString ? `${_this2.url}/bucket?${queryString}` : `${_this2.url}/bucket`;
-      return await get(_this2.fetch, url2, { headers: _this2.headers });
+      const url = queryString ? `${_this2.url}/bucket?${queryString}` : `${_this2.url}/bucket`;
+      return await get(_this2.fetch, url, { headers: _this2.headers });
     });
   }
   /**
@@ -20128,8 +20128,8 @@ var StorageAnalyticsClient = class extends BaseApiClient {
 };
 var VectorIndexApi = class extends BaseApiClient {
   /** Creates a new VectorIndexApi instance */
-  constructor(url2, headers = {}, fetch$1) {
-    const finalUrl = url2.replace(/\/$/, "");
+  constructor(url, headers = {}, fetch$1) {
+    const finalUrl = url.replace(/\/$/, "");
     const finalHeaders = _objectSpread22(_objectSpread22({}, DEFAULT_HEADERS), {}, { "Content-Type": "application/json" }, headers);
     super(finalUrl, finalHeaders, fetch$1, "vectors");
   }
@@ -20170,8 +20170,8 @@ var VectorIndexApi = class extends BaseApiClient {
 };
 var VectorDataApi = class extends BaseApiClient {
   /** Creates a new VectorDataApi instance */
-  constructor(url2, headers = {}, fetch$1) {
-    const finalUrl = url2.replace(/\/$/, "");
+  constructor(url, headers = {}, fetch$1) {
+    const finalUrl = url.replace(/\/$/, "");
     const finalHeaders = _objectSpread22(_objectSpread22({}, DEFAULT_HEADERS), {}, { "Content-Type": "application/json" }, headers);
     super(finalUrl, finalHeaders, fetch$1, "vectors");
   }
@@ -20221,8 +20221,8 @@ var VectorDataApi = class extends BaseApiClient {
 };
 var VectorBucketApi = class extends BaseApiClient {
   /** Creates a new VectorBucketApi instance */
-  constructor(url2, headers = {}, fetch$1) {
-    const finalUrl = url2.replace(/\/$/, "");
+  constructor(url, headers = {}, fetch$1) {
+    const finalUrl = url.replace(/\/$/, "");
     const finalHeaders = _objectSpread22(_objectSpread22({}, DEFAULT_HEADERS), {}, { "Content-Type": "application/json" }, headers);
     super(finalUrl, finalHeaders, fetch$1, "vectors");
   }
@@ -20284,8 +20284,8 @@ var StorageVectorsClient = class extends VectorBucketApi {
   * const client = new StorageVectorsClient(url, options)
   * ```
   */
-  constructor(url2, options = {}) {
-    super(url2, options.headers || {}, options.fetch);
+  constructor(url, options = {}) {
+    super(url, options.headers || {}, options.fetch);
   }
   /**
   *
@@ -20433,8 +20433,8 @@ var VectorBucketScope = class extends VectorIndexApi {
   * const bucket = supabase.storage.vectors.from('embeddings-prod')
   * ```
   */
-  constructor(url2, headers, vectorBucketName, fetch$1) {
-    super(url2, headers, fetch$1);
+  constructor(url, headers, vectorBucketName, fetch$1) {
+    super(url, headers, fetch$1);
     this.vectorBucketName = vectorBucketName;
   }
   /**
@@ -20594,8 +20594,8 @@ var VectorIndexScope = class extends VectorDataApi {
   * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
   * ```
   */
-  constructor(url2, headers, vectorBucketName, indexName, fetch$1) {
-    super(url2, headers, fetch$1);
+  constructor(url, headers, vectorBucketName, indexName, fetch$1) {
+    super(url, headers, fetch$1);
     this.vectorBucketName = vectorBucketName;
     this.indexName = indexName;
   }
@@ -20782,8 +20782,8 @@ var StorageClient = class extends StorageBucketApi {
   * const avatars = storage.from('avatars')
   * ```
   */
-  constructor(url2, headers = {}, fetch$1, opts) {
-    super(url2, headers, fetch$1, opts);
+  constructor(url, headers = {}, fetch$1, opts) {
+    super(url, headers, fetch$1, opts);
   }
   /**
   * Perform file operation in a bucket.
@@ -20892,20 +20892,20 @@ function parseTraceParent(traceparent) {
 }
 function shouldPropagateToTarget(targetUrl, targets) {
   if (!targetUrl || !targets || targets.length === 0) return false;
-  let url2;
-  if (targetUrl instanceof URL) url2 = targetUrl;
+  let url;
+  if (targetUrl instanceof URL) url = targetUrl;
   else try {
-    url2 = new URL(targetUrl);
+    url = new URL(targetUrl);
   } catch (error) {
     return false;
   }
   for (const target of targets) try {
     if (typeof target === "string") {
-      if (matchStringTarget(url2.hostname, target)) return true;
+      if (matchStringTarget(url.hostname, target)) return true;
     } else if (target instanceof RegExp) {
-      if (target.test(url2.hostname)) return true;
+      if (target.test(url.hostname)) return true;
     } else if (typeof target === "function") {
-      if (target(url2)) return true;
+      if (target(url)) return true;
     }
   } catch (error) {
     continue;
@@ -20925,8 +20925,8 @@ function matchStringTarget(hostname, target) {
 function getDefaultPropagationTargets(supabaseUrl) {
   const targets = [];
   try {
-    const url2 = new URL(supabaseUrl);
-    targets.push(url2.hostname);
+    const url = new URL(supabaseUrl);
+    targets.push(url.hostname);
   } catch (error) {
   }
   targets.push("*.supabase.co", "*.supabase.in");
@@ -21059,8 +21059,8 @@ function getTraceHeaders(input, targets, respectSampling) {
 function normalizeTracePropagation(value) {
   return typeof value === "boolean" ? { enabled: value } : value;
 }
-function ensureTrailingSlash(url2) {
-  return url2.endsWith("/") ? url2 : url2 + "/";
+function ensureTrailingSlash(url) {
+  return url.endsWith("/") ? url : url + "/";
 }
 function applySettingDefaults(options, defaults) {
   var _DEFAULT_GLOBAL_OPTIO, _globalOptions$header, _ref, _tracePropagationOpti, _ref2, _tracePropagationOpti2;
@@ -21559,17 +21559,21 @@ function shouldShowDeprecationWarning() {
 if (shouldShowDeprecationWarning()) console.warn("\u26A0\uFE0F  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715");
 
 // server/_handlers/_lib/db.ts
-var url = process.env.SUPABASE_URL;
-var serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 var client = null;
+var clientUrl = "";
+var clientKey = "";
 function getAdminClient() {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
-  if (!client) {
+  if (!client || clientUrl !== url || clientKey !== serviceKey) {
     client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
+    clientUrl = url;
+    clientKey = serviceKey;
   }
   return client;
 }
@@ -27971,8 +27975,8 @@ var routes = [
 ];
 async function handler35(req, res) {
   try {
-    const url2 = new URL(req.url || "/", "http://internal");
-    const path = url2.pathname.replace(/^\/api/, "") || "/";
+    const url = new URL(req.url || "/", "http://internal");
+    const path = url.pathname.replace(/^\/api/, "") || "/";
     for (const route of routes) {
       const m = path.match(route.pattern);
       if (m) {
