@@ -116,10 +116,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     clearLoginFails(emailNorm);
 
+    // 关键修复：signInWithPassword 成功后会向上述 client 内存写入用户 session，
+    // 若继续复用该 client 做权限查询，请求携带 authenticated 身份会被 RLS 过滤返回空（403 根因）。
+    // 必须强制重建一个干净的 service_role client 用于后续查询。
+    const adminClient = getAdminClient(true);
     const session = authData.session;
     const userId = authData.user?.id;
-    const { roles, permissions } = await loadUserAccess(supabase, userId);
-    const { data: profile } = await supabase
+    const { roles, permissions } = await loadUserAccess(adminClient, userId);
+    const { data: profile } = await adminClient
       .from('profiles')
       .select('display_name')
       .eq('id', userId)

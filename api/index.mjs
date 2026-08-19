@@ -21562,13 +21562,13 @@ if (shouldShowDeprecationWarning()) console.warn("\u26A0\uFE0F  Node.js 20 and b
 var client = null;
 var clientUrl = "";
 var clientKey = "";
-function getAdminClient() {
+function getAdminClient(forceNew = false) {
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
-  if (!client || clientUrl !== url || clientKey !== serviceKey) {
+  if (forceNew || !client || clientUrl !== url || clientKey !== serviceKey) {
     client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false }
     });
@@ -21695,7 +21695,7 @@ async function loadUserAccess(supabase, userId) {
 async function requireAuth(req) {
   const token = extractToken(req);
   if (!token) throw Errors.unauthorized("\u672A\u767B\u5F55\u6216\u7F3A\u5C11\u4EE4\u724C");
-  const supabase = getAdminClient();
+  const supabase = getAdminClient(true);
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData.user) {
     throw Errors.unauthorized("\u767B\u5F55\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
@@ -25946,10 +25946,11 @@ async function handler3(req, res) {
       throw authErr;
     }
     clearLoginFails(emailNorm);
+    const adminClient = getAdminClient(true);
     const session = authData.session;
     const userId = authData.user?.id;
-    const { roles, permissions } = await loadUserAccess(supabase, userId);
-    const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+    const { roles, permissions } = await loadUserAccess(adminClient, userId);
+    const { data: profile } = await adminClient.from("profiles").select("display_name").eq("id", userId).maybeSingle();
     return res.status(200).json({
       session,
       user: {

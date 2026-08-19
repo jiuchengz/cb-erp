@@ -156,7 +156,9 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
   const token = extractToken(req);
   if (!token) throw Errors.unauthorized('未登录或缺少令牌');
 
-  const supabase = getAdminClient();
+  // 强制重建干净 service_role client：登录 handler 的 signInWithPassword 会污染共享 client
+  // （写入用户 session），若复用会被 RLS 按 authenticated 身份过滤，导致权限查询全空 → 403。
+  const supabase = getAdminClient(true);
   const { data: authData, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !authData.user) {
     throw Errors.unauthorized('登录已失效，请重新登录');

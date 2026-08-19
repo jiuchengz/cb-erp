@@ -8,13 +8,15 @@ let clientKey = '';
 // 前端永远拿不到 service_role key。
 // 每次调用读取最新 env；env 变化时自动重建 client，
 // 避免 Vercel 实例保活导致模块级旧 env/旧 client 残留（曾导致线上用旧 URL 查询空数据）。
-export function getAdminClient(): SupabaseClient {
+// forceNew=true 时强制新建干净实例：signInWithPassword 会在 client 内存写入用户 session，
+// 导致后续查询携带 authenticated 身份被 RLS 过滤（403 根因），必须重建隔离。
+export function getAdminClient(forceNew = false): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   }
-  if (!client || clientUrl !== url || clientKey !== serviceKey) {
+  if (forceNew || !client || clientUrl !== url || clientKey !== serviceKey) {
     client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
