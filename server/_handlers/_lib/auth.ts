@@ -78,7 +78,7 @@ export async function loadUserAccess(supabase: any, userId: string): Promise<Use
     return { roles: cached.roles, permissions: cached.permissions };
   }
 
-  const retryDelays = [0, 500, 1500, 3000];
+  const retryDelays = [0, 1000, 3000, 6000];
   let last: UserAccess = { roles: [], permissions: [] };
   for (const delay of retryDelays) {
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
@@ -86,11 +86,16 @@ export async function loadUserAccess(supabase: any, userId: string): Promise<Use
     if (last.roles.length > 0 || last.permissions.length > 0) break;
   }
 
-  accessCache.set(userId, {
-    expireAt: Date.now() + CACHE_TTL_MS,
-    roles: last.roles,
-    permissions: last.permissions,
-  });
+  // 关键：只有拿到非空结果才写缓存。空结果绝不缓存——
+  // Vercel 多实例下某实例冷启动查库偶发返回空，若把空结果缓存 60s，
+  // 会把瞬时抖动放大成持续 403；不缓存则下一个请求会重新查库纠正。
+  if (last.roles.length > 0 || last.permissions.length > 0) {
+    accessCache.set(userId, {
+      expireAt: Date.now() + CACHE_TTL_MS,
+      roles: last.roles,
+      permissions: last.permissions,
+    });
+  }
   return last;
 }
 

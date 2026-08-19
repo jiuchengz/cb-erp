@@ -21636,18 +21636,20 @@ async function loadUserAccess(supabase, userId) {
   if (cached && cached.expireAt > Date.now()) {
     return { roles: cached.roles, permissions: cached.permissions };
   }
-  const retryDelays = [0, 500, 1500, 3e3];
+  const retryDelays = [0, 1e3, 3e3, 6e3];
   let last = { roles: [], permissions: [] };
   for (const delay of retryDelays) {
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     last = await loadUserAccessOnce(supabase, userId);
     if (last.roles.length > 0 || last.permissions.length > 0) break;
   }
-  accessCache.set(userId, {
-    expireAt: Date.now() + CACHE_TTL_MS,
-    roles: last.roles,
-    permissions: last.permissions
-  });
+  if (last.roles.length > 0 || last.permissions.length > 0) {
+    accessCache.set(userId, {
+      expireAt: Date.now() + CACHE_TTL_MS,
+      roles: last.roles,
+      permissions: last.permissions
+    });
+  }
   return last;
 }
 async function requireAuth(req) {
