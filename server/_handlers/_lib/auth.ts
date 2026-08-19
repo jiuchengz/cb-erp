@@ -63,6 +63,15 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   let permCodes: string[] = [];
 
   console.log('[DIAG] loadUserAccessOnce userId=', userId);
+
+  // 全表 count（不按 user_id 过滤）：区分"service_role 看不见该表"与"user_id 不匹配"。
+  // urAll>0 且 ur=0 → filter 条件不中（user_id 不匹配）；urAll=0 且 ur=0 → service_role 读不到表数据。
+  const { count: urAll, error: urAllErr } = await supabase
+    .from('user_roles')
+    .select('*', { count: 'exact', head: true });
+  console.log('[DIAG] user_roles total count=', urAll, 'error=', urAllErr ? urAllErr.message : 'null');
+  if (urAllErr) throw new Error('统计用户角色表失败: ' + urAllErr.message);
+
   const { data: userRoles, error: userRolesErr } = await supabase
     .from('user_roles')
     .select('role_id')
@@ -105,7 +114,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`,
+    diag: `uid=${userId};urAll=${urAll};ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`,
   };
 }
 
