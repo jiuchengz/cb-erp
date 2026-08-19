@@ -21642,10 +21642,10 @@ async function loadUserAccessOnce(supabase, userId) {
     if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
     console.log("[DIAG] roles=", JSON.stringify(roles));
-    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    const { data: rpData2, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
     if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
-    const permIds = (rpData || []).map((r) => r.permission_id);
-    console.log("[DIAG] role_permissions rows=", (rpData || []).length, "permIds=", JSON.stringify(permIds));
+    const permIds = (rpData2 || []).map((r) => r.permission_id);
+    console.log("[DIAG] role_permissions rows=", (rpData2 || []).length, "permIds=", JSON.stringify(permIds));
     if (permIds.length) {
       const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
       if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
@@ -21654,12 +21654,16 @@ async function loadUserAccessOnce(supabase, userId) {
     }
   }
   console.log("[DIAG] FINAL once roles=", JSON.stringify(roles), "permissions=", JSON.stringify(Array.from(permissionsSet)));
-  return { roles, permissions: Array.from(permissionsSet) };
+  return {
+    roles,
+    permissions: Array.from(permissionsSet),
+    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${(rpData || []).length};perms=${JSON.stringify(Array.from(permissionsSet))}`
+  };
 }
 async function loadUserAccess(supabase, userId) {
   const cached = accessCache.get(userId);
   if (cached && cached.expireAt > Date.now()) {
-    return { roles: cached.roles, permissions: cached.permissions };
+    return { roles: cached.roles, permissions: cached.permissions, diag: "cache-hit" };
   }
   const retryDelays = [0, 1e3, 3e3, 6e3];
   let last = { roles: [], permissions: [] };
@@ -21687,7 +21691,7 @@ async function requireAuth(req) {
   }
   const userId = authData.user.id;
   const { data: profile } = await supabase.from("profiles").select("id, email, display_name").eq("id", userId).maybeSingle();
-  const { roles, permissions } = await loadUserAccess(supabase, userId);
+  const { roles, permissions, diag } = await loadUserAccess(supabase, userId);
   console.log("[DIAG] requireAuth email=", authData.user.email, "userId=", userId, "roles=", JSON.stringify(roles), "permissions=", JSON.stringify(permissions));
   return {
     userId,
@@ -21699,7 +21703,8 @@ async function requireAuth(req) {
     diagEnvUrlMatch: (() => {
       const ref = extractUrlRef(process.env.SUPABASE_URL || "");
       return ref === "lytbkusovltcgwmsikgp" ? "OK" : `WRONG(ref=${ref})`;
-    })()
+    })(),
+    diagQuery: diag || ""
   };
 }
 
@@ -25960,7 +25965,7 @@ function requireAnyPermission(ctx, permissions) {
   if (ctx.roles.includes("super_admin")) return;
   if (!permissions.some((p) => ctx.permissions.includes(p))) {
     throw Errors.forbidden(
-      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF0Cenv-key-role:${ctx.diagEnvKeyRole}\uFF0Cenv-url:${ctx.diagEnvUrlMatch}\uFF09`
+      `\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}\uFF08\u5F53\u524D\u89D2\u8272:${ctx.roles.join(",") || "\u7A7A"}\uFF0C\u6743\u9650:${ctx.permissions.join(",") || "\u7A7A"}\uFF0Cenv-key-role:${ctx.diagEnvKeyRole}\uFF0Cenv-url:${ctx.diagEnvUrlMatch}\uFF0Cdb:${ctx.diagQuery}\uFF09`
     );
   }
 }

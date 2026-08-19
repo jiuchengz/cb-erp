@@ -10,6 +10,7 @@ export interface AuthContext {
   permissions: string[];
   diagEnvKeyRole: string;
   diagEnvUrlMatch: string;
+  diagQuery: string;
 }
 
 // 提取 Supabase URL 中的项目 ref，用于诊断 SUPABASE_URL 是否指向正确项目
@@ -44,6 +45,7 @@ function extractToken(req: VercelRequest): string | null {
 export interface UserAccess {
   roles: string[];
   permissions: string[];
+  diag?: string;
 }
 
 // 实例级权限缓存：60 秒 TTL。
@@ -96,7 +98,11 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   }
 
   console.log('[DIAG] FINAL once roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(Array.from(permissionsSet)));
-  return { roles, permissions: Array.from(permissionsSet) };
+  return {
+    roles,
+    permissions: Array.from(permissionsSet),
+    diag: `ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${(rpData || []).length};perms=${JSON.stringify(Array.from(permissionsSet))}`,
+  };
 }
 
 // 加载用户角色与权限（带缓存 + 空结果抖动退避重试）。
@@ -106,7 +112,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
 export async function loadUserAccess(supabase: any, userId: string): Promise<UserAccess> {
   const cached = accessCache.get(userId);
   if (cached && cached.expireAt > Date.now()) {
-    return { roles: cached.roles, permissions: cached.permissions };
+    return { roles: cached.roles, permissions: cached.permissions, diag: 'cache-hit' };
   }
 
   const retryDelays = [0, 1000, 3000, 6000];
@@ -151,7 +157,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     .maybeSingle();
 
   // 加载角色与权限（带缓存 + 空结果抖动退避重试，见 loadUserAccess）
-  const { roles, permissions } = await loadUserAccess(supabase, userId);
+  const { roles, permissions, diag } = await loadUserAccess(supabase, userId);
   console.log('[DIAG] requireAuth email=', authData.user.email, 'userId=', userId, 'roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(permissions));
 
   return {
@@ -165,5 +171,6 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
       const ref = extractUrlRef(process.env.SUPABASE_URL || '');
       return ref === 'lytbkusovltcgwmsikgp' ? 'OK' : `WRONG(ref=${ref})`;
     })(),
+    diagQuery: diag || '',
   };
 }
