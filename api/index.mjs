@@ -21604,13 +21604,16 @@ var Errors = {
 // server/_handlers/_lib/auth.ts
 function decodeJwtRole(token) {
   if (!token) return "missing";
+  const head2 = token.slice(0, 40);
   try {
     const parts = token.split(".");
-    if (parts.length !== 3) return "malformed";
-    const p = parts[1] + "=".repeat(-parts[1].length % 4);
-    return JSON.parse(Buffer.from(p, "base64").toString("utf8")).role || "no-role-field";
-  } catch {
-    return "parse-fail";
+    if (parts.length !== 3) return `malformed(len=${token.length},head=${head2})`;
+    let p = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (p.length % 4 !== 0) p += "=";
+    const json = JSON.parse(Buffer.from(p, "base64").toString("utf8"));
+    return json.role || `no-role-field(len=${token.length},head=${head2})`;
+  } catch (e) {
+    return `parse-fail(len=${token.length},head=${head2})`;
   }
 }
 function extractToken(req) {
