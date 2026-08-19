@@ -21608,6 +21608,48 @@ function extractToken(req) {
   const m = /^Bearer\s+(.+)$/i.exec(h);
   return m ? m[1] : null;
 }
+var accessCache = /* @__PURE__ */ new Map();
+var CACHE_TTL_MS = 60 * 1e3;
+async function loadUserAccessOnce(supabase, userId) {
+  const roles = [];
+  const permissionsSet = /* @__PURE__ */ new Set();
+  const { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
+  if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
+  const roleIds = (userRoles || []).map((r) => r.role_id);
+  if (roleIds.length) {
+    const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
+    if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
+    for (const r of roleData || []) if (r.name) roles.push(r.name);
+    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
+    if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
+    const permIds = (rpData || []).map((r) => r.permission_id);
+    if (permIds.length) {
+      const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
+      if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
+      for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
+    }
+  }
+  return { roles, permissions: Array.from(permissionsSet) };
+}
+async function loadUserAccess(supabase, userId) {
+  const cached = accessCache.get(userId);
+  if (cached && cached.expireAt > Date.now()) {
+    return { roles: cached.roles, permissions: cached.permissions };
+  }
+  const retryDelays = [0, 500, 1500, 3e3];
+  let last = { roles: [], permissions: [] };
+  for (const delay of retryDelays) {
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    last = await loadUserAccessOnce(supabase, userId);
+    if (last.roles.length > 0 || last.permissions.length > 0) break;
+  }
+  accessCache.set(userId, {
+    expireAt: Date.now() + CACHE_TTL_MS,
+    roles: last.roles,
+    permissions: last.permissions
+  });
+  return last;
+}
 async function requireAuth(req) {
   const token = extractToken(req);
   if (!token) throw Errors.unauthorized("\u672A\u767B\u5F55\u6216\u7F3A\u5C11\u4EE4\u724C");
@@ -21618,38 +21660,7 @@ async function requireAuth(req) {
   }
   const userId = authData.user.id;
   const { data: profile } = await supabase.from("profiles").select("id, email, display_name").eq("id", userId).maybeSingle();
-  const roles = [];
-  let { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
-  if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
-  if (!userRoles || userRoles.length === 0) {
-    const retryDelays = [500, 1500, 3e3];
-    for (const delay of retryDelays) {
-      await new Promise((r) => setTimeout(r, delay));
-      const retry = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
-      if (retry.error) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + retry.error.message);
-      if (retry.data && retry.data.length > 0) {
-        userRoles = retry.data;
-        break;
-      }
-    }
-  }
-  const roleIds = (userRoles || []).map((r) => r.role_id);
-  if (roleIds.length) {
-    const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
-    if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
-    for (const r of roleData || []) if (r.name) roles.push(r.name);
-  }
-  const permissions = /* @__PURE__ */ new Set();
-  if (roleIds.length) {
-    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
-    if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
-    const permIds = (rpData || []).map((r) => r.permission_id);
-    if (permIds.length) {
-      const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
-      if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
-      for (const p of permData || []) if (p.code) permissions.add(p.code);
-    }
-  }
+  const { roles, permissions } = await loadUserAccess(supabase, userId);
   return {
     userId,
     email: authData.user.email || profile?.email || "",
@@ -25833,39 +25844,6 @@ async function verifyTurnstile(token, ip) {
     console.error("Turnstile siteverify error", e);
     return false;
   }
-}
-async function loadUserAccess(supabase, userId) {
-  const roles = [];
-  const permissionsSet = /* @__PURE__ */ new Set();
-  let { data: userRoles, error: userRolesErr } = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
-  if (userRolesErr) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + userRolesErr.message);
-  if (!userRoles || userRoles.length === 0) {
-    const retryDelays = [500, 1500, 3e3];
-    for (const delay of retryDelays) {
-      await new Promise((r) => setTimeout(r, delay));
-      const retry = await supabase.from("user_roles").select("role_id").eq("user_id", userId);
-      if (retry.error) throw new Error("\u52A0\u8F7D\u7528\u6237\u89D2\u8272\u5931\u8D25: " + retry.error.message);
-      if (retry.data && retry.data.length > 0) {
-        userRoles = retry.data;
-        break;
-      }
-    }
-  }
-  const roleIds = (userRoles || []).map((r) => r.role_id);
-  if (roleIds.length) {
-    const { data: roleData, error: roleErr } = await supabase.from("roles").select("name").in("id", roleIds);
-    if (roleErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u5B9A\u4E49\u5931\u8D25: " + roleErr.message);
-    for (const r of roleData || []) if (r.name) roles.push(r.name);
-    const { data: rpData, error: rpErr } = await supabase.from("role_permissions").select("permission_id").in("role_id", roleIds);
-    if (rpErr) throw new Error("\u52A0\u8F7D\u89D2\u8272\u6743\u9650\u5931\u8D25: " + rpErr.message);
-    const permIds = (rpData || []).map((r) => r.permission_id);
-    if (permIds.length) {
-      const { data: permData, error: permErr } = await supabase.from("permissions").select("code").in("id", permIds);
-      if (permErr) throw new Error("\u52A0\u8F7D\u6743\u9650\u5B9A\u4E49\u5931\u8D25: " + permErr.message);
-      for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
-    }
-  }
-  return { roles, permissions: Array.from(permissionsSet) };
 }
 async function handler3(req, res) {
   try {

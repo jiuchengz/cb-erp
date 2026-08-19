@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getAdminClient } from '../_lib/db';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit, loginRateLimit } from '../_lib/rate-limit';
+import { loadUserAccess } from '../_lib/auth';
 import {
   getLockRemainMs,
   recordLoginFail,
@@ -47,47 +48,6 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
     console.error('Turnstile siteverify error', e);
     return false;
   }
-}
-
-async function loadUserAccess(supabase: any, userId: string): Promise<{ roles: string[]; permissions: string[] }> {
-  const roles: string[] = [];
-  const permissionsSet = new Set<string>();
-  // 查询失败必须显性报错，禁止静默当成"无角色"（否则登录响应权限为空）
-  // 空结果抖动防护：Supabase 偶发在冷启动/连接建立初期返回空数组（非报错），
-  // 若直接当"无角色"会导致登录后权限为空误报 403；此处空结果按退避间隔多次重试，
-  // 覆盖更长抖动窗口（累计约 5s），仍为空才判定"无角色"。
-  let { data: userRoles, error: userRolesErr } = await supabase.from('user_roles').select('role_id').eq('user_id', userId);
-  if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
-  if (!userRoles || userRoles.length === 0) {
-    const retryDelays = [500, 1500, 3000];
-    for (const delay of retryDelays) {
-      await new Promise((r) => setTimeout(r, delay));
-      const retry = await supabase.from('user_roles').select('role_id').eq('user_id', userId);
-      if (retry.error) throw new Error('加载用户角色失败: ' + retry.error.message);
-      if (retry.data && retry.data.length > 0) {
-        userRoles = retry.data;
-        break;
-      }
-    }
-  }
-  const roleIds = (userRoles || []).map((r: any) => r.role_id);
-  if (roleIds.length) {
-    const { data: roleData, error: roleErr } = await supabase.from('roles').select('name').in('id', roleIds);
-    if (roleErr) throw new Error('加载角色定义失败: ' + roleErr.message);
-    for (const r of roleData || []) if (r.name) roles.push(r.name);
-    const { data: rpData, error: rpErr } = await supabase
-      .from('role_permissions')
-      .select('permission_id')
-      .in('role_id', roleIds);
-    if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
-    const permIds = (rpData || []).map((r: any) => r.permission_id);
-    if (permIds.length) {
-      const { data: permData, error: permErr } = await supabase.from('permissions').select('code').in('id', permIds);
-      if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
-      for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
-    }
-  }
-  return { roles, permissions: Array.from(permissionsSet) };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
