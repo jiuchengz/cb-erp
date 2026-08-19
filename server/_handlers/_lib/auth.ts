@@ -9,6 +9,7 @@ export interface AuthContext {
   roles: string[];
   permissions: string[];
   diagEnvKeyRole: string;
+  diagEnvUrl: string;
 }
 
 // 解码 JWT 的 role 字段，用于诊断线上函数实际读到的 service key 身份（仅截取前 40 字符，不泄露完整 key）
@@ -154,5 +155,6 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     roles,
     permissions: Array.from(permissions),
     diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || ''),
+    diagEnvUrl: process.env.SUPABASE_URL || 'missing',
   };
 }
