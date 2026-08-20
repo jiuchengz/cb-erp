@@ -46,6 +46,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
 
+      // 校验类型存在于自定义字典
+      const { data: typeMeta } = await supabase.from('after_sale_types').select('value').eq('value', body.type).maybeSingle();
+      if (!typeMeta) throw Errors.badRequest(`未知售后类型：${body.type}`);
+
       const { data: order, error } = await supabase
         .from('after_sales')
         .insert({

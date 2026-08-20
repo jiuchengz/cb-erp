@@ -26007,6 +26007,8 @@ async function handler4(req, res) {
       requirePermission(ctx, "after_sales.write");
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+      const { data: typeMeta } = await supabase.from("after_sale_types").select("value").eq("value", body.type).maybeSingle();
+      if (!typeMeta) throw Errors.badRequest(`\u672A\u77E5\u552E\u540E\u7C7B\u578B\uFF1A${body.type}`);
       const { data: order, error } = await supabase.from("after_sales").insert({
         order_no: body.order_no,
         sales_order_id: body.sales_order_id || null,
@@ -27160,6 +27162,88 @@ async function handler24(req, res) {
   }
 }
 
+// server/_handlers/after-sale-types.ts
+var createSchema12 = external_exports.object({
+  value: external_exports.string().min(1).max(50).regex(/^[a-zA-Z0-9_]+$/, "\u7C7B\u578B\u6807\u8BC6\u4EC5\u652F\u6301\u82F1\u6587/\u6570\u5B57/\u4E0B\u5212\u7EBF"),
+  name: external_exports.string().min(1).max(50),
+  need_stock_in: external_exports.boolean().default(false),
+  sort_order: external_exports.number().int().default(0)
+});
+async function handler25(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    const supabase = getAdminClient();
+    if (req.method === "GET") {
+      requirePermission(ctx, "after_sales.read");
+      const { data, error } = await supabase.from("after_sale_types").select("*").order("sort_order", { ascending: true });
+      if (error) throw error;
+      return res.status(200).json({ data: data || [] });
+    }
+    if (req.method === "POST") {
+      requirePermission(ctx, "after_sales.write");
+      const body = parse(createSchema12, req.body || {});
+      const { data, error } = await supabase.from("after_sale_types").insert({ value: body.value, name: body.name, need_stock_in: body.need_stock_in, sort_order: body.sort_order }).select().single();
+      if (error) {
+        if (error.code === "23505") throw Errors.conflict(`\u552E\u540E\u7C7B\u578B\u6807\u8BC6\u5DF2\u5B58\u5728\uFF1A${body.value}`);
+        throw error;
+      }
+      await writeAudit(ctx, req, "create", "after_sale_type", data.id, null, { value: data.value, name: data.name });
+      return res.status(201).json({ data });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/after-sale-types/[id].ts
+var updateSchema3 = external_exports.object({
+  name: external_exports.string().min(1).max(50).optional(),
+  need_stock_in: external_exports.boolean().optional(),
+  sort_order: external_exports.number().int().optional()
+});
+async function handler26(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    const id = parse(uuidSchema, req.query.id);
+    const supabase = getAdminClient();
+    if (req.method === "PATCH") {
+      requirePermission(ctx, "after_sales.write");
+      const body = parse(updateSchema3, req.body || {});
+      if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
+      const { data: before } = await supabase.from("after_sale_types").select("*").eq("id", id).single();
+      if (!before) throw Errors.notFound("\u552E\u540E\u7C7B\u578B\u4E0D\u5B58\u5728");
+      const { data, error } = await supabase.from("after_sale_types").update(body).eq("id", id).select().single();
+      if (error) {
+        if (error.code === "PGRST116") throw Errors.notFound("\u552E\u540E\u7C7B\u578B\u4E0D\u5B58\u5728");
+        throw error;
+      }
+      await writeAudit(ctx, req, "update", "after_sale_type", id, before, data);
+      return res.status(200).json({ data });
+    }
+    if (req.method === "DELETE") {
+      requirePermission(ctx, "after_sales.write");
+      const { data: before } = await supabase.from("after_sale_types").select("*").eq("id", id).single();
+      if (!before) throw Errors.notFound("\u552E\u540E\u7C7B\u578B\u4E0D\u5B58\u5728");
+      const { data: refRows, error: refErr } = await supabase.from("after_sales").select("id").eq("type", before.value).limit(1);
+      if (refErr) throw refErr;
+      if (refRows && refRows.length > 0) throw Errors.conflict("\u8BE5\u7C7B\u578B\u5DF2\u88AB\u552E\u540E\u5355\u5F15\u7528\uFF0C\u65E0\u6CD5\u5220\u9664");
+      const { error } = await supabase.from("after_sale_types").delete().eq("id", id);
+      if (error) {
+        if (error.code === "23503") throw Errors.conflict("\u552E\u540E\u7C7B\u578B\u5DF2\u88AB\u4E1A\u52A1\u5355\u636E\u5F15\u7528\uFF0C\u65E0\u6CD5\u5220\u9664");
+        throw error;
+      }
+      await writeAudit(ctx, req, "delete", "after_sale_type", id, before, null);
+      return res.status(200).json({ ok: true });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
 // server/_handlers/after-sales/[id].ts
 var AFTER_SALES_FLOW = {
   PENDING: ["APPROVED", "REJECTED"],
@@ -27168,11 +27252,11 @@ var AFTER_SALES_FLOW = {
   COMPLETED: [],
   REJECTED: []
 };
-var updateSchema3 = external_exports.object({
+var updateSchema4 = external_exports.object({
   status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED"]).optional(),
   result: external_exports.string().max(512).optional()
 }).refine((v) => v.status !== void 0 || v.result !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler25(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27188,7 +27272,7 @@ async function handler25(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse(updateSchema3, req.body || {});
+      const body = parse(updateSchema4, req.body || {});
       const { data: before, error: getErr } = await supabase.from("after_sales").select("*, after_sale_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u552E\u540E\u5355\u4E0D\u5B58\u5728");
@@ -27203,19 +27287,24 @@ async function handler25(req, res) {
       if (isStatusUpdate && !allowed.includes(body.status)) {
         throw Errors.conflict(`\u975E\u6CD5\u72B6\u6001\u8F6C\u6362\uFF1A${before.status} -> ${body.status}`);
       }
-      if (isStatusUpdate && body.status === "COMPLETED" && before.status !== "COMPLETED" && before.type === "return" && before.warehouse_id) {
-        for (const it of items) {
-          const { error: invErr } = await supabase.rpc("adjust_inventory", {
-            p_product_id: it.product_id,
-            p_warehouse_id: before.warehouse_id,
-            p_quantity: Number(it.quantity),
-            p_type: "after_sales_in",
-            p_reference_type: "after_sale",
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `\u552E\u540E\u9000\u8D27\u5165\u5E93 ${before.order_no}`
-          });
-          if (invErr) throw invErr;
+      let needStockIn = false;
+      if (isStatusUpdate && body.status === "COMPLETED" && before.status !== "COMPLETED" && before.warehouse_id) {
+        const { data: typeMeta } = await supabase.from("after_sale_types").select("need_stock_in").eq("value", before.type).maybeSingle();
+        needStockIn = typeMeta?.need_stock_in === true;
+        if (needStockIn) {
+          for (const it of items) {
+            const { error: invErr } = await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: before.warehouse_id,
+              p_quantity: Number(it.quantity),
+              p_type: "after_sales_in",
+              p_reference_type: "after_sale",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u552E\u540E\u9000\u8D27\u5165\u5E93 ${before.order_no}`
+            });
+            if (invErr) throw invErr;
+          }
         }
       }
       if (isStatusUpdate) updatePayload.status = body.status;
@@ -27244,7 +27333,7 @@ async function handler25(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler26(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27281,7 +27370,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler27(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27316,7 +27405,7 @@ async function handler27(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler28(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27346,7 +27435,7 @@ async function handler28(req, res) {
 }
 
 // server/_handlers/products/[id].ts
-var updateSchema4 = external_exports.object({
+var updateSchema5 = external_exports.object({
   sku: external_exports.string().max(64).nullable().optional(),
   name: external_exports.string().min(1).max(200).optional(),
   barcode: external_exports.string().max(64).nullable().optional(),
@@ -27367,7 +27456,7 @@ var updateSchema4 = external_exports.object({
   last_mile_delivery_peso: external_exports.coerce.number().min(0).optional(),
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional()
 });
-async function handler29(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27384,7 +27473,7 @@ async function handler29(req, res) {
     }
     if (req.method === "PATCH") {
       requirePermission(ctx, "products.write");
-      const body = parse(updateSchema4, req.body || {});
+      const body = parse(updateSchema5, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("products").select("*").eq("id", id).single();
       const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
@@ -27428,7 +27517,7 @@ var PURCHASE_FLOW = {
   RECEIVED: [],
   CANCELLED: []
 };
-var updateSchema5 = external_exports.object({
+var updateSchema6 = external_exports.object({
   status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED", "ARRIVED"]).optional(),
   receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional(),
@@ -27439,7 +27528,7 @@ var updateSchema5 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler30(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27455,7 +27544,7 @@ async function handler30(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse(updateSchema5, req.body || {});
+      const body = parse(updateSchema6, req.body || {});
       const { data: before, error: getErr } = await supabase.from("purchase_orders").select("*, purchase_order_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u91C7\u8D2D\u5355\u4E0D\u5B58\u5728");
@@ -27551,14 +27640,14 @@ var REPLENISHMENT_FLOW = {
   COMPLETED: [],
   CANCELLED: []
 };
-var updateSchema6 = external_exports.object({
+var updateSchema7 = external_exports.object({
   status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PROCESSING", "COMPLETED", "CANCELLED"]).optional(),
   replenish_qty: external_exports.coerce.number().min(0).optional(),
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 }).refine((v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0, {
   message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
 });
-async function handler31(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27574,7 +27663,7 @@ async function handler31(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse(updateSchema6, req.body || {});
+      const body = parse(updateSchema7, req.body || {});
       const { data: before, error: getErr } = await supabase.from("replenishment_orders").select("*, replenishment_order_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8865\u8D27\u5355\u4E0D\u5B58\u5728");
@@ -27640,11 +27729,11 @@ var SALES_FLOW = {
   DELIVERED: [],
   CANCELLED: []
 };
-var updateSchema7 = external_exports.object({
+var updateSchema8 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler32(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27660,7 +27749,7 @@ async function handler32(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse(updateSchema7, req.body || {});
+      const body = parse(updateSchema8, req.body || {});
       const { data: before, error: getErr } = await supabase.from("sales_orders").select("*").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8BA2\u5355\u4E0D\u5B58\u5728");
@@ -27709,7 +27798,7 @@ var SHIPMENT_FLOW = {
   DELIVERED: [],
   CANCELLED: []
 };
-var updateSchema8 = external_exports.object({
+var updateSchema9 = external_exports.object({
   status: external_exports.enum(["PENDING", "SHIPPED", "IN_TRANSIT", "DELIVERED", "CANCELLED"]).optional(),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
   cargo_status: external_exports.string().max(20).nullable().optional(),
@@ -27733,7 +27822,7 @@ var updateSchema8 = external_exports.object({
   pull_declare_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
   estimated_arrival: external_exports.string().max(32).nullable().optional()
 });
-async function handler33(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27750,7 +27839,7 @@ async function handler33(req, res) {
     }
     if (req.method === "PATCH") {
       requirePermission(ctx, "shipment.write");
-      const body = parse(updateSchema8, req.body || {});
+      const body = parse(updateSchema9, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before, error: getErr } = await supabase.from("shipments").select("*, forwarders(name), shipment_items(*)").eq("id", id).single();
       if (getErr) {
@@ -27825,10 +27914,10 @@ var TRANSFER_FLOW = {
   RECEIVED: [],
   CANCELLED: []
 };
-var updateSchema9 = external_exports.object({
+var updateSchema10 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler34(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27844,7 +27933,7 @@ async function handler34(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse(updateSchema9, req.body || {});
+      const body = parse(updateSchema10, req.body || {});
       const { data: before, error: getErr } = await supabase.from("transfers").select("*, transfer_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8C03\u62E8\u5355\u4E0D\u5B58\u5728");
@@ -27921,7 +28010,7 @@ async function handler34(req, res) {
 }
 
 // server/_handlers/users/[id].ts
-var updateSchema10 = external_exports.object({
+var updateSchema11 = external_exports.object({
   // 邮箱/密码走 Supabase Auth（service_role），其余字段走 profiles
   email: external_exports.string().email().optional(),
   name: external_exports.string().min(1).max(100).optional(),
@@ -27937,7 +28026,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler35(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27945,7 +28034,7 @@ async function handler35(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "user.manage");
-      const body = parse(updateSchema10, req.body || {});
+      const body = parse(updateSchema11, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       await getProfileWithRoles2(supabase, id);
       if (body.email !== void 0 || body.password !== void 0) {
@@ -27998,14 +28087,14 @@ async function handler35(req, res) {
 }
 
 // server/_handlers/warehouses/[id].ts
-var updateSchema11 = external_exports.object({
+var updateSchema12 = external_exports.object({
   code: external_exports.string().min(1).max(32).optional(),
   name: external_exports.string().min(1).max(100).optional(),
   address: external_exports.string().max(300).nullable().optional(),
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler36(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28013,7 +28102,7 @@ async function handler36(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "inventory.write");
-      const body = parse(updateSchema11, req.body || {});
+      const body = parse(updateSchema12, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("warehouses").select("*").eq("id", id).single();
       if (!before) throw Errors.notFound("\u4ED3\u5E93\u4E0D\u5B58\u5728");
@@ -28055,38 +28144,40 @@ var routes = [
   { pattern: /^\/dashboard\/stats$/, handler: handler20 },
   { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler24, params: ["id"] },
   { pattern: /^\/cargo-statuses$/, handler: handler23 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler26, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler25 },
   { pattern: /^\/forwarders\/([^/]+)$/, handler: handler22, params: ["id"] },
   { pattern: /^\/forwarders$/, handler: handler21 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler25, params: ["id"] },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler27, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler4 },
   { pattern: /^\/audit-logs$/, handler: handler5 },
   { pattern: /^\/db-usage$/, handler: handler6 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler27 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler28 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler26, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler29 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler30 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler28, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler7 },
   { pattern: /^\/permissions$/, handler: handler8 },
   { pattern: /^\/products\/batch-delete$/, handler: handler10 },
   { pattern: /^\/products\/upload-image$/, handler: handler11 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler29, params: ["id"] },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler31, params: ["id"] },
   { pattern: /^\/products$/, handler: handler9 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler30, params: ["id"] },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler32, params: ["id"] },
   { pattern: /^\/purchase-orders$/, handler: handler12 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler31, params: ["id"] },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler33, params: ["id"] },
   { pattern: /^\/replenishment$/, handler: handler13 },
   { pattern: /^\/roles$/, handler: handler14 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler34, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler15 },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler33, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler35, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler16 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler36, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler17 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler35, params: ["id"] },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler37, params: ["id"] },
   { pattern: /^\/users$/, handler: handler18 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler36, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler38, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler19 }
 ];
-async function handler37(req, res) {
+async function handler39(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -28109,5 +28200,5 @@ async function handler37(req, res) {
   }
 }
 export {
-  handler37 as default
+  handler39 as default
 };

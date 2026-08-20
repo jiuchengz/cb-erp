@@ -59,20 +59,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
       }
 
-      // 售后退货入库：COMPLETED 且 type=return 时入库
-      if (isStatusUpdate && body.status === 'COMPLETED' && before.status !== 'COMPLETED' && before.type === 'return' && before.warehouse_id) {
-        for (const it of items) {
-          const { error: invErr } = await supabase.rpc('adjust_inventory', {
-            p_product_id: it.product_id,
-            p_warehouse_id: before.warehouse_id,
-            p_quantity: Number(it.quantity),
-            p_type: 'after_sales_in',
-            p_reference_type: 'after_sale',
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `售后退货入库 ${before.order_no}`,
-          });
-          if (invErr) throw invErr;
+      // 售后退货入库：COMPLETED 且类型标记为退货入库(need_stock_in)时入库
+      let needStockIn = false;
+      if (isStatusUpdate && body.status === 'COMPLETED' && before.status !== 'COMPLETED' && before.warehouse_id) {
+        const { data: typeMeta } = await supabase
+          .from('after_sale_types')
+          .select('need_stock_in')
+          .eq('value', before.type)
+          .maybeSingle();
+        needStockIn = typeMeta?.need_stock_in === true;
+        if (needStockIn) {
+          for (const it of items) {
+            const { error: invErr } = await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: before.warehouse_id,
+              p_quantity: Number(it.quantity),
+              p_type: 'after_sales_in',
+              p_reference_type: 'after_sale',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `售后退货入库 ${before.order_no}`,
+            });
+            if (invErr) throw invErr;
+          }
         }
       }
 

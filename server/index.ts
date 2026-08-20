@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import authMe from './_handlers/auth';
 import authPassword from './_handlers/auth/password';
 import authLogin from './_handlers/auth/login';
@@ -23,6 +23,8 @@ import forwarders from './_handlers/forwarders';
 import forwardersId from './_handlers/forwarders/[id]';
 import cargoStatuses from './_handlers/cargo-statuses';
 import cargoStatusesId from './_handlers/cargo-statuses/[id]';
+import afterSaleTypes from './_handlers/after-sale-types';
+import afterSaleTypesId from './_handlers/after-sale-types/[id]';
 import afterSalesId from './_handlers/after-sales/[id]';
 import inventoryId from './_handlers/inventory/[id]';
 import inventoryAdjust from './_handlers/inventory/adjust';
@@ -51,6 +53,8 @@ const routes: Route[] = [
   { pattern: /^\/dashboard\/stats$/, handler: dashboard },
   { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: cargoStatusesId, params: ['id'] },
   { pattern: /^\/cargo-statuses$/, handler: cargoStatuses },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: afterSaleTypesId, params: ['id'] },
+  { pattern: /^\/after-sale-types$/, handler: afterSaleTypes },
   { pattern: /^\/forwarders\/([^/]+)$/, handler: forwardersId, params: ['id'] },
   { pattern: /^\/forwarders$/, handler: forwarders },
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },

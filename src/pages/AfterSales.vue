@@ -69,9 +69,7 @@
         </el-form-item>
         <el-form-item label="类型" required>
           <el-select v-model="form.type" style="width: 200px">
-            <el-option label="退货" value="return" />
-            <el-option label="换货" value="exchange" />
-            <el-option label="退款" value="refund" />
+            <el-option v-for="t in afterSaleTypes" :key="t.value" :label="t.name" :value="t.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="关联销售单">
@@ -158,6 +156,34 @@
         <el-button type="primary" :loading="saving" @click="submitFlow">确认流转</el-button>
       </template>
     </el-dialog>
+
+    <!-- 售后类型管理弹窗 -->
+    <el-dialog v-model="typeVisible" title="售后类型管理" width="680px" destroy-on-close>
+      <el-table :data="afterSaleTypes" border stripe size="small" max-height="340">
+        <el-table-column prop="sort_order" label="排序" width="70" />
+        <el-table-column prop="value" label="类型标识" min-width="120" />
+        <el-table-column prop="name" label="类型名称" min-width="130" />
+        <el-table-column label="退货入库" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.need_stock_in ? 'success' : 'info'">{{ row.need_stock_in ? '是' : '否' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="editType(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeType(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="type-form">
+        <el-input v-model="typeForm.value" placeholder="标识(英文/数字,保存后不可改)" style="width: 200px" :disabled="!!typeEditingId" />
+        <el-input v-model="typeForm.name" placeholder="类型名称(必填)" style="width: 150px" />
+        <el-checkbox v-model="typeForm.need_stock_in">退货入库</el-checkbox>
+        <el-input v-model="typeForm.sort_order" placeholder="排序(数字)" style="width: 110px" />
+        <el-button type="primary" :loading="typeSaving" @click="saveType">{{ typeEditingId ? '保存修改' : '新增类型' }}</el-button>
+        <el-button v-if="typeEditingId" @click="resetTypeForm">取消编辑</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -205,7 +231,7 @@ function nextStatuses(s?: string) {
   return (s && AFTER_SALES_FLOW[s]) || []
 }
 function typeLabel(t: string) {
-  return { return: '退货', exchange: '换货', refund: '退款' }[t] || t
+  return afterSaleTypes.value.find((x) => x.value === t)?.name || t || '-'
 }
 function formatDate(v: string) {
   if (!v) return ''
@@ -216,6 +242,17 @@ const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
 const query = reactive({ page: 1, pageSize: 20, status: '' })
+
+// 售后类型字典（动态从 /api/after-sale-types 加载，value + name + need_stock_in）
+const afterSaleTypes = ref<any[]>([])
+async function loadAfterSaleTypes() {
+  try {
+    const { data } = await api.get('/after-sale-types')
+    afterSaleTypes.value = data.data ?? []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载售后类型失败')
+  }
+}
 
 async function load() {
   loading.value = true
@@ -364,6 +401,85 @@ function onSelectionChange(rows: any[]) {
   selected.value = rows
 }
 
+// ===== 售后类型管理 =====
+const typeVisible = ref(false)
+const typeSaving = ref(false)
+const typeEditingId = ref('')
+const typeForm = reactive({ value: '', name: '', need_stock_in: false, sort_order: 0 })
+
+function resetTypeForm() {
+  typeEditingId.value = ''
+  typeForm.value = ''
+  typeForm.name = ''
+  typeForm.need_stock_in = false
+  typeForm.sort_order = 0
+}
+
+function openTypeDialog() {
+  resetTypeForm()
+  loadAfterSaleTypes()
+  typeVisible.value = true
+}
+
+function editType(row: any) {
+  typeEditingId.value = row.id
+  typeForm.value = row.value
+  typeForm.name = row.name
+  typeForm.need_stock_in = !!row.need_stock_in
+  typeForm.sort_order = row.sort_order ?? 0
+}
+
+async function saveType() {
+  if (!typeForm.name.trim()) {
+    ElMessage.warning('请填写类型名称')
+    return
+  }
+  if (!typeEditingId.value && !typeForm.value.trim()) {
+    ElMessage.warning('请填写类型标识')
+    return
+  }
+  typeSaving.value = true
+  try {
+    const payload: any = {
+      name: typeForm.name.trim(),
+      need_stock_in: !!typeForm.need_stock_in,
+      sort_order: typeForm.sort_order ?? 0,
+    }
+    if (typeEditingId.value) {
+      await api.patch(`/after-sale-types/${typeEditingId.value}`, payload)
+      ElMessage.success('修改成功')
+    } else {
+      await api.post('/after-sale-types', { value: typeForm.value.trim(), ...payload })
+      ElMessage.success('新增成功')
+    }
+    resetTypeForm()
+    loadAfterSaleTypes()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    typeSaving.value = false
+  }
+}
+
+async function removeType(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除售后类型「${row.name}」吗？`, '删除售后类型', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/after-sale-types/${row.id}`)
+    ElMessage.success('删除成功')
+    loadAfterSaleTypes()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
+  }
+}
+
 // 处理结果内联保存：PATCH /after-sales/[id]
 async function saveResult(row: any) {
   try {
@@ -427,6 +543,7 @@ async function batchRemove() {
 onMounted(() => {
   load()
   loadOptions()
+  loadAfterSaleTypes()
 })
 </script>
 
@@ -454,5 +571,12 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+.type-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 </style>
