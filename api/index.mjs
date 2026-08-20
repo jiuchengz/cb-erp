@@ -26675,10 +26675,29 @@ var itemSchema4 = external_exports.object({
   sales_order_id: external_exports.string().uuid().optional()
 });
 var createSchema6 = external_exports.object({
-  tracking_no: external_exports.string().min(1).max(64),
-  carrier: external_exports.string().max(128).optional().default(""),
+  // 兼容旧调用：tracking_no / items 均可选；新表单走单行字段（旧文件发货模块 11 字段）
+  tracking_no: external_exports.string().min(1).max(64).optional(),
+  carrier: external_exports.string().max(128).nullable().optional(),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
-  items: external_exports.array(itemSchema4).min(1).max(200)
+  items: external_exports.array(itemSchema4).min(1).max(200).optional(),
+  warehouse_no: external_exports.string().max(50).nullable().optional(),
+  ship_date: external_exports.string().max(32).nullable().optional(),
+  shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipping_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipping_mode: external_exports.string().max(20).nullable().optional(),
+  shipment_no: external_exports.string().min(1).max(100).nullable().optional(),
+  product_code: external_exports.string().max(100).nullable().optional(),
+  billable_weight_vol: external_exports.string().max(50).nullable().optional(),
+  volume_diff: external_exports.string().max(50).nullable().optional(),
+  billable_amount: external_exports.union([external_exports.null(), external_exports.coerce.number()]).optional(),
+  pull_declare_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  estimated_arrival: external_exports.string().max(32).nullable().optional(),
+  cargo_status: external_exports.string().max(20).nullable().optional(),
+  bill_check_status: external_exports.string().max(20).nullable().optional(),
+  warehouse_status: external_exports.string().max(100).nullable().optional(),
+  actual_warehouse_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  abnormal_penalty: external_exports.string().max(500).nullable().optional(),
+  appointment_time: external_exports.string().max(32).nullable().optional()
 });
 async function handler16(req, res) {
   try {
@@ -26703,28 +26722,49 @@ async function handler16(req, res) {
       const body = parse(createSchema6, req.body || {});
       const supabase = getAdminClient();
       const { data: shipment, error } = await supabase.from("shipments").insert({
-        tracking_no: body.tracking_no,
-        carrier: body.carrier || null,
-        forwarder_id: body.forwarder_id || null,
+        // 兼容新表单（无 tracking_no 走 shipment_no 兜底）
+        tracking_no: body.tracking_no || body.shipment_no,
+        carrier: body.carrier ?? null,
+        forwarder_id: body.forwarder_id ?? null,
+        warehouse_no: body.warehouse_no ?? null,
+        ship_date: body.ship_date ?? null,
+        shipping_cartons: body.shipping_cartons ?? null,
+        shipping_qty: body.shipping_qty ?? null,
+        shipping_mode: body.shipping_mode ?? null,
+        shipment_no: body.shipment_no ?? null,
+        product_code: body.product_code ?? null,
+        billable_weight_vol: body.billable_weight_vol ?? null,
+        volume_diff: body.volume_diff ?? null,
+        billable_amount: body.billable_amount ?? null,
+        pull_declare_qty: body.pull_declare_qty ?? null,
+        estimated_arrival: body.estimated_arrival ?? null,
+        cargo_status: body.cargo_status ?? void 0,
+        bill_check_status: body.bill_check_status ?? void 0,
+        warehouse_status: body.warehouse_status ?? null,
+        actual_warehouse_qty: body.actual_warehouse_qty ?? null,
+        abnormal_penalty: body.abnormal_penalty ?? null,
+        appointment_time: body.appointment_time ?? null,
         created_by: ctx.userId
       }).select().single();
       if (error) {
-        if (error.code === "23505") throw Errors.conflict(`\u8FD0\u5355\u53F7\u5DF2\u5B58\u5728\uFF1A${body.tracking_no}`);
+        if (error.code === "23505") throw Errors.conflict(`\u8FD0\u5355\u53F7\u5DF2\u5B58\u5728\uFF1A${body.tracking_no || body.shipment_no}`);
         throw error;
       }
-      const { error: itemErr } = await supabase.from("shipment_items").insert(
-        body.items.map((it) => ({
-          shipment_id: shipment.id,
-          product_id: it.product_id,
-          quantity: it.quantity,
-          sales_order_id: it.sales_order_id || null
-        }))
-      );
-      if (itemErr) {
-        await supabase.from("shipments").delete().eq("id", shipment.id);
-        throw itemErr;
+      if (body.items && body.items.length > 0) {
+        const { error: itemErr } = await supabase.from("shipment_items").insert(
+          body.items.map((it) => ({
+            shipment_id: shipment.id,
+            product_id: it.product_id,
+            quantity: it.quantity,
+            sales_order_id: it.sales_order_id || null
+          }))
+        );
+        if (itemErr) {
+          await supabase.from("shipments").delete().eq("id", shipment.id);
+          throw itemErr;
+        }
       }
-      await writeAudit(ctx, req, "create", "shipment", shipment.id, null, { tracking_no: shipment.tracking_no, items: body.items.length });
+      await writeAudit(ctx, req, "create", "shipment", shipment.id, null, { tracking_no: body.tracking_no || body.shipment_no, items: body.items?.length ?? 0 });
       return res.status(201).json({ data: shipment });
     }
     return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
@@ -27587,18 +27627,29 @@ var SHIPMENT_FLOW = {
   DELIVERED: [],
   CANCELLED: []
 };
-var CARGO_STATUSES = ["in_warehouse", "transporting", "arrived_port", "cleared"];
-var BILL_CHECK_STATUSES = ["pending", "confirmed", "difference_confirmed", "difference_pending"];
 var updateSchema7 = external_exports.object({
   status: external_exports.enum(["PENDING", "SHIPPED", "IN_TRANSIT", "DELIVERED", "CANCELLED"]).optional(),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
-  cargo_status: external_exports.enum(CARGO_STATUSES).optional(),
+  cargo_status: external_exports.string().max(20).nullable().optional(),
   warehouse_status: external_exports.string().max(100).nullable().optional(),
-  actual_warehouse_qty: external_exports.coerce.number().nonnegative().nullable().optional(),
+  actual_warehouse_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
   abnormal_penalty: external_exports.string().max(500).nullable().optional(),
-  bill_check_status: external_exports.enum(BILL_CHECK_STATUSES).optional(),
+  bill_check_status: external_exports.string().max(20).nullable().optional(),
   bill_check_time: external_exports.string().datetime().nullable().optional(),
-  appointment_time: external_exports.string().datetime().nullable().optional()
+  appointment_time: external_exports.string().max(32).nullable().optional(),
+  // 新表单字段
+  warehouse_no: external_exports.string().max(50).nullable().optional(),
+  ship_date: external_exports.string().max(32).nullable().optional(),
+  shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipping_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipping_mode: external_exports.string().max(20).nullable().optional(),
+  shipment_no: external_exports.string().min(1).max(100).nullable().optional(),
+  product_code: external_exports.string().max(100).nullable().optional(),
+  billable_weight_vol: external_exports.string().max(50).nullable().optional(),
+  volume_diff: external_exports.string().max(50).nullable().optional(),
+  billable_amount: external_exports.union([external_exports.null(), external_exports.coerce.number()]).optional(),
+  pull_declare_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  estimated_arrival: external_exports.string().max(32).nullable().optional()
 });
 async function handler31(req, res) {
   try {
@@ -27644,6 +27695,18 @@ async function handler31(req, res) {
         update.bill_check_time = (/* @__PURE__ */ new Date()).toISOString();
       }
       if (body.bill_check_status !== void 0) update.bill_check_status = body.bill_check_status;
+      if (body.warehouse_no !== void 0) update.warehouse_no = body.warehouse_no;
+      if (body.ship_date !== void 0) update.ship_date = body.ship_date;
+      if (body.shipping_cartons !== void 0) update.shipping_cartons = body.shipping_cartons;
+      if (body.shipping_qty !== void 0) update.shipping_qty = body.shipping_qty;
+      if (body.shipping_mode !== void 0) update.shipping_mode = body.shipping_mode;
+      if (body.shipment_no !== void 0) update.shipment_no = body.shipment_no;
+      if (body.product_code !== void 0) update.product_code = body.product_code;
+      if (body.billable_weight_vol !== void 0) update.billable_weight_vol = body.billable_weight_vol;
+      if (body.volume_diff !== void 0) update.volume_diff = body.volume_diff;
+      if (body.billable_amount !== void 0) update.billable_amount = body.billable_amount;
+      if (body.pull_declare_qty !== void 0) update.pull_declare_qty = body.pull_declare_qty;
+      if (body.estimated_arrival !== void 0) update.estimated_arrival = body.estimated_arrival;
       const { data, error } = await supabase.from("shipments").update(update).eq("id", id).select().single();
       if (error) {
         if (error.code === "23503") throw Errors.conflict("\u5173\u8054\u7684\u8D27\u4EE3\u4E0D\u5B58\u5728");

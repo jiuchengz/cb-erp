@@ -15,10 +15,29 @@ const itemSchema = z.object({
 });
 
 const createSchema = z.object({
-  tracking_no: z.string().min(1).max(64),
-  carrier: z.string().max(128).optional().default(''),
+  // 兼容旧调用：tracking_no / items 均可选；新表单走单行字段（旧文件发货模块 11 字段）
+  tracking_no: z.string().min(1).max(64).optional(),
+  carrier: z.string().max(128).nullable().optional(),
   forwarder_id: z.string().uuid().nullable().optional(),
-  items: z.array(itemSchema).min(1).max(200),
+  items: z.array(itemSchema).min(1).max(200).optional(),
+  warehouse_no: z.string().max(50).nullable().optional(),
+  ship_date: z.string().max(32).nullable().optional(),
+  shipping_cartons: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  shipping_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  shipping_mode: z.string().max(20).nullable().optional(),
+  shipment_no: z.string().min(1).max(100).nullable().optional(),
+  product_code: z.string().max(100).nullable().optional(),
+  billable_weight_vol: z.string().max(50).nullable().optional(),
+  volume_diff: z.string().max(50).nullable().optional(),
+  billable_amount: z.union([z.null(), z.coerce.number()]).optional(),
+  pull_declare_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  estimated_arrival: z.string().max(32).nullable().optional(),
+  cargo_status: z.string().max(20).nullable().optional(),
+  bill_check_status: z.string().max(20).nullable().optional(),
+  warehouse_status: z.string().max(100).nullable().optional(),
+  actual_warehouse_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  abnormal_penalty: z.string().max(500).nullable().optional(),
+  appointment_time: z.string().max(32).nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -49,34 +68,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: shipment, error } = await supabase
         .from('shipments')
         .insert({
-          tracking_no: body.tracking_no,
-          carrier: body.carrier || null,
-          forwarder_id: body.forwarder_id || null,
+          // 兼容新表单（无 tracking_no 走 shipment_no 兜底）
+          tracking_no: body.tracking_no || body.shipment_no,
+          carrier: body.carrier ?? null,
+          forwarder_id: body.forwarder_id ?? null,
+          warehouse_no: body.warehouse_no ?? null,
+          ship_date: body.ship_date ?? null,
+          shipping_cartons: body.shipping_cartons ?? null,
+          shipping_qty: body.shipping_qty ?? null,
+          shipping_mode: body.shipping_mode ?? null,
+          shipment_no: body.shipment_no ?? null,
+          product_code: body.product_code ?? null,
+          billable_weight_vol: body.billable_weight_vol ?? null,
+          volume_diff: body.volume_diff ?? null,
+          billable_amount: body.billable_amount ?? null,
+          pull_declare_qty: body.pull_declare_qty ?? null,
+          estimated_arrival: body.estimated_arrival ?? null,
+          cargo_status: body.cargo_status ?? undefined,
+          bill_check_status: body.bill_check_status ?? undefined,
+          warehouse_status: body.warehouse_status ?? null,
+          actual_warehouse_qty: body.actual_warehouse_qty ?? null,
+          abnormal_penalty: body.abnormal_penalty ?? null,
+          appointment_time: body.appointment_time ?? null,
           created_by: ctx.userId,
         })
         .select()
         .single();
       if (error) {
-        if (error.code === '23505') throw Errors.conflict(`运单号已存在：${body.tracking_no}`);
+        if (error.code === '23505') throw Errors.conflict(`运单号已存在：${body.tracking_no || body.shipment_no}`);
         throw error;
       }
 
-      const { error: itemErr } = await supabase
-        .from('shipment_items')
-        .insert(
-          body.items.map((it) => ({
-            shipment_id: shipment.id,
-            product_id: it.product_id,
-            quantity: it.quantity,
-            sales_order_id: it.sales_order_id || null,
-          }))
-        );
-      if (itemErr) {
-        await supabase.from('shipments').delete().eq('id', shipment.id);
-        throw itemErr;
+      // 旧调用带 items 则插入明细，新表单（单行字段）跳过
+      if (body.items && body.items.length > 0) {
+        const { error: itemErr } = await supabase
+          .from('shipment_items')
+          .insert(
+            body.items.map((it) => ({
+              shipment_id: shipment.id,
+              product_id: it.product_id,
+              quantity: it.quantity,
+              sales_order_id: it.sales_order_id || null,
+            }))
+          );
+        if (itemErr) {
+          await supabase.from('shipments').delete().eq('id', shipment.id);
+          throw itemErr;
+        }
       }
 
-      await writeAudit(ctx, req, 'create', 'shipment', shipment.id, null, { tracking_no: shipment.tracking_no, items: body.items.length });
+      await writeAudit(ctx, req, 'create', 'shipment', shipment.id, null, { tracking_no: body.tracking_no || body.shipment_no, items: body.items?.length ?? 0 });
       return res.status(201).json({ data: shipment });
     }
 

@@ -16,19 +16,29 @@ const SHIPMENT_FLOW: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-const CARGO_STATUSES = ['in_warehouse', 'transporting', 'arrived_port', 'cleared'] as const;
-const BILL_CHECK_STATUSES = ['pending', 'confirmed', 'difference_confirmed', 'difference_pending'] as const;
-
 const updateSchema = z.object({
   status: z.enum(['PENDING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']).optional(),
   forwarder_id: z.string().uuid().nullable().optional(),
-  cargo_status: z.enum(CARGO_STATUSES).optional(),
+  cargo_status: z.string().max(20).nullable().optional(),
   warehouse_status: z.string().max(100).nullable().optional(),
-  actual_warehouse_qty: z.coerce.number().nonnegative().nullable().optional(),
+  actual_warehouse_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
   abnormal_penalty: z.string().max(500).nullable().optional(),
-  bill_check_status: z.enum(BILL_CHECK_STATUSES).optional(),
+  bill_check_status: z.string().max(20).nullable().optional(),
   bill_check_time: z.string().datetime().nullable().optional(),
-  appointment_time: z.string().datetime().nullable().optional(),
+  appointment_time: z.string().max(32).nullable().optional(),
+  // 新表单字段
+  warehouse_no: z.string().max(50).nullable().optional(),
+  ship_date: z.string().max(32).nullable().optional(),
+  shipping_cartons: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  shipping_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  shipping_mode: z.string().max(20).nullable().optional(),
+  shipment_no: z.string().min(1).max(100).nullable().optional(),
+  product_code: z.string().max(100).nullable().optional(),
+  billable_weight_vol: z.string().max(50).nullable().optional(),
+  volume_diff: z.string().max(50).nullable().optional(),
+  billable_amount: z.union([z.null(), z.coerce.number()]).optional(),
+  pull_declare_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
+  estimated_arrival: z.string().max(32).nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -79,6 +89,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         update.bill_check_time = new Date().toISOString();
       }
       if (body.bill_check_status !== undefined) update.bill_check_status = body.bill_check_status;
+      // 新表单字段
+      if (body.warehouse_no !== undefined) update.warehouse_no = body.warehouse_no;
+      if (body.ship_date !== undefined) update.ship_date = body.ship_date;
+      if (body.shipping_cartons !== undefined) update.shipping_cartons = body.shipping_cartons;
+      if (body.shipping_qty !== undefined) update.shipping_qty = body.shipping_qty;
+      if (body.shipping_mode !== undefined) update.shipping_mode = body.shipping_mode;
+      if (body.shipment_no !== undefined) update.shipment_no = body.shipment_no;
+      if (body.product_code !== undefined) update.product_code = body.product_code;
+      if (body.billable_weight_vol !== undefined) update.billable_weight_vol = body.billable_weight_vol;
+      if (body.volume_diff !== undefined) update.volume_diff = body.volume_diff;
+      if (body.billable_amount !== undefined) update.billable_amount = body.billable_amount;
+      if (body.pull_declare_qty !== undefined) update.pull_declare_qty = body.pull_declare_qty;
+      if (body.estimated_arrival !== undefined) update.estimated_arrival = body.estimated_arrival;
 
       const { data, error } = await supabase.from('shipments').update(update).eq('id', id).select().single();
       if (error) {
