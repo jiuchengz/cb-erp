@@ -25982,7 +25982,7 @@ var createSchema = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   sales_order_id: external_exports.string().uuid().optional(),
   warehouse_id: external_exports.string().uuid().optional(),
-  type: external_exports.enum(["return", "exchange", "refund"]),
+  type: external_exports.string().min(1),
   reason: external_exports.string().max(256).optional().default(""),
   result: external_exports.string().max(512).optional().default(""),
   items: external_exports.array(itemSchema).min(1).max(200)

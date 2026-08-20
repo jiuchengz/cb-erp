@@ -17,7 +17,7 @@ const createSchema = z.object({
   order_no: z.string().min(1).max(64),
   sales_order_id: z.string().uuid().optional(),
   warehouse_id: z.string().uuid().optional(),
-  type: z.enum(['return', 'exchange', 'refund']),
+  type: z.string().min(1),
   reason: z.string().max(256).optional().default(''),
   result: z.string().max(512).optional().default(''),
   items: z.array(itemSchema).min(1).max(200),
