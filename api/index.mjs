@@ -25995,7 +25995,7 @@ async function handler4(req, res) {
       requirePermission(ctx, "after_sales.read");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query = supabase.from("after_sales").select("*", { count: "exact" });
+      let query = supabase.from("after_sales").select("*, after_sale_items(*, products(id, name, link_id, image_text))", { count: "exact" });
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
       if (status) query = query.eq("status", status);
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -27246,14 +27246,15 @@ async function handler26(req, res) {
 
 // server/_handlers/after-sales/[id].ts
 var AFTER_SALES_FLOW = {
-  PENDING: ["APPROVED", "REJECTED"],
+  PENDING: ["APPROVED", "REJECTED", "PLATFORM_INTERVENED"],
   APPROVED: ["PROCESSING", "REJECTED"],
-  PROCESSING: ["COMPLETED"],
-  COMPLETED: [],
-  REJECTED: []
+  PROCESSING: ["COMPLETED", "PLATFORM_INTERVENED"],
+  COMPLETED: ["PLATFORM_INTERVENED"],
+  REJECTED: [],
+  PLATFORM_INTERVENED: ["COMPLETED", "REJECTED"]
 };
 var updateSchema4 = external_exports.object({
-  status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED"]).optional(),
+  status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED", "PLATFORM_INTERVENED"]).optional(),
   result: external_exports.string().max(512).optional()
 }).refine((v) => v.status !== void 0 || v.result !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
 async function handler27(req, res) {
@@ -27264,7 +27265,7 @@ async function handler27(req, res) {
     const supabase = getAdminClient();
     if (req.method === "GET") {
       requirePermission(ctx, "after_sales.read");
-      const { data, error } = await supabase.from("after_sales").select("*, after_sale_items(*)").eq("id", id).single();
+      const { data, error } = await supabase.from("after_sales").select("*, after_sale_items(*, products(id, name, link_id, image_text))").eq("id", id).single();
       if (error) {
         if (error.code === "PGRST116") throw Errors.notFound("\u552E\u540E\u5355\u4E0D\u5B58\u5728");
         throw error;
@@ -27273,7 +27274,7 @@ async function handler27(req, res) {
     }
     if (req.method === "PATCH") {
       const body = parse(updateSchema4, req.body || {});
-      const { data: before, error: getErr } = await supabase.from("after_sales").select("*, after_sale_items(*)").eq("id", id).single();
+      const { data: before, error: getErr } = await supabase.from("after_sales").select("*, after_sale_items(*, products(id, name, link_id, image_text))").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u552E\u540E\u5355\u4E0D\u5B58\u5728");
         throw getErr;

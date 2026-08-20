@@ -9,16 +9,19 @@ import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 
 const AFTER_SALES_FLOW: Record<string, string[]> = {
-  PENDING: ['APPROVED', 'REJECTED'],
+  PENDING: ['APPROVED', 'REJECTED', 'PLATFORM_INTERVENED'],
   APPROVED: ['PROCESSING', 'REJECTED'],
-  PROCESSING: ['COMPLETED'],
-  COMPLETED: [],
+  PROCESSING: ['COMPLETED', 'PLATFORM_INTERVENED'],
+  COMPLETED: ['PLATFORM_INTERVENED'],
   REJECTED: [],
+  PLATFORM_INTERVENED: ['COMPLETED', 'REJECTED'],
 };
 
 const updateSchema = z
   .object({
-    status: z.enum(['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED']).optional(),
+    status: z
+      .enum(['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED', 'PLATFORM_INTERVENED'])
+      .optional(),
     result: z.string().max(512).optional(),
   })
   .refine((v) => v.status !== undefined || v.result !== undefined, { message: '至少提供一个更新字段' });
@@ -32,7 +35,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'after_sales.read');
-      const { data, error } = await supabase.from('after_sales').select('*, after_sale_items(*)').eq('id', id).single();
+      const { data, error } = await supabase
+        .from('after_sales')
+        .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
+        .eq('id', id)
+        .single();
       if (error) {
         if (error.code === 'PGRST116') throw Errors.notFound('售后单不存在');
         throw error;
@@ -42,7 +49,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'PATCH') {
       const body = parse(updateSchema, req.body || {});
-      const { data: before, error: getErr } = await supabase.from('after_sales').select('*, after_sale_items(*)').eq('id', id).single();
+      const { data: before, error: getErr } = await supabase
+        .from('after_sales')
+        .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
+        .eq('id', id)
+        .single();
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
         throw getErr;

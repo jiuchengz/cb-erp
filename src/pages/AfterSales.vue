@@ -30,6 +30,21 @@
       <el-table-column label="仓库" min-width="140">
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
       </el-table-column>
+      <el-table-column label="商品名称" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ firstItem(row)?.products?.name || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="图片" width="90">
+        <template #default="{ row }">
+          <img
+            v-if="isImageUrl(firstItem(row)?.products?.image_text)"
+            :src="firstItem(row)?.products?.image_text"
+            class="item-img"
+            referrerpolicy="no-referrer"
+            @error="onImgError($event)"
+          />
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="reason" label="原因" min-width="160" show-overflow-tooltip />
       <el-table-column prop="result" label="处理结果" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.result || '-' }}</template>
@@ -97,9 +112,17 @@
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable placeholder="商品" style="width: 400px">
-                <el-option v-for="p in products" :key="p.id" :label="`${p.sku} - ${p.name}`" :value="p.id" />
-              </el-select>
+              <el-input v-model="it.link_id" placeholder="输入链ID" style="width: 200px" @change="resolveItem(it)" />
+              <template v-if="it.product_name">
+                <span class="item-name">{{ it.product_name }}</span>
+                <img
+                  v-if="isImageUrl(it.product_image)"
+                  :src="it.product_image"
+                  class="item-thumb"
+                  referrerpolicy="no-referrer"
+                  @error="it.product_image = ''"
+                />
+              </template>
               <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 140px" />
               <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
             </div>
@@ -136,7 +159,24 @@
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
       <el-table v-if="detail" :data="detail.after_sale_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column prop="product_id" label="商品ID" min-width="240" show-overflow-tooltip />
+        <el-table-column label="图片" width="80">
+          <template #default="{ row }">
+            <img
+              v-if="isImageUrl(row.products?.image_text)"
+              :src="row.products?.image_text"
+              class="item-thumb"
+              referrerpolicy="no-referrer"
+              @error="onImgError($event)"
+            />
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="链ID" min-width="140">
+          <template #default="{ row }">{{ row.products?.link_id || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="商品名称" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.products?.name || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
       </el-table>
     </el-dialog>
@@ -199,27 +239,30 @@ const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('after_sales.write'))
 
 const AFTER_SALES_FLOW: Record<string, string[]> = {
-  PENDING: ['APPROVED', 'REJECTED'],
+  PENDING: ['APPROVED', 'REJECTED', 'PLATFORM_INTERVENED'],
   APPROVED: ['PROCESSING', 'REJECTED'],
-  PROCESSING: ['COMPLETED'],
-  COMPLETED: [],
+  PROCESSING: ['COMPLETED', 'PLATFORM_INTERVENED'],
+  COMPLETED: ['PLATFORM_INTERVENED'],
   REJECTED: [],
+  PLATFORM_INTERVENED: ['COMPLETED', 'REJECTED'],
 }
 
 const statusOptions = [
   { label: '待处理', value: 'PENDING' },
-  { label: '已通过', value: 'APPROVED' },
+  { label: '已完成', value: 'APPROVED' },
   { label: '处理中', value: 'PROCESSING' },
   { label: '已完成', value: 'COMPLETED' },
-  { label: '已驳回', value: 'REJECTED' },
+  { label: '已取消', value: 'REJECTED' },
+  { label: '平台已介入', value: 'PLATFORM_INTERVENED' },
 ]
 
 const statusMap: Record<string, { label: string; type: string }> = {
   PENDING: { label: '待处理', type: 'info' },
-  APPROVED: { label: '已通过', type: 'primary' },
+  APPROVED: { label: '已完成', type: 'success' },
   PROCESSING: { label: '处理中', type: 'warning' },
   COMPLETED: { label: '已完成', type: 'success' },
-  REJECTED: { label: '已驳回', type: 'danger' },
+  REJECTED: { label: '已取消', type: 'danger' },
+  PLATFORM_INTERVENED: { label: '平台已介入', type: 'warning' },
 }
 
 function statusLabel(s: string) {
@@ -310,10 +353,44 @@ const form = reactive({
 })
 
 function addItem() {
-  form.items.push({ product_id: '', quantity: 1 })
+  form.items.push({ link_id: '', product_id: '', product_name: '', product_image: '', quantity: 1 })
 }
 function removeItem(idx: number) {
   form.items.splice(idx, 1)
+}
+
+// 根据输入的链ID匹配商品，回填商品ID/名称/图片
+function resolveItem(it: any) {
+  const linkId = (it.link_id || '').trim()
+  const p = products.value.find((x) => x.link_id === linkId)
+  if (p) {
+    it.product_id = p.id
+    it.product_name = p.name
+    it.product_image = p.image_text || ''
+  } else {
+    it.product_id = ''
+    it.product_name = ''
+    it.product_image = ''
+    if (linkId) ElMessage.warning(`未找到链ID：${linkId}`)
+  }
+}
+
+function firstItem(row: any) {
+  return (row.after_sale_items || [])[0] || {}
+}
+
+function isImageUrl(v: unknown): v is string {
+  if (!v || typeof v !== 'string') return false
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:image/')
+}
+
+function onImgError(e: Event) {
+  const img = e.target as HTMLImageElement
+  img.src =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="100%" height="100%" fill="#f0f2f5"/><text x="50%" y="50%" fill="#c0c4cc" font-size="10" text-anchor="middle" dominant-baseline="middle">无图片</text></svg>'
+    )
 }
 
 function openCreate() {
@@ -499,6 +576,7 @@ function exportRows() {
     { key: 'order_no', label: '售后单号' },
     { key: 'type', label: '类型', value: (r: any) => typeLabel(r.type) },
     { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
+    { key: 'item_name', label: '商品名称', value: (r: any) => firstItem(r)?.products?.name || '-' },
     { key: 'reason', label: '原因' },
     { key: 'result', label: '处理结果', value: (r: any) => r.result || '-' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
@@ -572,6 +650,28 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+.item-name {
+  font-size: 13px;
+  color: #303133;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid #ebeef5;
+}
+.item-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid #ebeef5;
 }
 .type-form {
   display: flex;
