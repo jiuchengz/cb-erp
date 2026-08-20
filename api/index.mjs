@@ -26960,7 +26960,7 @@ async function handler20(req, res) {
       countAll("shipments"),
       countAll("sales_orders"),
       countAll("after_sales"),
-      supabase.from("shipments").select("id, tracking_no, status, carrier, cargo_status, created_at").order("created_at", { ascending: false }).limit(5)
+      supabase.from("shipments").select("id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)").order("created_at", { ascending: false }).limit(5)
     ]);
     if (inventoryRows.error) throw inventoryRows.error;
     if (recentShipments.error) throw recentShipments.error;

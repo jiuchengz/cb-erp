@@ -23,9 +23,21 @@
       </template>
       <el-table v-loading="loading" :data="recentShipments" border stripe empty-text="暂无发货记录">
         <el-table-column prop="tracking_no" label="运单号" min-width="180" />
+        <el-table-column label="货代" width="120">
+          <template #default="{ row }">{{ row.forwarders?.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="空海运" width="100">
+          <template #default="{ row }">{{ row.shipping_mode || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="仓号" width="100">
+          <template #default="{ row }">{{ row.warehouse_no || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="发货数量" width="110">
+          <template #default="{ row }">{{ row.shipping_qty ?? '-' }}</template>
+        </el-table-column>
         <el-table-column label="货物状态" width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.cargo_status" :style="{ backgroundColor: cargoStatusMap[row.cargo_status] || undefined }" :type="cargoStatusMap[row.cargo_status] ? '' : 'info'">
+            <el-tag v-if="row.cargo_status" :style="{ backgroundColor: cargoStatusColors[row.cargo_status] || undefined }" :type="cargoStatusColors[row.cargo_status] ? '' : 'info'">
               {{ row.cargo_status }}
             </el-tag>
             <span v-else>-</span>
@@ -58,18 +70,13 @@ const stats = ref<any>({
   recent_shipments: [],
 })
 
-// 货物状态字典：name -> color（与发货管理一致，动态加载）
-const cargoStatusMap = ref<Record<string, string>>({})
-
-async function loadCargoStatuses() {
-  try {
-    const { data } = await api.get('/cargo-statuses')
-    const map: Record<string, string> = {}
-    for (const s of data.data ?? []) map[s.name] = s.color
-    cargoStatusMap.value = map
-  } catch {
-    // 字典加载失败时状态列回退为灰色 info，不影响首页统计展示
-  }
+// 货物状态固定颜色映射（与发货模块 cargo_statuses 字典解耦，无匹配 fallback info 灰 #909399）
+const cargoStatusColors: Record<string, string> = {
+  转运中: '#17A2B8',
+  到港: '#F0AD4E',
+  清关: '#6F42C1',
+  已预约: '#007BFF',
+  已入仓: '#28A745',
 }
 
 const statCards = computed(() => [
@@ -112,7 +119,6 @@ async function load() {
 
 onMounted(() => {
   load()
-  loadCargoStatuses()
 })
 </script>
 
