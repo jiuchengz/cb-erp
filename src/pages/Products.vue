@@ -56,7 +56,7 @@
         start-placeholder="开始日期"
         end-placeholder="结束日期"
         clearable
-        style="width: 180px"
+        style="width: 200px"
         @change="onDateRangeChange"
       />
       <el-button type="primary" @click="load">查询</el-button>
@@ -893,6 +893,17 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   gap: 12px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+}
+/* 强制日期范围选择器宽度为 200px，避免 Element Plus 默认宽度撑开 */
+.filters :deep(.el-date-editor--daterange) {
+  width: 200px !important;
+  flex-shrink: 0;
+}
+.filters :deep(.el-date-editor--daterange .el-range-input) {
+  min-width: 0;
+}
+.filters :deep(.el-date-editor--daterange .el-range-separator) {
+  padding: 0 2px;
 }
 .profit-bar {
   display: flex;

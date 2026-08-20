@@ -35,19 +35,6 @@
           <button class="hamburger" :title="drawerOpen ? '收起菜单' : '展开菜单'" @click="toggleDrawer">
             <el-icon><menu /></el-icon>
           </button>
-          <!-- 全局搜索：可折叠，Ctrl/⌘K 聚焦 -->
-          <div class="global-search" :class="{ expanded: searchExpanded }">
-            <el-icon class="search-icon" @click="expandSearch"><search /></el-icon>
-            <input
-              ref="searchInput"
-              v-model="globalSearch"
-              type="text"
-              placeholder="搜索商品 SKU / 名称 / 条形码…"
-              @keyup.enter="onGlobalSearch"
-              @blur="collapseSearch"
-            />
-            <span class="shortcut">Ctrl K</span>
-          </div>
         </div>
         <div class="header-right">
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
@@ -99,9 +86,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Document, Menu, Moon, Search, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -198,52 +185,20 @@ function toggleDarkMode() {
   addLog(isDark.value ? 'info' : 'info', isDark.value ? '切换为暗色模式' : '切换为浅色模式')
 }
 
-/* ---------- 全局搜索 ---------- */
-const searchInput = ref<HTMLInputElement>()
-const globalSearch = ref('')
-const searchExpanded = ref(false)
-function expandSearch() {
-  searchExpanded.value = true
-  nextTick(() => searchInput.value?.focus())
-}
-function collapseSearch() {
-  // 保留展开态：仅当输入框失焦且无内容时收起
-  if (!globalSearch.value.trim()) {
-    searchExpanded.value = false
-  }
-}
-function onGlobalSearch() {
-  const kw = globalSearch.value.trim()
-  if (!kw) return
-  router.push({ path: '/products', query: { search: kw } })
-  globalSearch.value = ''
-  searchExpanded.value = false
-  addLog('info', '全局搜索', kw)
-}
-function onGlobalKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    expandSearch()
-  }
-}
-onMounted(() => {
-  isDark.value = document.documentElement.classList.contains('dark')
-  refreshLocalLogs()
-  window.addEventListener('keydown', onGlobalKeydown)
-  // 启动空闲自动退出监听（整个系统 3 小时无操作自动登出）
-  idleWatcher.start()
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onGlobalKeydown)
-  idleWatcher.stop()
-})
-
 /* ---------- 空闲自动退出（3 小时无操作） ---------- */
 const idleWatcher = createIdleWatcher(IDLE_TIMEOUT_MS, async () => {
   addLog('info', '自动退出', auth.user?.email || '')
   ElMessage.warning('长时间无操作，已自动退出登录')
   await auth.signOut()
   router.replace('/login')
+})
+onMounted(() => {
+  isDark.value = document.documentElement.classList.contains('dark')
+  refreshLocalLogs()
+  idleWatcher.start()
+})
+onBeforeUnmount(() => {
+  idleWatcher.stop()
 })
 
 /* ---------- 日志入口 ---------- */
@@ -356,14 +311,6 @@ html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 
 .hamburger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 17px; flex-shrink: 0; margin-right: 8px; }
 .hamburger:hover { background: rgba(255,255,255,.85); color: var(--accent); }
 
-/* 全局搜索框 */
-.global-search { display: flex; align-items: center; gap: 8px; width: 46px; overflow: hidden; padding: 0 12px; height: 36px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(255,255,255,.55); transition: width .25s ease; }
-.global-search.expanded { width: 320px; }
-.global-search .search-icon { font-size: 15px; color: var(--ink-3); cursor: pointer; flex-shrink: 0; }
-.global-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--ink); font-size: 13px; }
-.global-search input::placeholder { color: var(--ink-3); }
-.global-search .shortcut { flex-shrink: 0; font-size: 11px; color: var(--ink-3); background: rgba(255,255,255,.6); border-radius: 6px; padding: 2px 7px; }
-
 /* 顶栏按钮 */
 .topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
 .topbar-btn:hover { background: rgba(255,255,255,.85); color: var(--accent); transform: translateY(-1px); }
@@ -390,7 +337,6 @@ html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 
   .sidebar nav .group-items a .mico { font-size: 18px; width: auto; }
   .main { gap: 14px; }
   .topbar { padding: 12px 16px; min-height: 58px; }
-  .global-search.expanded { width: 240px; }
   .user-trigger .user { max-width: 120px; }
 }
 
@@ -409,7 +355,6 @@ html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 
   .main { height: 100%; gap: 10px; }
   .topbar { padding: 10px 12px; min-height: 52px; }
   .hamburger { display: inline-flex; }
-  .global-search { display: none; }
   .user-trigger .user { display: none; }
   .user-trigger { padding: 7px 11px; }
 }
