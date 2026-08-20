@@ -9,7 +9,7 @@
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
         <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量新增</el-button>
-        <el-button v-if="canWrite" type="primary" @click="openCreate">新增补货建议</el-button>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">采购新增</el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
     </div>
