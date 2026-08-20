@@ -68,6 +68,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const s = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+      // 销量时间范围（可选）：sales_from / sales_to，格式 YYYY-MM-DD 或 ISO
+      const salesFrom = typeof req.query.sales_from === 'string' && req.query.sales_from.trim() ? req.query.sales_from.trim() : '';
+      const salesTo = typeof req.query.sales_to === 'string' && req.query.sales_to.trim() ? req.query.sales_to.trim() : '';
 
       const supabase = getAdminClient();
       let query: any = supabase.from('products').select('*', { count: 'exact' });
@@ -115,12 +118,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
 
-        // 销量：销售明细累计（排除已取消订单）
-        const { data: salesRows, error: salesErr } = await supabase
+        // 销量：销售明细累计（排除已取消订单）；sales_from/sales_to 传了则按订单创建时间过滤
+        let salesQuery: any = supabase
           .from('sales_order_items')
-          .select('product_id, quantity, sales_orders!inner(status)')
+          .select('product_id, quantity, sales_orders!inner(created_at, status)')
           .in('product_id', pageIds)
           .neq('sales_orders.status', 'CANCELLED');
+        if (salesFrom) salesQuery = salesQuery.gte('sales_orders.created_at', salesFrom);
+        if (salesTo) salesQuery = salesQuery.lte('sales_orders.created_at', salesTo);
+        const { data: salesRows, error: salesErr } = await salesQuery;
         if (salesErr) throw salesErr;
         for (const r of salesRows || []) {
           const pid = r.product_id as string;

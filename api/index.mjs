@@ -26200,6 +26200,8 @@ async function handler9(req, res) {
       const s = typeof req.query.search === "string" ? req.query.search.trim() : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+      const salesFrom = typeof req.query.sales_from === "string" && req.query.sales_from.trim() ? req.query.sales_from.trim() : "";
+      const salesTo = typeof req.query.sales_to === "string" && req.query.sales_to.trim() ? req.query.sales_to.trim() : "";
       const supabase = getAdminClient();
       let query = supabase.from("products").select("*", { count: "exact" });
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
@@ -26230,7 +26232,10 @@ async function handler9(req, res) {
           const pid = r.product_id;
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
-        const { data: salesRows, error: salesErr } = await supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(status)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
+        let salesQuery = supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(created_at, status)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
+        if (salesFrom) salesQuery = salesQuery.gte("sales_orders.created_at", salesFrom);
+        if (salesTo) salesQuery = salesQuery.lte("sales_orders.created_at", salesTo);
+        const { data: salesRows, error: salesErr } = await salesQuery;
         if (salesErr) throw salesErr;
         for (const r of salesRows || []) {
           const pid = r.product_id;

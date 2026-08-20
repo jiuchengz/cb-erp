@@ -27,6 +27,41 @@
         <el-option label="启用" value="active" />
         <el-option label="停用" value="inactive" />
       </el-select>
+      <el-dropdown trigger="click" @command="onSalesRangeCommand">
+        <el-button>
+          {{ salesRangeLabel }}
+          <el-icon class="el-icon--right"><arrow-down /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu style="width: 320px; padding: 8px">
+            <div style="padding: 4px 12px; font-size: 12px; color: var(--color-muted)">销量时间范围</div>
+            <el-dropdown-item command="all" :class="{ 'sales-range-active': salesRangeKey === 'all' }">全部时间</el-dropdown-item>
+            <el-dropdown-item command="today" :class="{ 'sales-range-active': salesRangeKey === 'today' }">今日</el-dropdown-item>
+            <el-dropdown-item command="7d" :class="{ 'sales-range-active': salesRangeKey === '7d' }">近7天</el-dropdown-item>
+            <el-dropdown-item command="15d" :class="{ 'sales-range-active': salesRangeKey === '15d' }">近15天</el-dropdown-item>
+            <el-dropdown-item command="30d" :class="{ 'sales-range-active': salesRangeKey === '30d' }">近30天</el-dropdown-item>
+            <el-dropdown-item command="custom" :class="{ 'sales-range-active': salesRangeKey === 'custom' }">自定义</el-dropdown-item>
+            <div v-if="salesRangeKey === 'custom'" style="padding: 8px 12px 4px">
+              <el-date-picker
+                v-model="customSalesRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                style="width: 100%"
+              />
+            </div>
+            <div v-if="salesRangeKey !== 'all'" style="padding: 6px 12px 0; font-size: 12px; color: var(--color-muted)">
+              当前范围：{{ salesRangeDetail }}
+            </div>
+            <div style="padding: 8px 12px 4px; text-align: right">
+              <el-button size="small" @click="clearSalesRange">清除</el-button>
+              <el-button size="small" type="primary" @click="applySalesRange">确定</el-button>
+            </div>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
@@ -62,7 +97,7 @@
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
       <el-table-column prop="in_transit_qty" label="在途数量" width="100" align="right" />
-      <el-table-column prop="sales_qty" label="销量" width="90" align="right" />
+      <el-table-column prop="sales_qty" :label="salesColumnLabel" width="110" align="right" />
       <el-table-column prop="unit" label="单位" width="80" />
       <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
       <el-table-column label="售价元" width="100" align="right">
@@ -227,6 +262,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
@@ -247,6 +283,106 @@ const previewVisible = ref(false)
 const previewUrl = ref('')
 const query = reactive({ page: 1, pageSize: 20, search: '', status: '' })
 const rate = ref(0.38)
+
+// 销量时间范围下拉
+const salesRangeKey = ref('all') // all | today | 7d | 15d | 30d | custom
+const customSalesRange = ref<[string, string] | null>(null)
+const salesFrom = ref('')
+const salesTo = ref('')
+
+const salesRangePresets: Record<string, { label: string; from: () => string; to: () => string }> = {
+  today: {
+    label: '今日',
+    from: () => todayStr(),
+    to: () => todayStr(),
+  },
+  '7d': {
+    label: '近7天',
+    from: () => daysAgoStr(6),
+    to: () => todayStr(),
+  },
+  '15d': {
+    label: '近15天',
+    from: () => daysAgoStr(14),
+    to: () => todayStr(),
+  },
+  '30d': {
+    label: '近30天',
+    from: () => daysAgoStr(29),
+    to: () => todayStr(),
+  },
+}
+
+function daysAgoStr(n: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+const salesRangeLabel = computed(() => {
+  if (salesRangeKey.value === 'all') return '销量：全部时间'
+  if (salesRangeKey.value === 'custom') return customSalesRange.value?.length ? `销量：${customSalesRange.value[0]} ~ ${customSalesRange.value[1]}` : '销量：自定义'
+  return `销量：${salesRangePresets[salesRangeKey.value].label}`
+})
+
+const salesRangeDetail = computed(() => {
+  if (salesFrom.value && salesTo.value) return `${salesFrom.value} 至 ${salesTo.value}`
+  if (salesRangeKey.value === 'custom' && customSalesRange.value?.length) return `${customSalesRange.value[0]} 至 ${customSalesRange.value[1]}`
+  return ''
+})
+
+const salesColumnLabel = computed(() => {
+  if (salesRangeKey.value === 'all') return '销量'
+  const d = salesRangeDetail.value
+  return d ? `销量(${d})` : '销量'
+})
+
+function onSalesRangeCommand(cmd: string) {
+  if (cmd === 'custom') {
+    salesRangeKey.value = 'custom'
+    return
+  }
+  salesRangeKey.value = cmd
+  if (cmd === 'all') {
+    salesFrom.value = ''
+    salesTo.value = ''
+  } else {
+    salesFrom.value = salesRangePresets[cmd].from()
+    salesTo.value = salesRangePresets[cmd].to()
+  }
+  load()
+}
+
+function applySalesRange() {
+  if (salesRangeKey.value === 'custom') {
+    if (customSalesRange.value?.length === 2) {
+      salesFrom.value = customSalesRange.value[0]
+      salesTo.value = customSalesRange.value[1]
+      load()
+    } else {
+      ElMessage.warning('请选择自定义日期范围')
+    }
+    return
+  }
+  if (salesRangeKey.value === 'all') {
+    salesFrom.value = ''
+    salesTo.value = ''
+  } else {
+    salesFrom.value = salesRangePresets[salesRangeKey.value].from()
+    salesTo.value = salesRangePresets[salesRangeKey.value].to()
+  }
+  load()
+}
+
+function clearSalesRange() {
+  salesRangeKey.value = 'all'
+  customSalesRange.value = null
+  salesFrom.value = ''
+  salesTo.value = ''
+  load()
+}
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
 watch(
@@ -318,7 +454,10 @@ function onPreviewImage(url: string) {
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/products', { params: query })
+    const params: Record<string, any> = { ...query }
+    if (salesFrom.value) params.sales_from = salesFrom.value
+    if (salesTo.value) params.sales_to = salesTo.value
+    const { data } = await api.get('/products', { params })
     rows.value = data.data ?? []
     total.value = data.total ?? 0
   } catch (e: any) {
@@ -848,5 +987,9 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   background: var(--color-fill);
   border-radius: 4px;
   font-size: 12px;
+}
+.sales-range-active {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 </style>
