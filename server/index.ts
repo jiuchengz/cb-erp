@@ -21,6 +21,8 @@ import warehouses from './_handlers/warehouses';
 import dashboard from './_handlers/dashboard';
 import forwarders from './_handlers/forwarders';
 import forwardersId from './_handlers/forwarders/[id]';
+import cargoStatuses from './_handlers/cargo-statuses';
+import cargoStatusesId from './_handlers/cargo-statuses/[id]';
 import afterSalesId from './_handlers/after-sales/[id]';
 import inventoryId from './_handlers/inventory/[id]';
 import inventoryAdjust from './_handlers/inventory/adjust';
@@ -47,6 +49,8 @@ const routes: Route[] = [
   { pattern: /^\/auth\/password$/, handler: authPassword },
   { pattern: /^\/auth\/me$/, handler: authMe },
   { pattern: /^\/dashboard\/stats$/, handler: dashboard },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: cargoStatusesId, params: ['id'] },
+  { pattern: /^\/cargo-statuses$/, handler: cargoStatuses },
   { pattern: /^\/forwarders\/([^/]+)$/, handler: forwardersId, params: ['id'] },
   { pattern: /^\/forwarders$/, handler: forwarders },
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },

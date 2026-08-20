@@ -10,6 +10,7 @@
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
         <el-button v-if="canWrite" @click="openForwarderDialog">货代管理</el-button>
+        <el-button v-if="canWrite" @click="openCargoStatusDialog">状态管理</el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增发货单</el-button>
         <input ref="importFileRef" type="file" accept=".xlsx,.xls" style="display: none" @change="onImportFileChange" />
       </div>
@@ -19,16 +20,13 @@
       <el-select v-model="query.status" placeholder="状态" clearable style="width: 160px" @change="load">
         <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
-      <el-select v-model="query.cargo_status" placeholder="货物状态" clearable style="width: 160px" @change="load">
-        <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name" />
-      </el-select>
       <el-select v-model="query.bill_check_status" placeholder="账单核对" clearable style="width: 160px" @change="load">
         <el-option v-for="s in billCheckStatusOptions" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+    <el-table v-loading="loading" :data="rows" border stripe :row-style="rowStyle" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column label="发货时间" width="130">
         <template #default="{ row }">
@@ -434,6 +432,32 @@
         <el-button v-if="fwEditingId" @click="resetFwForm">取消编辑</el-button>
       </div>
     </el-dialog>
+    <!-- 货物状态管理弹窗 -->
+    <el-dialog v-model="cargoStatusVisible" title="货物状态管理" width="620px" destroy-on-close>
+      <el-table :data="cargoStatuses" border stripe size="small" max-height="360">
+        <el-table-column prop="sort_order" label="排序" width="80" />
+        <el-table-column prop="name" label="状态名称" min-width="150" />
+        <el-table-column label="颜色" min-width="160">
+          <template #default="{ row }">
+            <span class="dot" :style="{ display: 'inline-block', width: '14px', height: '14px', borderRadius: '3px', backgroundColor: row.color, border: '1px solid #dcdfe6', marginRight: '6px', verticalAlign: 'middle' }" />
+            <span>{{ row.color }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="editCargoStatus(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeCargoStatus(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="fw-form">
+        <el-input v-model="csForm.name" placeholder="状态名称(必填)" style="width: 180px" />
+        <el-color-picker v-model="csForm.color" />
+        <el-input v-model="csForm.sort_order" placeholder="排序(数字)" style="width: 130px" />
+        <el-button type="primary" :loading="csSaving" @click="saveCargoStatus">{{ csEditingId ? '保存修改' : '新增状态' }}</el-button>
+        <el-button v-if="csEditingId" @click="resetCsForm">取消编辑</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -472,20 +496,35 @@ const statusMap: Record<string, { label: string; type: string }> = {
   CANCELLED: { label: '已取消', type: 'danger' },
 }
 
-// 货物状态字典（对齐旧文件：name + color）
-const cargoStatuses = [
-  { name: '转运中', color: '#FFFFFF' },
-  { name: '到港', color: '#F0AD4E' },
-  { name: '清关', color: '#17A2B8' },
-  { name: '已预约', color: '#007BFF' },
-  { name: '已入仓', color: '#28A745' },
-]
+// 货物状态字典（动态从 /api/cargo-statuses 加载，name + color）
+const cargoStatuses = ref<any[]>([])
+
+async function loadCargoStatuses() {
+  try {
+    const { data } = await api.get('/cargo-statuses')
+    cargoStatuses.value = data.data ?? []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载货物状态失败')
+  }
+}
 
 function getCargoColor(s: string) {
-  return cargoStatuses.find((x) => x.name === s)?.color || '#FFFFFF'
+  return cargoStatuses.value.find((x) => x.name === s)?.color || '#FFFFFF'
 }
 function cargoLabel(s: string) {
-  return cargoStatuses.find((x) => x.name === s)?.name || s || '-'
+  return cargoStatuses.value.find((x) => x.name === s)?.name || s || '-'
+}
+
+// 整行着色：按 cargo_status 取颜色作为背景，文字色按明暗自适应
+function rowStyle({ row }: { row: any }) {
+  const color = getCargoColor(row.cargo_status)
+  if (!color) return {}
+  const c = color.replace('#', '')
+  const r = parseInt(c.substring(0, 2), 16)
+  const g = parseInt(c.substring(2, 4), 16)
+  const b = parseInt(c.substring(4, 6), 16)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return { backgroundColor: color, color: luminance > 0.6 ? '#303133' : '#fff' }
 }
 
 const warehouseStatusOptions = ['全部入仓', '差异入仓']
@@ -538,7 +577,7 @@ function formatDateOnly(v: string) {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, status: '', cargo_status: '', bill_check_status: '' })
+const query = reactive({ page: 1, pageSize: 20, status: '', bill_check_status: '' })
 
 async function load() {
   loading.value = true
@@ -1171,9 +1210,83 @@ async function removeForwarder(row: any) {
   }
 }
 
+// ===== 货物状态管理 =====
+const cargoStatusVisible = ref(false)
+const csSaving = ref(false)
+const csEditingId = ref('')
+const csForm = reactive({ name: '', color: '#FFFFFF', sort_order: 0 })
+
+function resetCsForm() {
+  csEditingId.value = ''
+  csForm.name = ''
+  csForm.color = '#FFFFFF'
+  csForm.sort_order = 0
+}
+
+function openCargoStatusDialog() {
+  resetCsForm()
+  loadCargoStatuses()
+  cargoStatusVisible.value = true
+}
+
+function editCargoStatus(row: any) {
+  csEditingId.value = row.id
+  csForm.name = row.name
+  csForm.color = row.color || '#FFFFFF'
+  csForm.sort_order = row.sort_order ?? 0
+}
+
+async function saveCargoStatus() {
+  if (!csForm.name.trim()) {
+    ElMessage.warning('请填写状态名称')
+    return
+  }
+  csSaving.value = true
+  try {
+    const payload = {
+      name: csForm.name.trim(),
+      color: csForm.color || '#FFFFFF',
+      sort_order: csForm.sort_order ?? 0,
+    }
+    if (csEditingId.value) {
+      await api.patch(`/cargo-statuses/${csEditingId.value}`, payload)
+      ElMessage.success('修改成功')
+    } else {
+      await api.post('/cargo-statuses', payload)
+      ElMessage.success('新增成功')
+    }
+    resetCsForm()
+    loadCargoStatuses()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    csSaving.value = false
+  }
+}
+
+async function removeCargoStatus(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除货物状态「${row.name}」吗？`, '删除货物状态', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/cargo-statuses/${row.id}`)
+    ElMessage.success('删除成功')
+    loadCargoStatuses()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
+  }
+}
+
 onMounted(() => {
   load()
   loadOptions()
+  loadCargoStatuses()
 })
 </script>
 

@@ -28,8 +28,13 @@
             <el-tag :type="statusMeta[row.status]?.type || 'info'">{{ statusMeta[row.status]?.label || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="carrier" label="承运商" min-width="120">
-          <template #default="{ row }">{{ row.carrier || '-' }}</template>
+        <el-table-column label="货物状态" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.cargo_status" :style="{ backgroundColor: cargoStatusMap[row.cargo_status] || undefined }" :type="cargoStatusMap[row.cargo_status] ? '' : 'info'">
+              {{ row.cargo_status }}
+            </el-tag>
+            <span v-else>-</span>
+          </template>
         </el-table-column>
         <el-table-column label="时间" min-width="180">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
@@ -64,6 +69,20 @@ const statusMeta: Record<string, { label: string; type: string }> = {
   IN_TRANSIT: { label: '运输中', type: 'info' },
   DELIVERED: { label: '已签收', type: 'success' },
   CANCELLED: { label: '已取消', type: 'danger' },
+}
+
+// 货物状态字典：name -> color（与发货管理一致，动态加载）
+const cargoStatusMap = ref<Record<string, string>>({})
+
+async function loadCargoStatuses() {
+  try {
+    const { data } = await api.get('/cargo-statuses')
+    const map: Record<string, string> = {}
+    for (const s of data.data ?? []) map[s.name] = s.color
+    cargoStatusMap.value = map
+  } catch {
+    // 字典加载失败时状态列回退为灰色 info，不影响首页统计展示
+  }
 }
 
 const statCards = computed(() => [
@@ -104,7 +123,10 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadCargoStatuses()
+})
 </script>
 
 <style scoped>

@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         countAll('after_sales'),
         supabase
           .from('shipments')
-          .select('id, tracking_no, status, carrier, created_at')
+          .select('id, tracking_no, status, carrier, cargo_status, created_at')
           .order('created_at', { ascending: false })
           .limit(5),
       ]);
