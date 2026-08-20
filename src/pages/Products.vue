@@ -2,6 +2,11 @@
   <div class="page">
     <div class="page-header">
       <h2>商品管理</h2>
+      <div class="profit-bar">
+        <span class="profit-label">汇率（RMB/比索）</span>
+        <el-input-number v-model="rate" :min="0.01" :max="10" :precision="4" :step="0.01" size="small" />
+        <span class="profit-tip">利润列实时重算（只读联动）</span>
+      </div>
       <div>
         <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
@@ -51,16 +56,10 @@
         start-placeholder="开始日期"
         end-placeholder="结束日期"
         clearable
-        style="width: 200px"
+        style="width: 180px"
         @change="onDateRangeChange"
       />
       <el-button type="primary" @click="load">查询</el-button>
-    </div>
-
-    <div class="profit-bar">
-      <span class="profit-label">汇率（RMB/比索）</span>
-      <el-input-number v-model="rate" :min="0.01" :max="10" :precision="4" :step="0.01" size="small" />
-      <span class="profit-tip">修改汇率后利润列实时重算（只读联动）</span>
     </div>
 
     <div class="table-wrap">
@@ -875,12 +874,25 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 16px;
+}
+.page-header .profit-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
 }
 .filters {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 .profit-bar {
   display: flex;
