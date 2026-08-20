@@ -1,5 +1,5 @@
 -- 004_warehouses_inventory.sql
--- 仓库 + 库位 + 库存 + 库存流水 + 库存预留
+-- 仓库 + 库存 + 库存流水
 
 create table if not exists public.warehouses (
   id uuid primary key default gen_random_uuid(),
@@ -8,16 +8,6 @@ create table if not exists public.warehouses (
   address text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
-create table if not exists public.warehouse_locations (
-  id uuid primary key default gen_random_uuid(),
-  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
-  code text not null,
-  name text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (warehouse_id, code)
 );
 
 create table if not exists public.inventory (
@@ -46,30 +36,13 @@ create table if not exists public.inventory_transactions (
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.inventory_reservations (
-  id uuid primary key default gen_random_uuid(),
-  inventory_id uuid not null references public.inventory(id) on delete cascade,
-  quantity numeric not null check (quantity > 0),
-  reference_type text,
-  reference_id uuid,
-  status text not null default 'active' check (status in ('active','released','consumed')),
-  created_by uuid references public.profiles(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
 create index if not exists idx_inventory_product on public.inventory(product_id);
 create index if not exists idx_inventory_warehouse on public.inventory(warehouse_id);
 create index if not exists idx_inv_txn_product on public.inventory_transactions(product_id);
 create index if not exists idx_inv_txn_warehouse on public.inventory_transactions(warehouse_id);
 create index if not exists idx_inv_txn_created on public.inventory_transactions(created_at);
-create index if not exists idx_inv_res_inventory on public.inventory_reservations(inventory_id);
 
 create trigger trg_warehouses_updated before update on public.warehouses
   for each row execute function public.set_updated_at();
-create trigger trg_locations_updated before update on public.warehouse_locations
-  for each row execute function public.set_updated_at();
 create trigger trg_inventory_updated before update on public.inventory
-  for each row execute function public.set_updated_at();
-create trigger trg_reservations_updated before update on public.inventory_reservations
   for each row execute function public.set_updated_at();

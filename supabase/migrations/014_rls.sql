@@ -11,13 +11,10 @@ alter table public.role_permissions enable row level security;
 alter table public.user_roles enable row level security;
 
 alter table public.products enable row level security;
-alter table public.product_variants enable row level security;
 
 alter table public.warehouses enable row level security;
-alter table public.warehouse_locations enable row level security;
 alter table public.inventory enable row level security;
 alter table public.inventory_transactions enable row level security;
-alter table public.inventory_reservations enable row level security;
 
 alter table public.sales_orders enable row level security;
 alter table public.sales_order_items enable row level security;
