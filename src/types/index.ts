@@ -44,16 +44,6 @@ export interface Product extends BaseEntity {
   first_leg_freight: number | null
   last_mile_delivery_peso: number | null
   ml_commission_rate: number | null
-  // 服务端按时间窗口聚合的销量字段（商品列表接口返回）
-  domestic_stock?: number
-  overseas_stock?: number
-  in_transit_qty?: number
-  sales_qty?: number
-  sales_today?: number
-  sales_7d?: number
-  sales_15d?: number
-  sales_month?: number
-  sales_custom?: number | null
 }
 
 export interface Warehouse extends BaseEntity {

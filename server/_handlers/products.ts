@@ -68,9 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const s = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
-      // 自定义销量区间（YYYY-MM-DD，可选）
-      const salesFrom = typeof req.query.sales_from === 'string' ? req.query.sales_from.trim() : '';
-      const salesTo = typeof req.query.sales_to === 'string' ? req.query.sales_to.trim() : '';
 
       const supabase = getAdminClient();
       let query: any = supabase.from('products').select('*', { count: 'exact' });
@@ -85,16 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = data || [];
       const pageIds = rows.map((r: any) => r.id);
 
-      // 当前页产品聚合：国内库存 / 国外库存 / 在途数量 / 销量（总 + 今日 + 7天 + 15天 + 本月 + 自定义区间）
+      // 当前页产品聚合：国内库存 / 国外库存 / 在途数量 / 销量
       const domMap = new Map<string, number>();
       const ovsMap = new Map<string, number>();
       const transitMap = new Map<string, number>();
       const salesMap = new Map<string, number>();
-      const todayMap = new Map<string, number>();
-      const d7Map = new Map<string, number>();
-      const d15Map = new Map<string, number>();
-      const monthMap = new Map<string, number>();
-      const customMap = new Map<string, number>();
 
       if (pageIds.length) {
         // 库存：inventory join warehouses(wh_type)
@@ -123,51 +115,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
 
-        // 销量：销售明细累计（排除已取消订单），按订单创建时间拆分为今日/7天/15天/本月/自定义区间
+        // 销量：销售明细累计（排除已取消订单）
         const { data: salesRows, error: salesErr } = await supabase
           .from('sales_order_items')
-          .select('product_id, quantity, sales_orders!inner(status, created_at)')
+          .select('product_id, quantity, sales_orders!inner(status)')
           .in('product_id', pageIds)
           .neq('sales_orders.status', 'CANCELLED');
         if (salesErr) throw salesErr;
-
-        // 时间窗口边界（服务器 UTC，按中国时区 UTC+8 折算自然日）
-        const now = new Date();
-        const cnNow = new Date(now.getTime() + 8 * 3600 * 1000);
-        const startOfToday = Date.UTC(cnNow.getUTCFullYear(), cnNow.getUTCMonth(), cnNow.getUTCDate()) - 8 * 3600 * 1000;
-        const startOf7d = startOfToday - 6 * 24 * 3600 * 1000; // 含今天，共 7 天
-        const startOf15d = startOfToday - 14 * 24 * 3600 * 1000; // 含今天，共 15 天
-        const startOfMonth = Date.UTC(cnNow.getUTCFullYear(), cnNow.getUTCMonth(), 1) - 8 * 3600 * 1000;
-        let customStart = NaN;
-        let customEnd = NaN;
-        const isCustom = /^\d{4}-\d{2}-\d{2}$/.test(salesFrom) || /^\d{4}-\d{2}-\d{2}$/.test(salesTo);
-        if (isCustom) {
-          const s = /^\d{4}-\d{2}-\d{2}$/.test(salesFrom)
-            ? Date.parse(`${salesFrom}T00:00:00+08:00`)
-            : startOfToday;
-          const e = /^\d{4}-\d{2}-\d{2}$/.test(salesTo)
-            ? Date.parse(`${salesTo}T23:59:59.999+08:00`)
-            : now.getTime();
-          if (s <= e) {
-            customStart = s;
-            customEnd = e;
-          }
-        }
-
-        const addTo = (map: Map<string, number>, pid: string, qty: number) =>
-          map.set(pid, (map.get(pid) || 0) + qty);
-
         for (const r of salesRows || []) {
           const pid = r.product_id as string;
-          const qty = Number(r.quantity || 0);
-          const orderCreated = new Date((r.sales_orders as any)?.created_at).getTime();
-          if (!Number.isFinite(orderCreated)) continue;
-          addTo(salesMap, pid, qty);
-          if (orderCreated >= startOfToday) addTo(todayMap, pid, qty);
-          if (orderCreated >= startOf7d) addTo(d7Map, pid, qty);
-          if (orderCreated >= startOf15d) addTo(d15Map, pid, qty);
-          if (orderCreated >= startOfMonth) addTo(monthMap, pid, qty);
-          if (Number.isFinite(customStart) && orderCreated >= customStart && orderCreated <= customEnd) addTo(customMap, pid, qty);
+          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
         }
       }
 
@@ -177,11 +134,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         overseas_stock: ovsMap.get(r.id) || 0,
         in_transit_qty: transitMap.get(r.id) || 0,
         sales_qty: salesMap.get(r.id) || 0,
-        sales_today: todayMap.get(r.id) || 0,
-        sales_7d: d7Map.get(r.id) || 0,
-        sales_15d: d15Map.get(r.id) || 0,
-        sales_month: monthMap.get(r.id) || 0,
-        sales_custom: Number.isFinite(customStart) ? customMap.get(r.id) || 0 : null,
       }));
 
       return res.status(200).json({ data: enriched, total: count ?? 0, page: q.page, pageSize: q.pageSize });
