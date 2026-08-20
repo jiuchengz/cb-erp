@@ -32,160 +32,57 @@
       <el-table-column type="selection" width="46" />
       <el-table-column label="发货时间" width="130">
         <template #default="{ row }">
-          <el-date-picker
-            v-if="canWrite"
-            :model-value="row.ship_date || null"
-            type="date"
-            value-format="YYYY-MM-DD"
-            placeholder="选择日期"
-            size="small"
-            style="width: 120px"
-            @change="(v: string) => onChangeShipDate(row, v)"
-          />
-          <span v-else>{{ row.ship_date || '-' }}</span>
+          <span>{{ row.ship_date || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="货代" min-width="130">
         <template #default="{ row }">
-          <el-select
-            v-if="canWrite"
-            :model-value="row.forwarder_id || ''"
-            placeholder="未指定"
-            clearable
-            size="small"
-            style="width: 120px"
-            @update:model-value="onChangeForwarder(row, $event)"
-          >
-            <el-option v-for="f in forwarders" :key="f.id" :label="f.name" :value="f.id" />
-          </el-select>
-          <span v-else>{{ row.forwarders?.name || '-' }}</span>
+          <span>{{ row.forwarders?.name || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="空海运" width="100">
         <template #default="{ row }">
-          <el-select
-            v-if="canWrite"
-            :model-value="row.shipping_mode || ''"
-            placeholder="选择"
-            clearable
-            size="small"
-            style="width: 90px"
-            @update:model-value="onChangeShippingMode(row, $event)"
-          >
-            <el-option label="空运" value="空运" />
-            <el-option label="海运" value="海运" />
-          </el-select>
-          <span v-else>{{ row.shipping_mode || '-' }}</span>
+          <span>{{ row.shipping_mode || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="仓号" width="100">
         <template #default="{ row }">
-          <el-select
-            v-if="canWrite"
-            :model-value="row.warehouse_no || ''"
-            placeholder="未填"
-            clearable
-            size="small"
-            style="width: 90px"
-            @update:model-value="onChangeWarehouseNo(row, $event)"
-          >
-            <el-option label="3仓" value="3仓" />
-            <el-option label="5仓" value="5仓" />
-          </el-select>
-          <span v-else>{{ row.warehouse_no || '-' }}</span>
+          <span>{{ row.warehouse_no || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="发货箱数" width="100">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.shipping_cartons ?? ''"
-            placeholder="箱数"
-            size="small"
-            style="width: 90px"
-            @change="(v: string) => onChangeShippingCartons(row, v)"
-          />
-          <span v-else>{{ row.shipping_cartons ?? '-' }}</span>
+          <span>{{ row.shipping_cartons ?? '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="发货数量" width="100">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.shipping_qty ?? ''"
-            placeholder="数量"
-            size="small"
-            style="width: 90px"
-            @change="(v: string) => onChangeShippingQty(row, v)"
-          />
-          <span v-else>{{ row.shipping_qty ?? '-' }}</span>
+          <span>{{ row.shipping_qty ?? '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="货件号" min-width="150">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.shipment_no ?? ''"
-            placeholder="货件号"
-            size="small"
-            style="width: 140px"
-            @change="(v: string) => onChangeShipmentNo(row, v)"
-          />
-          <span v-else>{{ row.shipment_no || '-' }}</span>
+          <span>{{ row.shipment_no || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="货代号" min-width="120">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.product_code ?? ''"
-            placeholder="货代号"
-            size="small"
-            style="width: 110px"
-            @change="(v: string) => onChangeProductCode(row, v)"
-          />
-          <span v-else>{{ row.product_code || '-' }}</span>
+          <span>{{ row.product_code || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="计费重量/体积" min-width="135">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.billable_weight_vol ?? ''"
-            placeholder="如 30.8kg/0.17m³"
-            size="small"
-            style="width: 125px"
-            @change="(v: string) => onChangeBillableWeightVol(row, v)"
-          />
-          <span v-else>{{ row.billable_weight_vol || '-' }}</span>
+          <span>{{ row.billable_weight_vol || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="体积差" width="100">
         <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            :model-value="row.volume_diff ?? ''"
-            placeholder="如 +0.06m³"
-            size="small"
-            style="width: 90px"
-            @change="(v: string) => onChangeVolumeDiff(row, v)"
-          />
-          <span v-else>{{ row.volume_diff || '-' }}</span>
+          <span>{{ row.volume_diff || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="计费金额" width="110">
         <template #default="{ row }">
-          <el-input-number
-            v-if="canWrite"
-            :model-value="row.billable_amount ?? 0"
-            :min="0"
-            :precision="2"
-            controls-position="right"
-            size="small"
-            style="width: 100px"
-            @change="(v: number | undefined) => onChangeBillableAmount(row, v)"
-          />
-          <span v-else>{{ row.billable_amount ?? '-' }}</span>
+          <span>{{ row.billable_amount ?? '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="运费" width="100">
@@ -205,32 +102,12 @@
       </el-table-column>
       <el-table-column label="PULL后台申报数量" min-width="145">
         <template #default="{ row }">
-          <el-input-number
-            v-if="canWrite"
-            :model-value="row.pull_declare_qty ?? 0"
-            :min="0"
-            :precision="0"
-            controls-position="right"
-            size="small"
-            style="width: 135px"
-            @change="(v: number | undefined) => onChangePullDeclareQty(row, v)"
-          />
-          <span v-else>{{ row.pull_declare_qty ?? '-' }}</span>
+          <span>{{ row.pull_declare_qty ?? '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="(预计)到港时间" min-width="130">
         <template #default="{ row }">
-          <el-date-picker
-            v-if="canWrite"
-            :model-value="row.estimated_arrival || null"
-            type="date"
-            value-format="YYYY-MM-DD"
-            placeholder="选择日期"
-            size="small"
-            style="width: 120px"
-            @change="(v: string) => onChangeEstimatedArrival(row, v)"
-          />
-          <span v-else>{{ row.estimated_arrival || '-' }}</span>
+          <span>{{ row.estimated_arrival || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="货物状态" width="120">
@@ -327,6 +204,14 @@
           </div>
         </template>
       </el-table-column>
+      <el-table-column label="操作" width="130" fixed="right">
+        <template #default="{ row }">
+          <template v-if="canWrite">
+            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="danger" size="small" @click="removeRow(row)">删除</el-button>
+          </template>
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-pagination
@@ -387,6 +272,89 @@
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="editVisible" title="编辑发货单" width="600px" destroy-on-close>
+      <el-form :model="editForm" label-width="120px">
+        <el-form-item label="发货时间">
+          <el-date-picker v-model="editForm.ship_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="货代">
+          <el-select v-model="editForm.forwarder_id" clearable filterable placeholder="选择货代" style="width: 100%">
+            <el-option v-for="f in activeForwarders" :key="f.id" :label="f.name" :value="f.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="空海运">
+          <el-select v-model="editForm.shipping_mode" placeholder="选择运输方式" style="width: 100%">
+            <el-option label="空运" value="空运" />
+            <el-option label="海运" value="海运" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="仓号">
+          <el-select v-model="editForm.warehouse_no" placeholder="选择仓号" style="width: 100%">
+            <el-option label="3仓" value="3仓" />
+            <el-option label="5仓" value="5仓" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="发货箱数">
+          <el-input v-model.number="editForm.shipping_cartons" type="number" placeholder="请输入箱数" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="发货数量">
+          <el-input v-model.number="editForm.shipping_qty" type="number" placeholder="请输入数量" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="货件号" required>
+          <el-input v-model="editForm.shipment_no" placeholder="请输入货件号" />
+        </el-form-item>
+        <el-form-item label="货代号">
+          <el-input v-model="editForm.product_code" placeholder="请输入货代号" />
+        </el-form-item>
+        <el-form-item label="计费重量/体积">
+          <el-input v-model="editForm.billable_weight_vol" placeholder="如 30.8kg/0.17m³" />
+        </el-form-item>
+        <el-form-item label="体积差">
+          <el-input v-model="editForm.volume_diff" placeholder="如 +0.06m³" />
+        </el-form-item>
+        <el-form-item label="计费金额">
+          <el-input-number v-model="editForm.billable_amount" :min="0" :precision="2" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="PULL后台申报数量">
+          <el-input-number v-model="editForm.pull_declare_qty" :min="0" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="(预计)到港时间">
+          <el-date-picker v-model="editForm.estimated_arrival" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="货物状态">
+          <el-select v-model="editForm.cargo_status" placeholder="选择货物状态" style="width: 100%">
+            <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name">
+              <span class="dot" :style="{ backgroundColor: s.color }" />
+              <span>{{ s.name }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="预约时间">
+          <el-date-picker v-model="editForm.appointment_time" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" placeholder="选择时间" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="入仓情况">
+          <el-select v-model="editForm.warehouse_status" clearable placeholder="选择入仓情况" style="width: 100%">
+            <el-option v-for="s in warehouseStatusOptions" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="实际入仓数量">
+          <el-input-number v-model="editForm.actual_warehouse_qty" :min="0" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="异常情况及罚金">
+          <el-input v-model="editForm.abnormal_penalty" placeholder="如 标签不符-罚$50" />
+        </el-form-item>
+        <el-form-item label="账单运费核对">
+          <el-select v-model="editForm.bill_check_status" style="width: 100%">
+            <el-option v-for="s in billCheckStatusOptions" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -623,42 +591,6 @@ function onChangeBillCheck(row: any, v: string) {
 function onChangeAppointment(row: any, v: string) {
   patchShipment(row, { appointment_time: v || null })
 }
-function onChangeWarehouseNo(row: any, v: string) {
-  patchShipment(row, { warehouse_no: v || null })
-}
-function onChangeShipDate(row: any, v: string) {
-  patchShipment(row, { ship_date: v || null })
-}
-function onChangeShippingCartons(row: any, v: string) {
-  patchShipment(row, { shipping_cartons: v === '' ? null : Number(v) })
-}
-function onChangeShippingQty(row: any, v: string) {
-  patchShipment(row, { shipping_qty: v === '' ? null : Number(v) })
-}
-function onChangeShippingMode(row: any, v: string) {
-  patchShipment(row, { shipping_mode: v || null })
-}
-function onChangeShipmentNo(row: any, v: string) {
-  patchShipment(row, { shipment_no: v || null })
-}
-function onChangeProductCode(row: any, v: string) {
-  patchShipment(row, { product_code: v || null })
-}
-function onChangeBillableWeightVol(row: any, v: string) {
-  patchShipment(row, { billable_weight_vol: v || null })
-}
-function onChangeVolumeDiff(row: any, v: string) {
-  patchShipment(row, { volume_diff: v || null })
-}
-function onChangeBillableAmount(row: any, v: number | undefined) {
-  patchShipment(row, { billable_amount: v ?? null })
-}
-function onChangePullDeclareQty(row: any, v: number | undefined) {
-  patchShipment(row, { pull_declare_qty: v ?? null })
-}
-function onChangeEstimatedArrival(row: any, v: string) {
-  patchShipment(row, { estimated_arrival: v || null })
-}
 
 const forwarders = ref<any[]>([])
 const activeForwarders = computed(() => forwarders.value.filter((f) => f.is_active))
@@ -734,6 +666,98 @@ async function save() {
     ElMessage.error(e?.response?.data?.error?.message || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+// ---- 编辑弹窗 ----
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editForm = ref<any>({})
+const editId = ref<string>('')
+
+function openEdit(row: any) {
+  editId.value = row.id
+  editForm.value = {
+    warehouse_no: row.warehouse_no ?? null,
+    ship_date: row.ship_date ?? null,
+    forwarder_id: row.forwarder_id ?? null,
+    shipping_cartons: row.shipping_cartons ?? 0,
+    shipping_qty: row.shipping_qty ?? 0,
+    shipping_mode: row.shipping_mode ?? null,
+    shipment_no: row.shipment_no ?? '',
+    product_code: row.product_code ?? null,
+    billable_weight_vol: row.billable_weight_vol ?? null,
+    volume_diff: row.volume_diff ?? null,
+    billable_amount: row.billable_amount ?? null,
+    pull_declare_qty: row.pull_declare_qty ?? 0,
+    estimated_arrival: row.estimated_arrival ?? null,
+    cargo_status: row.cargo_status ?? '转运中',
+    appointment_time: row.appointment_time ?? null,
+    warehouse_status: row.warehouse_status ?? null,
+    actual_warehouse_qty: row.actual_warehouse_qty ?? 0,
+    abnormal_penalty: row.abnormal_penalty ?? null,
+    bill_check_status: row.bill_check_status ?? '待确认',
+  }
+  editVisible.value = true
+}
+
+async function saveEdit() {
+  const f = editForm.value
+  if (!f.shipment_no || !String(f.shipment_no).trim()) {
+    ElMessage.warning('请输入货件号')
+    return
+  }
+  editSaving.value = true
+  try {
+    const payload: any = {
+      warehouse_no: f.warehouse_no || null,
+      ship_date: f.ship_date || null,
+      forwarder_id: f.forwarder_id || null,
+      shipping_cartons: f.shipping_cartons ?? null,
+      shipping_qty: f.shipping_qty ?? null,
+      shipping_mode: f.shipping_mode || null,
+      shipment_no: String(f.shipment_no).trim(),
+      product_code: f.product_code || null,
+      billable_weight_vol: f.billable_weight_vol || null,
+      volume_diff: f.volume_diff || null,
+      billable_amount: f.billable_amount ?? null,
+      pull_declare_qty: f.pull_declare_qty ?? null,
+      estimated_arrival: f.estimated_arrival || null,
+      cargo_status: f.cargo_status,
+      appointment_time: f.appointment_time || null,
+      warehouse_status: f.warehouse_status || null,
+      actual_warehouse_qty: f.actual_warehouse_qty ?? null,
+      abnormal_penalty: f.abnormal_penalty || null,
+      bill_check_status: f.bill_check_status,
+    }
+    await api.patch(`/shipments/${editId.value}`, payload)
+    ElMessage.success('更新成功')
+    editVisible.value = false
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '更新失败')
+  } finally {
+    editSaving.value = false
+  }
+}
+
+// ---- 删除单行 ----
+async function removeRow(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除发货单「${row.shipment_no || row.tracking_no || row.id}」吗？`, '删除发货单', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/shipments/${row.id}`)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
   }
 }
 
