@@ -51,7 +51,7 @@
         start-placeholder="开始日期"
         end-placeholder="结束日期"
         clearable
-        style="width: 300px"
+        style="width: 240px"
         @change="onDateRangeChange"
       />
       <el-button type="primary" @click="load">查询</el-button>
