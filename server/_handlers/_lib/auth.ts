@@ -8,31 +8,6 @@ export interface AuthContext {
   displayName: string;
   roles: string[];
   permissions: string[];
-  diagEnvKeyRole: string;
-  diagEnvUrlMatch: string;
-  diagQuery: string;
-}
-
-// 提取 Supabase URL 中的项目 ref，用于诊断 SUPABASE_URL 是否指向正确项目
-function extractUrlRef(u: string): string {
-  const m = u.match(/^https?:\/\/([a-z0-9]+)\.supabase\.co\/?$/i);
-  return m ? m[1] : `unexpected:${u.slice(0, 60)}`;
-}
-
-// 解码 JWT 的 role 字段，用于诊断线上函数实际读到的 service key 身份（仅截取前 40 字符，不泄露完整 key）
-function decodeJwtRole(token: string): string {
-  if (!token) return 'missing';
-  const head = token.slice(0, 40);
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return `malformed(len=${token.length},head=${head})`;
-    let p = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (p.length % 4 !== 0) p += '=';
-    const json = JSON.parse(Buffer.from(p, 'base64').toString('utf8'));
-    return json.role || `no-role-field(len=${token.length},head=${head})`;
-  } catch (e: any) {
-    return `parse-fail(len=${token.length},head=${head})`;
-  }
 }
 
 function extractToken(req: VercelRequest): string | null {
@@ -45,7 +20,6 @@ function extractToken(req: VercelRequest): string | null {
 export interface UserAccess {
   roles: string[];
   permissions: string[];
-  diag?: string;
 }
 
 // 实例级权限缓存：60 秒 TTL。
@@ -59,29 +33,14 @@ const CACHE_TTL_MS = 60 * 1000;
 async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAccess> {
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
-  let rpRows = 0;
-  let permCodes: string[] = [];
-
-  console.log('[DIAG] loadUserAccessOnce userId=', userId);
-
-  // 全表原始行（不按 user_id 过滤）：直接看 service_role 实际读到什么。
-  // 数据库层已实证 service_role 有 SELECT 权限 + BYPASSRLS + 表内 2 行；
-  // 若此处仍返回空数组，则问题锁定在 PostgREST/REST 层。
-  const { data: urAllRows, error: urAllErr } = await supabase
-    .from('user_roles')
-    .select('user_id, role_id');
-  console.log('[DIAG] user_roles all rows=', JSON.stringify(urAllRows), 'error=', urAllErr ? urAllErr.message : 'null');
-  if (urAllErr) throw new Error('读取用户角色表失败: ' + urAllErr.message);
 
   const { data: userRoles, error: userRolesErr } = await supabase
     .from('user_roles')
     .select('role_id')
     .eq('user_id', userId);
-  console.log('[DIAG] user_roles query done rows=', (userRoles || []).length, 'error=', userRolesErr ? userRolesErr.message : 'null');
   if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
 
   const roleIds = (userRoles || []).map((r: any) => r.role_id);
-  console.log('[DIAG] roleIds=', JSON.stringify(roleIds));
   if (roleIds.length) {
     const { data: roleData, error: roleErr } = await supabase
       .from('roles')
@@ -89,16 +48,13 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       .in('id', roleIds);
     if (roleErr) throw new Error('加载角色定义失败: ' + roleErr.message);
     for (const r of roleData || []) if (r.name) roles.push(r.name);
-    console.log('[DIAG] roles=', JSON.stringify(roles));
 
     const { data: rpData, error: rpErr } = await supabase
       .from('role_permissions')
       .select('permission_id')
       .in('role_id', roleIds);
     if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
-    rpRows = (rpData || []).length;
     const permIds = (rpData || []).map((r: any) => r.permission_id);
-    console.log('[DIAG] role_permissions rows=', rpRows, 'permIds=', JSON.stringify(permIds));
     if (permIds.length) {
       const { data: permData, error: permErr } = await supabase
         .from('permissions')
@@ -106,16 +62,12 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
         .in('id', permIds);
       if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
       for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
-      permCodes = Array.from(permissionsSet);
-      console.log('[DIAG] permissions resolved=', JSON.stringify(permCodes));
     }
   }
 
-  console.log('[DIAG] FINAL once roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(Array.from(permissionsSet)));
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    diag: `uid=${userId};urAll=${JSON.stringify(urAllRows || [])};ur=${(userRoles || []).length};roleIds=${JSON.stringify(roleIds)};roles=${JSON.stringify(roles)};rp=${rpRows};perms=${JSON.stringify(permCodes)}`,
   };
 }
 
@@ -126,7 +78,7 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
 export async function loadUserAccess(supabase: any, userId: string): Promise<UserAccess> {
   const cached = accessCache.get(userId);
   if (cached && cached.expireAt > Date.now()) {
-    return { roles: cached.roles, permissions: cached.permissions, diag: 'cache-hit' };
+    return { roles: cached.roles, permissions: cached.permissions };
   }
 
   const retryDelays = [0, 1000, 3000, 6000];
@@ -173,8 +125,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     .maybeSingle();
 
   // 加载角色与权限（带缓存 + 空结果抖动退避重试，见 loadUserAccess）
-  const { roles, permissions, diag } = await loadUserAccess(supabase, userId);
-  console.log('[DIAG] requireAuth email=', authData.user.email, 'userId=', userId, 'roles=', JSON.stringify(roles), 'permissions=', JSON.stringify(permissions));
+  const { roles, permissions } = await loadUserAccess(supabase, userId);
 
   return {
     userId,
@@ -182,11 +133,5 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     displayName: (profile as any)?.display_name || '',
     roles,
     permissions: Array.from(permissions),
-    diagEnvKeyRole: decodeJwtRole(process.env.SUPABASE_SERVICE_ROLE_KEY || ''),
-    diagEnvUrlMatch: (() => {
-      const ref = extractUrlRef(process.env.SUPABASE_URL || '');
-      return ref === 'lytbkusovltcgwmsikgp' ? 'OK' : `WRONG(ref=${ref})`;
-    })(),
-    diagQuery: diag || '',
   };
 }
