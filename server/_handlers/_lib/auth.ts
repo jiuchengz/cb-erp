@@ -34,34 +34,29 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
 
+  // 嵌套关联查询：一次拿到 user_roles + 角色名（替代原来 4 次串行查询）
   const { data: userRoles, error: userRolesErr } = await supabase
     .from('user_roles')
-    .select('role_id')
+    .select('role_id, roles(name)')
     .eq('user_id', userId);
   if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
 
   const roleIds = (userRoles || []).map((r: any) => r.role_id);
-  if (roleIds.length) {
-    const { data: roleData, error: roleErr } = await supabase
-      .from('roles')
-      .select('name')
-      .in('id', roleIds);
-    if (roleErr) throw new Error('加载角色定义失败: ' + roleErr.message);
-    for (const r of roleData || []) if (r.name) roles.push(r.name);
+  for (const r of userRoles || []) {
+    const name = r.roles?.name;
+    if (name) roles.push(name);
+  }
 
+  if (roleIds.length) {
+    // 嵌套关联查询：一次拿到 role_permissions + 权限码
     const { data: rpData, error: rpErr } = await supabase
       .from('role_permissions')
-      .select('permission_id')
+      .select('permission_id, permissions(code)')
       .in('role_id', roleIds);
     if (rpErr) throw new Error('加载角色权限失败: ' + rpErr.message);
-    const permIds = (rpData || []).map((r: any) => r.permission_id);
-    if (permIds.length) {
-      const { data: permData, error: permErr } = await supabase
-        .from('permissions')
-        .select('code')
-        .in('id', permIds);
-      if (permErr) throw new Error('加载权限定义失败: ' + permErr.message);
-      for (const p of permData || []) if (p.code) permissionsSet.add(p.code);
+    for (const rp of rpData || []) {
+      const code = rp.permissions?.code;
+      if (code) permissionsSet.add(code);
     }
   }
 
