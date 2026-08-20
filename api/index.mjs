@@ -26200,6 +26200,8 @@ async function handler9(req, res) {
       const s = typeof req.query.search === "string" ? req.query.search.trim() : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+      const salesFrom = typeof req.query.sales_from === "string" ? req.query.sales_from.trim() : "";
+      const salesTo = typeof req.query.sales_to === "string" ? req.query.sales_to.trim() : "";
       const supabase = getAdminClient();
       let query = supabase.from("products").select("*", { count: "exact" });
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
@@ -26214,6 +26216,11 @@ async function handler9(req, res) {
       const ovsMap = /* @__PURE__ */ new Map();
       const transitMap = /* @__PURE__ */ new Map();
       const salesMap = /* @__PURE__ */ new Map();
+      const todayMap = /* @__PURE__ */ new Map();
+      const d7Map = /* @__PURE__ */ new Map();
+      const d15Map = /* @__PURE__ */ new Map();
+      const monthMap = /* @__PURE__ */ new Map();
+      const customMap = /* @__PURE__ */ new Map();
       if (pageIds.length) {
         const { data: invRows, error: invErr } = await supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)").in("product_id", pageIds);
         if (invErr) throw invErr;
@@ -26230,11 +26237,37 @@ async function handler9(req, res) {
           const pid = r.product_id;
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
-        const { data: salesRows, error: salesErr } = await supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(status)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
+        const { data: salesRows, error: salesErr } = await supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(status, created_at)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
         if (salesErr) throw salesErr;
+        const now = /* @__PURE__ */ new Date();
+        const cnNow = new Date(now.getTime() + 8 * 3600 * 1e3);
+        const startOfToday = Date.UTC(cnNow.getUTCFullYear(), cnNow.getUTCMonth(), cnNow.getUTCDate()) - 8 * 3600 * 1e3;
+        const startOf7d = startOfToday - 6 * 24 * 3600 * 1e3;
+        const startOf15d = startOfToday - 14 * 24 * 3600 * 1e3;
+        const startOfMonth = Date.UTC(cnNow.getUTCFullYear(), cnNow.getUTCMonth(), 1) - 8 * 3600 * 1e3;
+        let customStart2 = NaN;
+        let customEnd = NaN;
+        const isCustom = /^\d{4}-\d{2}-\d{2}$/.test(salesFrom) || /^\d{4}-\d{2}-\d{2}$/.test(salesTo);
+        if (isCustom) {
+          const s2 = /^\d{4}-\d{2}-\d{2}$/.test(salesFrom) ? Date.parse(`${salesFrom}T00:00:00+08:00`) : startOfToday;
+          const e = /^\d{4}-\d{2}-\d{2}$/.test(salesTo) ? Date.parse(`${salesTo}T23:59:59.999+08:00`) : now.getTime();
+          if (s2 <= e) {
+            customStart2 = s2;
+            customEnd = e;
+          }
+        }
+        const addTo = (map, pid, qty) => map.set(pid, (map.get(pid) || 0) + qty);
         for (const r of salesRows || []) {
           const pid = r.product_id;
-          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
+          const qty = Number(r.quantity || 0);
+          const orderCreated = new Date(r.sales_orders?.created_at).getTime();
+          if (!Number.isFinite(orderCreated)) continue;
+          addTo(salesMap, pid, qty);
+          if (orderCreated >= startOfToday) addTo(todayMap, pid, qty);
+          if (orderCreated >= startOf7d) addTo(d7Map, pid, qty);
+          if (orderCreated >= startOf15d) addTo(d15Map, pid, qty);
+          if (orderCreated >= startOfMonth) addTo(monthMap, pid, qty);
+          if (Number.isFinite(customStart2) && orderCreated >= customStart2 && orderCreated <= customEnd) addTo(customMap, pid, qty);
         }
       }
       const enriched = rows.map((r) => ({
@@ -26242,7 +26275,12 @@ async function handler9(req, res) {
         domestic_stock: domMap.get(r.id) || 0,
         overseas_stock: ovsMap.get(r.id) || 0,
         in_transit_qty: transitMap.get(r.id) || 0,
-        sales_qty: salesMap.get(r.id) || 0
+        sales_qty: salesMap.get(r.id) || 0,
+        sales_today: todayMap.get(r.id) || 0,
+        sales_7d: d7Map.get(r.id) || 0,
+        sales_15d: d15Map.get(r.id) || 0,
+        sales_month: monthMap.get(r.id) || 0,
+        sales_custom: Number.isFinite(customStart) ? customMap.get(r.id) || 0 : null
       }));
       return res.status(200).json({ data: enriched, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }

@@ -27,6 +27,16 @@
         <el-option label="启用" value="active" />
         <el-option label="停用" value="inactive" />
       </el-select>
+      <el-date-picker
+        v-model="salesRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="自定义销量起"
+        end-placeholder="自定义销量止"
+        value-format="YYYY-MM-DD"
+        style="width: 280px"
+        @change="onSalesRangeChange"
+      />
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
@@ -62,7 +72,16 @@
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
       <el-table-column prop="in_transit_qty" label="在途数量" width="100" align="right" />
-      <el-table-column prop="sales_qty" label="销量" width="90" align="right" />
+      <el-table-column prop="sales_qty" label="总销量" width="90" align="right" />
+      <el-table-column prop="sales_today" label="日销量" width="80" align="right" />
+      <el-table-column prop="sales_7d" label="7天销量" width="85" align="right" />
+      <el-table-column prop="sales_15d" label="15天销量" width="90" align="right" />
+      <el-table-column prop="sales_month" label="月销量" width="80" align="right" />
+      <el-table-column label="自定义销量" width="100" align="right">
+        <template #default="{ row }">
+          <span>{{ salesRange && salesRange.length === 2 ? (row.sales_custom ?? 0) : '—' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="unit" label="单位" width="80" />
       <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
       <el-table-column label="售价元" width="100" align="right">
@@ -245,8 +264,22 @@ const total = ref(0)
 const loading = ref(false)
 const previewVisible = ref(false)
 const previewUrl = ref('')
-const query = reactive({ page: 1, pageSize: 20, search: '', status: '' })
+const query = reactive({ page: 1, pageSize: 20, search: '', status: '', sales_from: '', sales_to: '' })
 const rate = ref(0.38)
+const salesRange = ref<[string, string] | null>(null)
+
+// 自定义销量区间变化：只传起止日期，切换后回到第一页
+function onSalesRangeChange() {
+  if (salesRange.value && salesRange.value.length === 2) {
+    query.sales_from = salesRange.value[0]
+    query.sales_to = salesRange.value[1]
+  } else {
+    query.sales_from = ''
+    query.sales_to = ''
+  }
+  query.page = 1
+  load()
+}
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
 watch(
@@ -479,7 +512,16 @@ function exportRows() {
     { key: 'domestic_stock', label: '国内库存' },
     { key: 'overseas_stock', label: '国外库存' },
     { key: 'in_transit_qty', label: '在途数量' },
-    { key: 'sales_qty', label: '销量' },
+    { key: 'sales_qty', label: '总销量' },
+    { key: 'sales_today', label: '日销量' },
+    { key: 'sales_7d', label: '7天销量' },
+    { key: 'sales_15d', label: '15天销量' },
+    { key: 'sales_month', label: '月销量' },
+    {
+      key: 'sales_custom',
+      label: '自定义销量',
+      value: (r: Product) => (salesRange.value && salesRange.value.length === 2 ? (r.sales_custom ?? 0) : ''),
+    },
     { key: 'listing_time', label: '上新时间' },
     { key: 'unit', label: '单位' },
     { key: 'unit_price', label: '售价' },
