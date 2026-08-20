@@ -33,35 +33,27 @@
           <el-icon class="el-icon--right"><arrow-down /></el-icon>
         </el-button>
         <template #dropdown>
-          <el-dropdown-menu style="width: 320px; padding: 8px">
-            <div style="padding: 4px 12px; font-size: 12px; color: var(--color-muted)">销量时间范围</div>
+          <el-dropdown-menu style="width: 180px; padding: 6px">
             <el-dropdown-item command="all" :class="{ 'sales-range-active': salesRangeKey === 'all' }">全部时间</el-dropdown-item>
             <el-dropdown-item command="today" :class="{ 'sales-range-active': salesRangeKey === 'today' }">今日</el-dropdown-item>
             <el-dropdown-item command="7d" :class="{ 'sales-range-active': salesRangeKey === '7d' }">近7天</el-dropdown-item>
             <el-dropdown-item command="15d" :class="{ 'sales-range-active': salesRangeKey === '15d' }">近15天</el-dropdown-item>
             <el-dropdown-item command="30d" :class="{ 'sales-range-active': salesRangeKey === '30d' }">近30天</el-dropdown-item>
             <el-dropdown-item command="custom" :class="{ 'sales-range-active': salesRangeKey === 'custom' }">自定义</el-dropdown-item>
-            <div v-if="salesRangeKey === 'custom'" style="padding: 8px 12px 4px">
-              <el-date-picker
-                v-model="customSalesRange"
-                type="daterange"
-                value-format="YYYY-MM-DD"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                style="width: 100%"
-              />
-            </div>
-            <div v-if="salesRangeKey !== 'all'" style="padding: 6px 12px 0; font-size: 12px; color: var(--color-muted)">
-              当前范围：{{ salesRangeDetail }}
-            </div>
-            <div style="padding: 8px 12px 4px; text-align: right">
-              <el-button size="small" @click="clearSalesRange">清除</el-button>
-              <el-button size="small" type="primary" @click="applySalesRange">确定</el-button>
-            </div>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+      <el-date-picker
+        v-model="customSalesRange"
+        type="daterange"
+        value-format="YYYY-MM-DD"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        clearable
+        style="width: 300px"
+        @change="onDateRangeChange"
+      />
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
@@ -327,16 +319,9 @@ const salesRangeLabel = computed(() => {
   return `销量：${salesRangePresets[salesRangeKey.value].label}`
 })
 
-const salesRangeDetail = computed(() => {
-  if (salesFrom.value && salesTo.value) return `${salesFrom.value} 至 ${salesTo.value}`
-  if (salesRangeKey.value === 'custom' && customSalesRange.value?.length) return `${customSalesRange.value[0]} 至 ${customSalesRange.value[1]}`
-  return ''
-})
-
 const salesColumnLabel = computed(() => {
-  if (salesRangeKey.value === 'all') return '销量'
-  const d = salesRangeDetail.value
-  return d ? `销量(${d})` : '销量'
+  if (salesFrom.value && salesTo.value) return `销量(${salesFrom.value} 至 ${salesTo.value})`
+  return '销量'
 })
 
 function onSalesRangeCommand(cmd: string) {
@@ -348,39 +333,25 @@ function onSalesRangeCommand(cmd: string) {
   if (cmd === 'all') {
     salesFrom.value = ''
     salesTo.value = ''
+    customSalesRange.value = null
   } else {
     salesFrom.value = salesRangePresets[cmd].from()
     salesTo.value = salesRangePresets[cmd].to()
+    customSalesRange.value = [salesFrom.value, salesTo.value]
   }
   load()
 }
 
-function applySalesRange() {
-  if (salesRangeKey.value === 'custom') {
-    if (customSalesRange.value?.length === 2) {
-      salesFrom.value = customSalesRange.value[0]
-      salesTo.value = customSalesRange.value[1]
-      load()
-    } else {
-      ElMessage.warning('请选择自定义日期范围')
-    }
-    return
-  }
-  if (salesRangeKey.value === 'all') {
+function onDateRangeChange(val: [string, string] | null) {
+  if (val && val.length === 2) {
+    salesFrom.value = val[0]
+    salesTo.value = val[1]
+    salesRangeKey.value = 'custom'
+  } else {
     salesFrom.value = ''
     salesTo.value = ''
-  } else {
-    salesFrom.value = salesRangePresets[salesRangeKey.value].from()
-    salesTo.value = salesRangePresets[salesRangeKey.value].to()
+    salesRangeKey.value = 'all'
   }
-  load()
-}
-
-function clearSalesRange() {
-  salesRangeKey.value = 'all'
-  customSalesRange.value = null
-  salesFrom.value = ''
-  salesTo.value = ''
   load()
 }
 
@@ -989,7 +960,7 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   font-size: 12px;
 }
 .sales-range-active {
-  color: var(--el-color-primary);
+  color: var(--accent, var(--el-color-primary));
   font-weight: 600;
 }
 </style>
