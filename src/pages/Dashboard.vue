@@ -23,11 +23,6 @@
       </template>
       <el-table v-loading="loading" :data="recentShipments" border stripe empty-text="暂无发货记录">
         <el-table-column prop="tracking_no" label="运单号" min-width="180" />
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag :type="statusMeta[row.status]?.type || 'info'">{{ statusMeta[row.status]?.label || row.status }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="货物状态" width="120">
           <template #default="{ row }">
             <el-tag v-if="row.cargo_status" :style="{ backgroundColor: cargoStatusMap[row.cargo_status] || undefined }" :type="cargoStatusMap[row.cargo_status] ? '' : 'info'">
@@ -62,14 +57,6 @@ const stats = ref<any>({
   after_sales_count: 0,
   recent_shipments: [],
 })
-
-const statusMeta: Record<string, { label: string; type: string }> = {
-  PENDING: { label: '待处理', type: 'warning' },
-  SHIPPED: { label: '已发货', type: 'primary' },
-  IN_TRANSIT: { label: '运输中', type: 'info' },
-  DELIVERED: { label: '已签收', type: 'success' },
-  CANCELLED: { label: '已取消', type: 'danger' },
-}
 
 // 货物状态字典：name -> color（与发货管理一致，动态加载）
 const cargoStatusMap = ref<Record<string, string>>({})
