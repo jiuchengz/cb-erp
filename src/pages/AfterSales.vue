@@ -8,6 +8,7 @@
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增售后单</el-button>
+        <el-button v-if="canWrite" @click="openTypeDialog">类型管理</el-button>
       </div>
     </div>
 
