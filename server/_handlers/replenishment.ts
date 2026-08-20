@@ -16,6 +16,8 @@ const itemSchema = z.object({
 const createSchema = z.object({
   order_no: z.string().min(1).max(64),
   warehouse_id: z.string().uuid(),
+  replenish_qty: z.coerce.number().min(0).optional(),
+  replenishment_time: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   items: z.array(itemSchema).min(1).max(200),
 });
 
@@ -30,13 +32,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       let query: any = supabase
         .from('replenishment_orders')
-        .select('*, replenishment_order_items(product_id, quantity, products(sku, name))', { count: 'exact' });
+        .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))', { count: 'exact' });
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
-      if (status) query = query.eq('status', status);
+      if (status === 'PROCESSING') {
+        // 采购中：兼容存量 DRAFT/SUBMITTED/APPROVED/PROCESSING 各状态
+        query = query.in('status', ['DRAFT', 'SUBMITTED', 'APPROVED', 'PROCESSING']);
+      } else if (status) {
+        query = query.eq('status', status);
+      }
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
-      return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
+
+      // 采购拿货联动：拿货时间晚于补货时间、且拿货数量能对应上补货数量 -> 自动置为已完成
+      const rows = data || [];
+      const productIds = Array.from(
+        new Set(
+          rows.flatMap((r: any) => (r.replenishment_order_items || []).map((it: any) => it.product_id))
+        )
+      ) as string[];
+      const purchaseByProduct: Record<string, { receive_date: string; quantity: number }[]> = {};
+      if (productIds.length) {
+        const { data: purchaseRows, error: purchaseErr } = await supabase
+          .from('purchase_orders')
+          .select('receive_date, purchase_order_items(product_id, quantity)')
+          .in('status', ['ARRIVED', 'RECEIVED'])
+          .not('receive_date', 'is', null);
+        if (purchaseErr) throw purchaseErr;
+        for (const po of purchaseRows || []) {
+          for (const it of po.purchase_order_items || []) {
+            if (productIds.includes(it.product_id)) {
+              (purchaseByProduct[it.product_id] = purchaseByProduct[it.product_id] || []).push({
+                receive_date: po.receive_date,
+                quantity: Number(it.quantity),
+              });
+            }
+          }
+        }
+      }
+
+      const completedIds: string[] = [];
+      for (const row of rows) {
+        const items = row.replenishment_order_items || [];
+        const replenishTime = row.replenishment_time;
+        if (!items.length || !replenishTime) continue;
+        const allMatched = items.every((it: any) => {
+          const records = purchaseByProduct[it.product_id] || [];
+          return records.some(
+            (rec) => rec.receive_date > replenishTime && rec.quantity >= Number(it.quantity)
+          );
+        });
+        if (allMatched && row.status !== 'COMPLETED') {
+          completedIds.push(row.id);
+          row.status = 'COMPLETED';
+        }
+      }
+      if (completedIds.length) {
+        await supabase.from('replenishment_orders').update({ status: 'COMPLETED' }).in('id', completedIds);
+      }
+
+      return res.status(200).json({ data: rows, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }
 
     if (req.method === 'POST') {
@@ -44,12 +99,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
 
+      const totalQty = body.items.reduce((s: number, it: any) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase
         .from('replenishment_orders')
         .insert({
           order_no: body.order_no,
           warehouse_id: body.warehouse_id,
           created_by: ctx.userId,
+          replenish_qty: body.replenish_qty ?? totalQty,
+          replenishment_time: body.replenishment_time ?? null,
         })
         .select()
         .single();

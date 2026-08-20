@@ -23,14 +23,42 @@
 
     <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
-      <el-table-column label="商品" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">{{ firstItemLabel(row) }}</template>
+      <el-table-column label="补货时间" width="170">
+        <template #default="{ row }">
+          <el-date-picker
+            v-if="canWrite"
+            v-model="row.replenishment_time"
+            type="date"
+            value-format="YYYY-MM-DD"
+            size="small"
+            placeholder="选择日期"
+            style="width: 140px"
+            @change="(v: any) => updateField(row, 'replenishment_time', v)"
+          />
+          <span v-else>{{ row.replenishment_time || '-' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="产品编码" width="130" show-overflow-tooltip>
+        <template #default="{ row }">{{ firstItemCode(row) }}</template>
+      </el-table-column>
+      <el-table-column label="图片" width="70">
+        <template #default="{ row }">
+          <el-image
+            v-if="firstItemImage(row)"
+            :src="firstItemImage(row)"
+            :preview-src-list="[firstItemImage(row)]"
+            preview-teleported
+            fit="cover"
+            class="product-img"
+          />
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="产品名称" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ firstItemName(row) }}</template>
       </el-table-column>
       <el-table-column label="仓库" min-width="140">
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
-      </el-table-column>
-      <el-table-column label="明细" min-width="140">
-        <template #default="{ row }">{{ itemSummary(row) }}</template>
       </el-table-column>
       <el-table-column label="补货数量" width="150" align="right">
         <template #default="{ row }">
@@ -47,21 +75,6 @@
           <span v-else>{{ row.replenish_qty ?? '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="补货时间" width="170">
-        <template #default="{ row }">
-          <el-date-picker
-            v-if="canWrite"
-            v-model="row.replenishment_time"
-            type="date"
-            value-format="YYYY-MM-DD"
-            size="small"
-            placeholder="选择日期"
-            style="width: 140px"
-            @change="(v: any) => updateField(row, 'replenishment_time', v)"
-          />
-          <span v-else>{{ row.replenishment_time || '-' }}</span>
-        </template>
-      </el-table-column>
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
@@ -70,12 +83,10 @@
       <el-table-column prop="created_at" label="创建时间" min-width="170">
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
+      <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row.id)">详情</el-button>
-          <el-button v-if="canWrite && nextStatuses(row.status).length" link type="primary" @click="openFlow(row)">
-            流转
-          </el-button>
+          <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="canWrite" link type="danger" @click="removeOne(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -91,20 +102,38 @@
       @size-change="onSizeChange"
     />
 
-    <el-dialog v-model="createVisible" title="新增补货建议" width="620px" destroy-on-close>
-      <el-form :model="form" label-width="110px">
-        <el-form-item label="商品" required>
-          <el-select v-model="form.product_id" filterable placeholder="选择商品" style="width: 100%">
-            <el-option v-for="p in products" :key="p.id" :label="`${p.sku} - ${p.name}`" :value="p.id" />
+    <el-dialog v-model="createVisible" title="采购新增" width="620px" destroy-on-close>
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="产品编码" required>
+          <el-select v-model="form.product_id" filterable placeholder="输入产品编码搜索" style="width: 100%">
+            <el-option v-for="p in products" :key="p.id" :label="p.code || p.sku" :value="p.id">
+              <span style="float: left">{{ p.code || p.sku }}</span>
+              <span style="float: right; color: #909399; font-size: 12px">{{ p.name }}</span>
+            </el-option>
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="selectedProduct" label="产品图片">
+          <el-image
+            :src="selectedProduct.image_text"
+            :preview-src-list="[selectedProduct.image_text]"
+            preview-teleported
+            fit="cover"
+            style="width: 48px; height: 48px; border-radius: 4px; border: 1px solid #ebeef5"
+          />
+        </el-form-item>
+        <el-form-item label="产品名称">
+          <span>{{ selectedProduct?.name || '-' }}</span>
         </el-form-item>
         <el-form-item label="仓库" required>
           <el-select v-model="form.warehouse_id" placeholder="选择仓库" style="width: 100%">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="建议补货量" required>
+        <el-form-item label="补货数量" required>
           <el-input-number v-model="form.quantity" :min="1" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="补货时间">
+          <el-date-picker v-model="form.replenishment_time" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -113,42 +142,28 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="补货建议详情" width="560px">
-      <el-descriptions v-if="detail" :column="1" border>
-        <el-descriptions-item label="商品">
-          {{ firstItemLabel(detail) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="仓库">{{ warehouseName(detail.warehouse_id) }}</el-descriptions-item>
-        <el-descriptions-item label="补货明细">{{ itemSummary(detail) }}</el-descriptions-item>
-        <el-descriptions-item label="补货数量">{{ detail.replenish_qty ?? '-' }}</el-descriptions-item>
-        <el-descriptions-item label="补货时间">{{ detail.replenishment_time || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
-      </el-descriptions>
-      <el-table v-if="detail" :data="detail.replenishment_order_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column label="商品" min-width="220">
-          <template #default="{ row }">
-            {{ row.products ? `${row.products.sku} - ${row.products.name}` : row.product_id }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="quantity" label="数量" width="100" align="right" />
-      </el-table>
-    </el-dialog>
-
-    <el-dialog v-model="flowVisible" title="状态流转" width="420px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="当前状态">
-          <el-tag>{{ statusLabel(flowRow?.status) }}</el-tag>
-        </el-form-item>
-        <el-form-item label="目标状态" required>
-          <el-select v-model="flowTarget" style="width: 100%">
-            <el-option v-for="s in nextStatuses(flowRow?.status)" :key="s" :label="statusLabel(s)" :value="s" />
+    <el-dialog v-model="editVisible" title="编辑补货单" width="620px" destroy-on-close>
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="产品" required>
+          <el-select v-model="editForm.product_id" filterable placeholder="选择产品" style="width: 100%">
+            <el-option v-for="p in products" :key="p.id" :label="`${p.code || p.sku} - ${p.name}`" :value="p.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="仓库" required>
+          <el-select v-model="editForm.warehouse_id" placeholder="选择仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="补货数量" required>
+          <el-input-number v-model="editForm.quantity" :min="1" :precision="0" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="补货时间">
+          <el-date-picker v-model="editForm.replenishment_time" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="flowVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitFlow">确认流转</el-button>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -165,31 +180,20 @@ import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('replenishment.write'))
 
-const REPLENISHMENT_FLOW: Record<string, string[]> = {
-  DRAFT: ['SUBMITTED', 'CANCELLED'],
-  SUBMITTED: ['APPROVED', 'REJECTED'],
-  APPROVED: ['COMPLETED', 'CANCELLED'],
-  COMPLETED: [],
-  REJECTED: [],
-  CANCELLED: [],
-}
-
 const statusOptions = [
-  { label: '草稿', value: 'DRAFT' },
-  { label: '已提交', value: 'SUBMITTED' },
-  { label: '已审批', value: 'APPROVED' },
+  { label: '采购中', value: 'PROCESSING' },
+  { label: '取消采购', value: 'CANCELLED' },
   { label: '已完成', value: 'COMPLETED' },
-  { label: '已驳回', value: 'REJECTED' },
-  { label: '已取消', value: 'CANCELLED' },
 ]
 
+// 采购中兼容存量 DRAFT/SUBMITTED/APPROVED
 const statusMap: Record<string, { label: string; type: string }> = {
-  DRAFT: { label: '草稿', type: 'info' },
-  SUBMITTED: { label: '已提交', type: 'primary' },
-  APPROVED: { label: '已审批', type: 'primary' },
+  DRAFT: { label: '采购中', type: 'warning' },
+  SUBMITTED: { label: '采购中', type: 'warning' },
+  APPROVED: { label: '采购中', type: 'warning' },
+  PROCESSING: { label: '采购中', type: 'warning' },
+  CANCELLED: { label: '取消采购', type: 'danger' },
   COMPLETED: { label: '已完成', type: 'success' },
-  REJECTED: { label: '已驳回', type: 'danger' },
-  CANCELLED: { label: '已取消', type: 'danger' },
 }
 
 function statusLabel(s: string) {
@@ -197,9 +201,6 @@ function statusLabel(s: string) {
 }
 function statusType(s: string) {
   return statusMap[s]?.type || 'info'
-}
-function nextStatuses(s?: string) {
-  return (s && REPLENISHMENT_FLOW[s]) || []
 }
 function formatDate(v: string) {
   if (!v) return ''
@@ -238,19 +239,41 @@ function warehouseName(id: string) {
 function orderItems(row: any): any[] {
   return row?.replenishment_order_items || []
 }
+// 产品列：产品编码 - 产品名称（多条明细时取第一条）
 function firstItemLabel(row: any) {
   const items = orderItems(row)
   if (items.length) {
     const it = items[0]
-    return it.products ? `${it.products.sku} - ${it.products.name}` : it.product_id || ''
+    if (it.products) {
+      return `${it.products.code || it.products.sku || ''} - ${it.products.name}`
+    }
+    return it.product_id || ''
   }
-  return row?.product_id || ''
+  return ''
 }
-function itemSummary(row: any) {
+// 产品编码：取第一条明细的产品编码
+function firstItemCode(row: any) {
   const items = orderItems(row)
-  if (!items.length) return ''
-  const total = items.reduce((s: number, it: any) => s + Number(it.quantity || 0), 0)
-  return `${items.length} 项 · 合计 ${total}`
+  if (items.length && items[0].products) {
+    return items[0].products.code || items[0].products.sku || ''
+  }
+  return ''
+}
+// 产品名称：取第一条明细的产品名称
+function firstItemName(row: any) {
+  const items = orderItems(row)
+  if (items.length && items[0].products) {
+    return items[0].products.name || ''
+  }
+  return ''
+}
+// 产品图片：取第一条明细的产品图片
+function firstItemImage(row: any) {
+  const items = orderItems(row)
+  if (items.length && items[0].products?.image_text) {
+    return items[0].products.image_text
+  }
+  return ''
 }
 async function loadOptions() {
   try {
@@ -271,18 +294,29 @@ const form = reactive({
   product_id: '',
   warehouse_id: '',
   quantity: 1,
+  replenishment_time: '',
 })
+
+// 弹窗中当前选中的产品（自动带出名称、图片）
+const selectedProduct = computed(() => products.value.find((p) => p.id === form.product_id))
+
+// 仓库默认：优先名称含「国内」的仓库，否则取第一个
+function defaultWarehouseId() {
+  const domestic = warehouses.value.find((w) => /国内/.test(w.name))
+  return domestic?.id || warehouses.value[0]?.id || ''
+}
 
 function openCreate() {
   form.product_id = ''
-  form.warehouse_id = ''
+  form.warehouse_id = defaultWarehouseId()
   form.quantity = 1
+  form.replenishment_time = ''
   createVisible.value = true
 }
 
 async function save() {
   if (!form.product_id || !form.warehouse_id) {
-    ElMessage.warning('请选择商品和仓库')
+    ElMessage.warning('请选择产品编码和仓库')
     return
   }
   saving.value = true
@@ -290,6 +324,7 @@ async function save() {
     await api.post('/replenishment', {
       order_no: autoNo('RPL', Math.floor(Math.random() * 900) + 100),
       warehouse_id: form.warehouse_id,
+      replenishment_time: form.replenishment_time || null,
       items: [{ product_id: form.product_id, quantity: form.quantity }],
     })
     ElMessage.success('创建成功')
@@ -302,40 +337,65 @@ async function save() {
   }
 }
 
-const detailVisible = ref(false)
-const detail = ref<any>(null)
-async function openDetail(id: string) {
+const editVisible = ref(false)
+const editForm = reactive({
+  id: '',
+  product_id: '',
+  warehouse_id: '',
+  quantity: 1,
+  replenishment_time: '',
+})
+
+function openEdit(row: any) {
+  const items = orderItems(row)
+  const first = items[0]
+  editForm.id = row.id
+  editForm.product_id = first?.product_id ?? ''
+  editForm.warehouse_id = row.warehouse_id ?? ''
+  editForm.quantity = Number(first?.quantity ?? row.replenish_qty ?? 1)
+  editForm.replenishment_time = row.replenishment_time || ''
+  editVisible.value = true
+}
+
+async function saveEdit() {
+  if (!editForm.id || !editForm.product_id || !editForm.warehouse_id) {
+    ElMessage.warning('请选择产品和仓库')
+    return
+  }
+  saving.value = true
   try {
-    const { data } = await api.get(`/replenishment/${id}`)
-    detail.value = data.data
-    detailVisible.value = true
+    await api.patch(`/replenishment/${editForm.id}`, {
+      warehouse_id: editForm.warehouse_id,
+      replenish_qty: editForm.quantity,
+      replenishment_time: editForm.replenishment_time || null,
+      items: [{ product_id: editForm.product_id, quantity: editForm.quantity }],
+    })
+    ElMessage.success('已保存')
+    editVisible.value = false
+    load()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '加载详情失败')
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
-const flowVisible = ref(false)
-const flowRow = ref<any>(null)
-const flowTarget = ref('')
-function openFlow(row: any) {
-  flowRow.value = row
-  const next = nextStatuses(row.status)
-  flowTarget.value = next[0] ?? ''
-  flowVisible.value = true
-}
-
-async function submitFlow() {
-  if (!flowRow.value || !flowTarget.value) return
-  saving.value = true
+async function removeOne(row: any) {
   try {
-    await api.patch(`/replenishment/${flowRow.value.id}`, { status: flowTarget.value })
-    ElMessage.success('状态更新成功')
-    flowVisible.value = false
+    await ElMessageBox.confirm(`确定删除补货单「${row.order_no}」吗？此操作不可恢复。`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/replenishment/${row.id}`)
+    ElMessage.success('删除成功')
     load()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '状态更新失败')
-  } finally {
-    saving.value = false
+    ElMessage.error(e?.response?.data?.error?.message || '删除失败')
   }
 }
 
@@ -344,7 +404,7 @@ function onSelectionChange(rows: any[]) {
   selected.value = rows
 }
 
-// 内联编辑：失焦/回车后 PATCH /replenishment/[id] 保存（不触发状态机校验）
+// 内联编辑：失焦/回车后 PATCH /replenishment/[id] 保存
 const updating = ref(false)
 async function updateField(row: any, key: string, val: any) {
   if (updating.value) return
@@ -365,11 +425,10 @@ async function updateField(row: any, key: string, val: any) {
 const exporting = ref(false)
 function exportRows() {
   const columns = [
-    { key: 'product_id', label: '商品', value: (r: any) => firstItemLabel(r) },
-    { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
-    { key: 'quantity', label: '明细', value: (r: any) => itemSummary(r) },
-    { key: 'replenish_qty', label: '补货数量', value: (r: any) => r.replenish_qty ?? '-' },
     { key: 'replenishment_time', label: '补货时间', value: (r: any) => r.replenishment_time || '-' },
+    { key: 'product', label: '产品', value: (r: any) => firstItemLabel(r) },
+    { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
+    { key: 'replenish_qty', label: '补货数量', value: (r: any) => r.replenish_qty ?? '-' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
     { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
   ]
@@ -389,7 +448,7 @@ const importFile = ref<any>(null)
 function downloadTpl() {
   downloadTemplate(
     [
-      { label: '商品SKU', sample: 'SKU-DLB-001' },
+      { label: '产品编码', sample: 'DLB-001' },
       { label: '仓库', sample: '默认仓库' },
       { label: '补货数量', sample: 10 },
       { label: '补货时间', sample: '2026-08-14' },
@@ -414,12 +473,12 @@ async function onImportFile(e: Event) {
   try {
     const { headers, rows } = await readExcelFile(file)
     const col = buildColMap(headers, {
-      sku: ['商品SKU', 'SKU', '产品编码', '编码', 'code', 'sku'],
+      sku: ['产品编码', '商品SKU', 'SKU', '编码', 'code', 'sku'],
       warehouse: ['仓库', '仓库名称', 'warehouse', 'warehouseName'],
       quantity: ['补货数量', '数量', 'quantity', 'qty'],
     })
     if (col.sku === undefined || col.warehouse === undefined || col.quantity === undefined) {
-      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品SKU"、"仓库"和"补货数量"列')
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"、"仓库"和"补货数量"列')
       return
     }
     const skuMap: Record<string, any> = {}
@@ -427,8 +486,8 @@ async function onImportFile(e: Event) {
     for (;;) {
       const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
       ;(data.data ?? []).forEach((p: any) => {
-        if (p.sku) skuMap[p.sku] = p
         if (p.code) skuMap[p.code] = p
+        if (p.sku) skuMap[p.sku] = p
       })
       if (page * 200 >= (data.total ?? 0)) break
       page++
@@ -448,7 +507,7 @@ async function onImportFile(e: Event) {
       const whName = cellStr(row, col.warehouse)
       const qty = cellNum(row, col.quantity)
       if (!sku) {
-        failures.push(`第${lineNo}行：商品SKU为空`)
+        failures.push(`第${lineNo}行：产品编码为空`)
         return
       }
       if (!whName) {
@@ -461,7 +520,7 @@ async function onImportFile(e: Event) {
       }
       const product = skuMap[sku]
       if (!product) {
-        failures.push(`第${lineNo}行：SKU「${sku}」未匹配到商品`)
+        failures.push(`第${lineNo}行：编码「${sku}」未匹配到产品`)
         return
       }
       const wh = whNameMap[whName]
@@ -552,5 +611,22 @@ onMounted(() => {
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
+}
+.product-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.product-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid #ebeef5;
+}
+.product-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

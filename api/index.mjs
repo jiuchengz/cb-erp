@@ -26510,6 +26510,8 @@ var itemSchema2 = external_exports.object({
 var createSchema4 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   warehouse_id: external_exports.string().uuid(),
+  replenish_qty: external_exports.coerce.number().min(0).optional(),
+  replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   items: external_exports.array(itemSchema2).min(1).max(200)
 });
 async function handler13(req, res) {
@@ -26520,22 +26522,69 @@ async function handler13(req, res) {
       requirePermission(ctx, "replenishment.read");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query = supabase.from("replenishment_orders").select("*, replenishment_order_items(product_id, quantity, products(sku, name))", { count: "exact" });
+      let query = supabase.from("replenishment_orders").select("*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))", { count: "exact" });
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
-      if (status) query = query.eq("status", status);
+      if (status === "PROCESSING") {
+        query = query.in("status", ["DRAFT", "SUBMITTED", "APPROVED", "PROCESSING"]);
+      } else if (status) {
+        query = query.eq("status", status);
+      }
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
-      return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
+      const rows = data || [];
+      const productIds = Array.from(
+        new Set(
+          rows.flatMap((r) => (r.replenishment_order_items || []).map((it) => it.product_id))
+        )
+      );
+      const purchaseByProduct = {};
+      if (productIds.length) {
+        const { data: purchaseRows, error: purchaseErr } = await supabase.from("purchase_orders").select("receive_date, purchase_order_items(product_id, quantity)").in("status", ["ARRIVED", "RECEIVED"]).not("receive_date", "is", null);
+        if (purchaseErr) throw purchaseErr;
+        for (const po of purchaseRows || []) {
+          for (const it of po.purchase_order_items || []) {
+            if (productIds.includes(it.product_id)) {
+              (purchaseByProduct[it.product_id] = purchaseByProduct[it.product_id] || []).push({
+                receive_date: po.receive_date,
+                quantity: Number(it.quantity)
+              });
+            }
+          }
+        }
+      }
+      const completedIds = [];
+      for (const row of rows) {
+        const items = row.replenishment_order_items || [];
+        const replenishTime = row.replenishment_time;
+        if (!items.length || !replenishTime) continue;
+        const allMatched = items.every((it) => {
+          const records = purchaseByProduct[it.product_id] || [];
+          return records.some(
+            (rec) => rec.receive_date > replenishTime && rec.quantity >= Number(it.quantity)
+          );
+        });
+        if (allMatched && row.status !== "COMPLETED") {
+          completedIds.push(row.id);
+          row.status = "COMPLETED";
+        }
+      }
+      if (completedIds.length) {
+        await supabase.from("replenishment_orders").update({ status: "COMPLETED" }).in("id", completedIds);
+      }
+      return res.status(200).json({ data: rows, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }
     if (req.method === "POST") {
       requirePermission(ctx, "replenishment.write");
       const body = parse(createSchema4, req.body || {});
       const supabase = getAdminClient();
+      const totalQty = body.items.reduce((s, it) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase.from("replenishment_orders").insert({
         order_no: body.order_no,
         warehouse_id: body.warehouse_id,
-        created_by: ctx.userId
+        created_by: ctx.userId,
+        replenish_qty: body.replenish_qty ?? totalQty,
+        replenishment_time: body.replenishment_time ?? null
       }).select().single();
       if (error) {
         if (error.code === "23505") throw Errors.conflict(`\u8865\u8D27\u5355\u53F7\u5DF2\u5B58\u5728\uFF1A${body.order_no}`);
@@ -27634,20 +27683,29 @@ async function handler32(req, res) {
 
 // server/_handlers/replenishment/[id].ts
 var REPLENISHMENT_FLOW = {
-  DRAFT: ["SUBMITTED", "CANCELLED"],
-  SUBMITTED: ["APPROVED", "CANCELLED"],
-  APPROVED: ["PROCESSING", "CANCELLED"],
-  PROCESSING: ["COMPLETED", "CANCELLED"],
+  DRAFT: ["CANCELLED", "COMPLETED"],
+  SUBMITTED: ["CANCELLED", "COMPLETED"],
+  APPROVED: ["CANCELLED", "COMPLETED"],
+  PROCESSING: ["CANCELLED", "COMPLETED"],
   COMPLETED: [],
   CANCELLED: []
 };
-var updateSchema7 = external_exports.object({
-  status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PROCESSING", "COMPLETED", "CANCELLED"]).optional(),
-  replenish_qty: external_exports.coerce.number().min(0).optional(),
-  replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
-}).refine((v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0, {
-  message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
+var itemSchema6 = external_exports.object({
+  product_id: external_exports.string().uuid(),
+  quantity: external_exports.coerce.number().positive()
 });
+var updateSchema7 = external_exports.object({
+  status: external_exports.enum(["PROCESSING", "CANCELLED", "COMPLETED"]).optional(),
+  replenish_qty: external_exports.coerce.number().min(0).optional(),
+  replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  warehouse_id: external_exports.string().uuid().optional(),
+  items: external_exports.array(itemSchema6).min(1).max(200).optional()
+}).refine(
+  (v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0 || v.warehouse_id !== void 0 || v.items !== void 0,
+  {
+    message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
+  }
+);
 async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -27656,7 +27714,7 @@ async function handler33(req, res) {
     const supabase = getAdminClient();
     if (req.method === "GET") {
       requirePermission(ctx, "replenishment.read");
-      const { data, error } = await supabase.from("replenishment_orders").select("*, replenishment_order_items(product_id, quantity, products(sku, name))").eq("id", id).single();
+      const { data, error } = await supabase.from("replenishment_orders").select("*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))").eq("id", id).single();
       if (error) {
         if (error.code === "PGRST116") throw Errors.notFound("\u8865\u8D27\u5355\u4E0D\u5B58\u5728");
         throw error;
@@ -27671,15 +27729,30 @@ async function handler33(req, res) {
         throw getErr;
       }
       requirePermission(ctx, "replenishment.write");
+      const isStatusUpdate = body.status !== void 0;
+      if (isStatusUpdate) {
+        const allowed = REPLENISHMENT_FLOW[before.status] || [];
+        if (!allowed.includes(body.status)) {
+          throw Errors.conflict(`\u975E\u6CD5\u72B6\u6001\u8F6C\u6362\uFF1A${before.status} -> ${body.status}`);
+        }
+      }
       const updatePayload = {};
+      if (body.warehouse_id !== void 0) updatePayload.warehouse_id = body.warehouse_id;
       if (body.replenish_qty !== void 0) updatePayload.replenish_qty = body.replenish_qty;
       if (body.replenishment_time !== void 0) updatePayload.replenishment_time = body.replenishment_time;
-      const items = before.replenishment_order_items || [];
-      const isStatusUpdate = body.status !== void 0;
-      const allowed = REPLENISHMENT_FLOW[before.status] || [];
-      if (isStatusUpdate && !allowed.includes(body.status)) {
-        throw Errors.conflict(`\u975E\u6CD5\u72B6\u6001\u8F6C\u6362\uFF1A${before.status} -> ${body.status}`);
+      const isFieldEdit = !isStatusUpdate && (body.warehouse_id !== void 0 || body.replenish_qty !== void 0 || body.replenishment_time !== void 0 || body.items !== void 0);
+      if (isFieldEdit && before.status !== "PROCESSING" && before.status !== "DRAFT" && before.status !== "SUBMITTED" && before.status !== "APPROVED") {
+        updatePayload.status = "PROCESSING";
       }
+      if (body.items !== void 0) {
+        const { error: delErr } = await supabase.from("replenishment_order_items").delete().eq("replenishment_id", id);
+        if (delErr) throw delErr;
+        const { error: insErr } = await supabase.from("replenishment_order_items").insert(
+          body.items.map((it) => ({ replenishment_id: id, product_id: it.product_id, quantity: it.quantity }))
+        );
+        if (insErr) throw insErr;
+      }
+      const items = before.replenishment_order_items || [];
       if (isStatusUpdate && body.status === "COMPLETED" && before.status !== "COMPLETED") {
         for (const it of items) {
           const { error: invErr } = await supabase.rpc("adjust_inventory", {

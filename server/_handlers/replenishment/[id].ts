@@ -8,24 +8,40 @@ import { writeAudit } from '../_lib/audit';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 
+// 补货单状态：采购中 / 取消采购 / 已完成（采购中兼容存量 DRAFT/SUBMITTED/APPROVED）
 const REPLENISHMENT_FLOW: Record<string, string[]> = {
-  DRAFT: ['SUBMITTED', 'CANCELLED'],
-  SUBMITTED: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['PROCESSING', 'CANCELLED'],
-  PROCESSING: ['COMPLETED', 'CANCELLED'],
+  DRAFT: ['CANCELLED', 'COMPLETED'],
+  SUBMITTED: ['CANCELLED', 'COMPLETED'],
+  APPROVED: ['CANCELLED', 'COMPLETED'],
+  PROCESSING: ['CANCELLED', 'COMPLETED'],
   COMPLETED: [],
   CANCELLED: [],
 };
 
+const itemSchema = z.object({
+  product_id: z.string().uuid(),
+  quantity: z.coerce.number().positive(),
+});
+
 const updateSchema = z
   .object({
-    status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PROCESSING', 'COMPLETED', 'CANCELLED']).optional(),
+    status: z.enum(['PROCESSING', 'CANCELLED', 'COMPLETED']).optional(),
     replenish_qty: z.coerce.number().min(0).optional(),
     replenishment_time: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    warehouse_id: z.string().uuid().optional(),
+    items: z.array(itemSchema).min(1).max(200).optional(),
   })
-  .refine((v) => v.status !== undefined || v.replenish_qty !== undefined || v.replenishment_time !== undefined, {
-    message: '至少提供一个更新字段',
-  });
+  .refine(
+    (v) =>
+      v.status !== undefined ||
+      v.replenish_qty !== undefined ||
+      v.replenishment_time !== undefined ||
+      v.warehouse_id !== undefined ||
+      v.items !== undefined,
+    {
+      message: '至少提供一个更新字段',
+    }
+  );
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -38,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'replenishment.read');
       const { data, error } = await supabase
         .from('replenishment_orders')
-        .select('*, replenishment_order_items(product_id, quantity, products(sku, name))')
+        .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))')
         .eq('id', id)
         .single();
       if (error) {
@@ -61,18 +77,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       requirePermission(ctx, 'replenishment.write');
 
+      const isStatusUpdate = body.status !== undefined;
+      if (isStatusUpdate) {
+        const allowed = REPLENISHMENT_FLOW[before.status] || [];
+        if (!allowed.includes(body.status!)) {
+          throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
+        }
+      }
+
       const updatePayload: any = {};
+      if (body.warehouse_id !== undefined) updatePayload.warehouse_id = body.warehouse_id;
       if (body.replenish_qty !== undefined) updatePayload.replenish_qty = body.replenish_qty;
       if (body.replenishment_time !== undefined) updatePayload.replenishment_time = body.replenishment_time;
 
-      const items = before.replenishment_order_items || [];
-      const isStatusUpdate = body.status !== undefined;
-      const allowed = REPLENISHMENT_FLOW[before.status] || [];
-      if (isStatusUpdate && !allowed.includes(body.status!)) {
-        throw Errors.conflict(`非法状态转换：${before.status} -> ${body.status}`);
+      // 编辑字段（非显式状态更新）时，把单子重新置回采购中，由列表接口联动重新判定是否已完成
+      const isFieldEdit = !isStatusUpdate && (body.warehouse_id !== undefined || body.replenish_qty !== undefined || body.replenishment_time !== undefined || body.items !== undefined);
+      if (isFieldEdit && before.status !== 'PROCESSING' && before.status !== 'DRAFT' && before.status !== 'SUBMITTED' && before.status !== 'APPROVED') {
+        updatePayload.status = 'PROCESSING';
       }
 
-      // 补货入库：COMPLETED 时按明细数量入库（内部调整）
+      // 明细替换：整单明细重建
+      if (body.items !== undefined) {
+        const { error: delErr } = await supabase
+          .from('replenishment_order_items')
+          .delete()
+          .eq('replenishment_id', id);
+        if (delErr) throw delErr;
+        const { error: insErr } = await supabase.from('replenishment_order_items').insert(
+          body.items.map((it) => ({ replenishment_id: id, product_id: it.product_id, quantity: it.quantity }))
+        );
+        if (insErr) throw insErr;
+      }
+
+      const items = before.replenishment_order_items || [];
+
+      // 补货入库：仅显式流转到 COMPLETED 时按明细数量入库（自动联动完成不触发，避免与采购拿货重复入库）
       if (isStatusUpdate && body.status === 'COMPLETED' && before.status !== 'COMPLETED') {
         for (const it of items) {
           const { error: invErr } = await supabase.rpc('adjust_inventory', {
