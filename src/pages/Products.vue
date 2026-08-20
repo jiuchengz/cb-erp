@@ -39,6 +39,8 @@
     <div class="table-wrap">
     <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
+      <el-table-column prop="listing_time" label="上新时间" width="110" />
+      <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column label="图片" width="90">
         <template #default="{ row }">
           <el-tooltip v-if="isImageUrl(row.image_text)" :show-after="200" :offset="10">
@@ -51,18 +53,16 @@
           <div v-else class="img-fallback">无图片</div>
         </template>
       </el-table-column>
+      <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
       <el-table-column label="SKU" min-width="140">
         <template #default="{ row }">{{ row.sku || '—' }}</template>
       </el-table-column>
-      <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
       <el-table-column prop="barcode" label="条形码" min-width="140" />
       <el-table-column prop="category" label="分类" min-width="120" />
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
       <el-table-column prop="in_transit_qty" label="在途数量" width="100" align="right" />
       <el-table-column prop="sales_qty" label="销量" width="90" align="right" />
-      <el-table-column prop="listing_time" label="上新时间" width="110" />
       <el-table-column prop="unit" label="单位" width="80" />
       <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
       <el-table-column label="售价元" width="100" align="right">
