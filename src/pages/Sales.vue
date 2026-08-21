@@ -44,7 +44,7 @@
 
     <!-- 指标卡 -->
     <el-row :gutter="14" class="kpi-row" v-loading="loading">
-      <el-col v-for="k in kpiCards" :key="k.label" :xs="12" :sm="6">
+      <el-col v-for="k in kpiCards" :key="k.label" :xs="12" :sm="4">
         <el-card shadow="hover" class="kpi-card">
           <div class="kpi-label">{{ k.label }}</div>
           <div class="kpi-value">{{ k.value }}<small v-if="k.unit">{{ k.unit }}</small></div>
@@ -59,7 +59,7 @@
     </el-row>
 
     <el-alert v-if="summary" type="info" :closable="false" class="summary-bar">
-      当前范围共出单 {{ summary.rows }} 条，总出单数量 {{ summary.quantity }}
+      当前范围共出单 {{ summary.rows }} 条，销售 {{ summary.sellQty }} / 退款 {{ summary.refundQty }}，实际销量 {{ summary.quantity }}
     </el-alert>
 
     <el-table
@@ -83,7 +83,11 @@
       <el-table-column prop="link_id" label="链接ID" min-width="120" sortable="custom" show-overflow-tooltip />
       <el-table-column prop="product_name" label="产品名称" min-width="170" sortable="custom" show-overflow-tooltip />
       <el-table-column prop="platform" label="平台/站点" min-width="100" sortable="custom" />
-      <el-table-column prop="quantity" label="出单数量" width="110" align="right" sortable="custom" />
+      <el-table-column prop="quantity" label="销售数量" width="110" align="right" sortable="custom" />
+      <el-table-column prop="refund_qty" label="退款数量" width="110" align="right" sortable="custom" />
+      <el-table-column label="实际销量" width="110" align="right" sortable="custom" prop="netQty">
+        <template #default="{ row }">{{ row.netQty != null ? Number(row.netQty) : '-' }}</template>
+      </el-table-column>
       <el-table-column label="环比变化" width="110" align="right" sortable="custom" prop="changeRate">
         <template #default="{ row }">
           <span v-if="row.prevQty == null" class="flat">新增</span>
@@ -196,33 +200,48 @@ function shiftDate(d: string, offsetDays: number) {
   return fmtDate(dt)
 }
 
-// 聚合明细为按链接ID的数据（指定区间），返回 { map, totalQty, totalAmount, dateSet, rows }
+// 聚合明细为按链接ID的数据（指定区间），拆分销售数量/退款数量/实际销量
 function aggregate(rows: any[]) {
   const map = new Map<string, any>()
   const dateSet = new Set<string>()
-  let totalQty = 0
-  let totalAmount = 0
+  let totalSellQty = 0
+  let totalRefundQty = 0
+  let totalRefundAmount = 0
+  let totalNetQty = 0
+  let totalNetAmount = 0
   for (const r of rows) {
     const key = String(r.link_id || '')
     const d = String(r.sale_date || '')
     if (d) dateSet.add(d)
-    const qty = Number(r.quantity || 0)
-    const amount = qty * Number(r.unit_price || 0)
-    totalQty += qty
-    totalAmount += amount
+    const sellQty = Number(r.quantity || 0)
+    const refundQty = Number(r.refund_qty || 0)
+    const refundAmount = Number(r.refund_amount || 0)
+    const sellAmount = sellQty * Number(r.unit_price || 0)
+    totalSellQty += sellQty
+    totalRefundQty += refundQty
+    totalRefundAmount += refundAmount
+    totalNetAmount += sellAmount - refundAmount
     const cur = map.get(key) || {
       link_id: key,
       product_name: r.product_name || '',
       platform: r.platform || '',
       quantity: 0,
-      amount: 0,
+      refund_qty: 0,
+      refund_amount: 0,
+      sellAmount: 0,
+      netQty: 0,
+      netAmount: 0,
       days: new Set<string>(),
       latest_date: '',
       overseas_stock: null as any,
       avg_price: null as any,
     }
-    cur.quantity += qty
-    cur.amount += amount
+    cur.quantity += sellQty
+    cur.refund_qty += refundQty
+    cur.refund_amount += refundAmount
+    cur.sellAmount += sellAmount
+    cur.netQty = cur.quantity - cur.refund_qty
+    cur.netAmount = cur.sellAmount - cur.refund_amount
     cur.days.add(d)
     if (!cur.latest_date || d > cur.latest_date) {
       cur.latest_date = d
@@ -237,10 +256,11 @@ function aggregate(rows: any[]) {
     aggRows.push({
       ...v,
       days: v.days.size,
-      avg_price: v.quantity > 0 ? Number((v.amount / v.quantity).toFixed(2)) : v.avg_price,
+      avg_price: v.netQty > 0 ? Number((v.netAmount / v.netQty).toFixed(2)) : v.avg_price,
     })
   }
-  return { aggRows, totalQty, totalAmount, dateSet }
+  totalNetQty = totalSellQty - totalRefundQty
+  return { aggRows, totalSellQty, totalRefundQty, totalRefundAmount, totalNetQty, totalNetAmount, dateSet }
 }
 
 // 全量翻页拉取 daily_sales
@@ -270,15 +290,21 @@ async function load() {
     const prevFrom = from ? shiftDate(from, -(dayDiff(from, to) + 1)) : ''
     const prevTo = from ? shiftDate(from, -1) : ''
     let prevMap = new Map<string, any>()
-    let prevTotalQty = 0
-    let prevTotalAmount = 0
+    let prevTotalSellQty = 0
+    let prevTotalRefundQty = 0
+    let prevTotalRefundAmount = 0
+    let prevTotalNetQty = 0
+    let prevTotalNetAmount = 0
     let prevDateSet = new Set<string>()
     if (prevFrom && prevTo) {
       const prevRows = await fetchDailySales(prevFrom, prevTo, query.keyword)
       const prev = aggregate(prevRows)
       prevMap = new Map(prev.aggRows.map((r) => [String(r.link_id), r]))
-      prevTotalQty = prev.totalQty
-      prevTotalAmount = prev.totalAmount
+      prevTotalSellQty = prev.totalSellQty
+      prevTotalRefundQty = prev.totalRefundQty
+      prevTotalRefundAmount = prev.totalRefundAmount
+      prevTotalNetQty = prev.totalNetQty
+      prevTotalNetAmount = prev.totalNetAmount
       prevDateSet = prev.dateSet
     }
 
@@ -297,13 +323,13 @@ async function load() {
       }
     }
 
-    // 合并环比数据
+    // 合并环比数据（基于实际销量 netQty）
     aggRows.value = cur.aggRows.map((r: any) => {
       const key = String(r.link_id)
       const prev = prevMap.get(key)
-      const prevQty = prev ? Number(prev.quantity || 0) : 0
+      const prevQty = prev ? Number(prev.netQty || 0) : 0
       let changeRate: number | null = null
-      if (prevQty > 0) changeRate = Number((((r.quantity - prevQty) / prevQty) * 100).toFixed(1))
+      if (prevQty > 0) changeRate = Number((((r.netQty - prevQty) / prevQty) * 100).toFixed(1))
       return {
         ...r,
         image: imageMap[key] || '',
@@ -315,19 +341,27 @@ async function load() {
 
     const kpi: any = {
       links: aggRows.value.length,
-      qty: cur.totalQty,
-      amount: cur.totalAmount,
+      sellQty: cur.totalSellQty,
+      refundQty: cur.totalRefundQty,
+      refundAmount: cur.totalRefundAmount,
+      netQty: cur.totalNetQty,
+      netAmount: cur.totalNetAmount,
       days: cur.dateSet.size,
     }
     const prevKpi: any = {
       links: prevMap.size,
-      qty: prevTotalQty,
-      amount: prevTotalAmount,
+      sellQty: prevTotalSellQty,
+      refundQty: prevTotalRefundQty,
+      refundAmount: prevTotalRefundAmount,
+      netQty: prevTotalNetQty,
+      netAmount: prevTotalNetAmount,
       days: prevDateSet.size,
     }
     summary.value = {
       rows: aggRows.value.length,
-      quantity: cur.totalQty,
+      sellQty: cur.totalSellQty,
+      refundQty: cur.totalRefundQty,
+      quantity: cur.totalNetQty,
       kpi,
       prevKpi,
       hasPrev: prevFrom !== '' && prevTo !== '',
@@ -346,8 +380,11 @@ const kpiCards = computed(() => {
   const trendOf = (cur: number, prev: number) => (hasPrev && prev > 0 ? Number((((cur - prev) / prev) * 100).toFixed(1)) : null)
   return [
     { label: '出单链接数', value: k.links ?? 0, unit: '个', trend: trendOf(k.links ?? 0, pk.links ?? 0) },
-    { label: '总出单数量', value: k.qty ?? 0, unit: '件', trend: trendOf(k.qty ?? 0, pk.qty ?? 0) },
-    { label: '总销售额', value: fmtMoney(k.amount ?? 0), unit: 'MXN', trend: trendOf(k.amount ?? 0, pk.amount ?? 0) },
+    { label: '销售数量', value: k.sellQty ?? 0, unit: '件', trend: trendOf(k.sellQty ?? 0, pk.sellQty ?? 0) },
+    { label: '退款数量', value: k.refundQty ?? 0, unit: '件', trend: trendOf(k.refundQty ?? 0, pk.refundQty ?? 0) },
+    { label: '退款金额', value: fmtMoney(k.refundAmount ?? 0), unit: 'MXN', trend: trendOf(k.refundAmount ?? 0, pk.refundAmount ?? 0) },
+    { label: '实际销量', value: k.netQty ?? 0, unit: '件', trend: trendOf(k.netQty ?? 0, pk.netQty ?? 0) },
+    { label: '总销售额', value: fmtMoney(k.netAmount ?? 0), unit: 'MXN', trend: trendOf(k.netAmount ?? 0, pk.netAmount ?? 0) },
     { label: '有销量天数', value: k.days ?? 0, unit: '天', trend: trendOf(k.days ?? 0, pk.days ?? 0) },
   ]
 })
@@ -474,10 +511,11 @@ async function onImportFile(e: Event) {
         errLines.push(`第${lineNo}行：商品ID为空`)
         continue
       }
-      if (qty <= 0) {
-        errLines.push(`第${lineNo}行：实际销量必须大于 0`)
+      if (qty === 0) {
+        errLines.push(`第${lineNo}行：实际销量不能为 0`)
         continue
       }
+      // 允许负销量：代表退款/退货，导入时扣减
       const product = linkMap[linkId]
       const item: any = {
         link_id: linkId,
@@ -540,7 +578,9 @@ function exportRows() {
     { key: 'link_id', label: '链接ID', value: (r: any) => r.link_id || '' },
     { key: 'product_name', label: '产品名称', value: (r: any) => r.product_name || '' },
     { key: 'platform', label: '平台/站点', value: (r: any) => r.platform || '' },
-    { key: 'quantity', label: '出单数量', value: (r: any) => r.quantity ?? '' },
+    { key: 'quantity', label: '销售数量', value: (r: any) => r.quantity ?? '' },
+    { key: 'refund_qty', label: '退款数量', value: (r: any) => r.refund_qty ?? '' },
+    { key: 'netQty', label: '实际销量', value: (r: any) => r.netQty ?? '' },
     {
       key: 'changeRate',
       label: '环比变化',

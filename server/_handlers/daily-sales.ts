@@ -13,7 +13,7 @@ const importRowSchema = z.object({
   platform: z.string().max(50).optional().default(''),
   link_id: z.string().min(1).max(200),
   product_name: z.string().max(200).optional().default(''),
-  quantity: z.coerce.number().positive(),
+  quantity: z.coerce.number().refine((v) => v !== 0, { message: 'quantity must not be 0' }),
   unit_price: z.coerce.number().min(0).optional().default(0),
   overseas_stock: z.coerce.number().min(0).optional().default(0),
 });
@@ -72,27 +72,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'sales.write');
       const body = parse(importSchema, req.body || {});
 
-      // 按 (sale_date, platform, link_id) upsert：重复导入当天数据时覆盖更新，不重复累计
-      const { error } = await supabase.from('daily_sales').upsert(
-        body.rows.map((r) => ({
+      // 按 (sale_date, platform, link_id) 聚合：正数=销售数量，负数=退款数量
+      const keyMap = new Map<string, any>();
+      for (const r of body.rows) {
+        const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
+        const cur = keyMap.get(key) || {
           sale_date: r.sale_date,
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name,
-          quantity: r.quantity,
-          unit_price: r.unit_price,
-          overseas_stock: r.overseas_stock,
-          updated_at: new Date().toISOString(),
-        })),
+          quantity: 0,
+          refund_qty: 0,
+          refund_amount: 0,
+          unit_price: 0,
+          overseas_stock: r.overseas_stock || 0,
+        };
+        const q = Number(r.quantity) || 0;
+        if (q > 0) {
+          cur.quantity += q;
+          cur.unit_price = Number(r.unit_price || 0);
+        } else {
+          const rq = -q;
+          cur.refund_qty += rq;
+          cur.refund_amount += rq * Number(r.unit_price || 0);
+        }
+        keyMap.set(key, cur);
+      }
+      const rows = Array.from(keyMap.values()).map((r) => ({
+        sale_date: r.sale_date,
+        platform: r.platform,
+        link_id: r.link_id,
+        product_name: r.product_name,
+        quantity: r.quantity,
+        refund_qty: r.refund_qty,
+        refund_amount: r.refund_amount,
+        unit_price: r.unit_price,
+        overseas_stock: r.overseas_stock,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase.from('daily_sales').upsert(
+        rows,
         { onConflict: 'sale_date,platform,link_id' }
       );
       if (error) throw error;
 
       await writeAudit(ctx, req, 'create', 'daily_sales', null, null, {
-        rows: body.rows.length,
+        rows: rows.length,
         sale_date: body.rows[0].sale_date,
       });
-      return res.status(201).json({ data: { imported: body.rows.length } });
+      return res.status(201).json({ data: { imported: rows.length } });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
