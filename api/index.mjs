@@ -27290,13 +27290,17 @@ async function handler21(req, res) {
     }
     const domShipTopRaw = Array.from(domShipMap.entries()).map(([pid, q]) => ({ product_id: pid, qty: Math.round(q) })).sort((a, b) => b.qty - a.qty).slice(0, 5);
     const [productsRows, domInvRows] = await Promise.all([
-      supabase.from("products").select("id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost"),
+      supabase.from("products").select("id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text"),
       supabase.from("inventory").select("product_id, quantity, created_at, warehouses!inner(wh_type)").eq("warehouses.wh_type", "domestic").gt("quantity", 0)
     ]);
     if (productsRows.error) throw productsRows.error;
     if (domInvRows.error) throw domInvRows.error;
     const productById = /* @__PURE__ */ new Map();
     for (const p of productsRows.data || []) productById.set(p.id, p);
+    const linkImageMap = /* @__PURE__ */ new Map();
+    for (const p of productsRows.data || []) {
+      if (p.link_id && p.image_text) linkImageMap.set(p.link_id, p.image_text);
+    }
     const domStockMap = /* @__PURE__ */ new Map();
     const domAgeMap = /* @__PURE__ */ new Map();
     for (const inv of domInvRows.data || []) {
@@ -27351,18 +27355,20 @@ async function handler21(req, res) {
         safety_stock: Math.round(safety),
         daily: Math.round(daily * 100) / 100,
         suggest,
-        daysLeft
+        daysLeft,
+        image: p.image_text || ""
       });
     }
     replenish.sort((a, b) => b.daily - a.daily || b.suggest - a.suggest);
     const domAgeTop = Array.from(domAgeMap.entries()).filter(([pid]) => (domStockMap.get(pid) || 0) > 0).map(([pid, t]) => {
       const days2 = Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 864e5));
-      return { product_id: pid, name: productById.get(pid)?.name || "", stock: Math.round(domStockMap.get(pid) || 0), days: days2 };
+      return { product_id: pid, name: productById.get(pid)?.name || "", stock: Math.round(domStockMap.get(pid) || 0), days: days2, image: productById.get(pid)?.image_text || "" };
     }).sort((a, b) => b.days - a.days).slice(0, 3);
     const domShipTop = domShipTopRaw.map((x) => ({
       product_id: x.product_id,
       name: productById.get(x.product_id)?.name || "",
-      qty: x.qty
+      qty: x.qty,
+      image: productById.get(x.product_id)?.image_text || ""
     }));
     const afterFrom = start + "T00:00:00";
     const afterTo = end + "T23:59:59";
@@ -27443,8 +27449,8 @@ async function handler21(req, res) {
           prev_after_count: prevAfterCount
         },
         platforms,
-        hot_top: hotTop,
-        new_rise: newRise,
+        hot_top: hotTop.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
+        new_rise: newRise.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
         trend,
         warn: {
           low_stock: lowStock.slice(0, 5),

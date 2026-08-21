@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ana-page">
     <div class="page-header">
       <div>
@@ -177,7 +177,7 @@
         <ul class="rank-list">
           <li v-for="(h, i) in d.hot_top" :key="h.link_id" class="rank-item">
             <span class="rank-no" :class="{ top: i === 0 }">{{ i + 1 }}</span>
-            <div class="rank-img">🏆</div>
+            <div class="rank-img"><img v-if="isImageUrl(h.image)" :src="h.image" referrerpolicy="no-referrer" @error="onImgError(h)" class="rank-thumb" /><span v-else>🏆</span></div>
             <div class="rank-info">
               <div class="rank-name">{{ h.name }}</div>
               <div class="rank-meta">链接 {{ h.link_id }}</div>
@@ -192,7 +192,7 @@
         <ul class="rank-list">
           <li v-for="(h, i) in d.new_rise" :key="h.link_id" class="rank-item">
             <span class="rank-no" :class="{ top: i === 0 }">{{ i + 1 }}</span>
-            <div class="rank-img">🚀</div>
+            <div class="rank-img"><img v-if="isImageUrl(h.image)" :src="h.image" referrerpolicy="no-referrer" @error="onImgError(h)" class="rank-thumb" /><span v-else>🚀</span></div>
             <div class="rank-info">
               <div class="rank-name">{{ h.name }}</div>
               <div class="rank-meta">本期销量 {{ h.qty }} 件</div>
@@ -211,7 +211,7 @@
         <ul class="rank-list">
           <li v-for="(r, i) in d.replenish" :key="r.product_id" class="rank-item">
             <span class="rank-no" :class="{ top: i === 0 }">{{ i + 1 }}</span>
-            <div class="rank-img">📦</div>
+            <div class="rank-img"><img v-if="isImageUrl(r.image)" :src="r.image" referrerpolicy="no-referrer" @error="onImgError(r)" class="rank-thumb" /><span v-else>📦</span></div>
             <div class="rank-info">
               <div class="rank-name">{{ r.name }}</div>
               <div class="rank-meta">
@@ -254,7 +254,7 @@
           <ul class="rank-list">
             <li v-for="(h, i) in d.domestic.ship_top" :key="h.product_id" class="rank-item">
               <span class="rank-no" :class="{ top: i === 0 }">{{ i + 1 }}</span>
-              <div class="rank-img">📤</div>
+              <div class="rank-img"><img v-if="isImageUrl(h.image)" :src="h.image" referrerpolicy="no-referrer" @error="onImgError(h)" class="rank-thumb" /><span v-else>📤</span></div>
               <div class="rank-info">
                 <div class="rank-name">{{ h.name || h.product_id }}</div>
                 <div class="rank-meta">占发货总量 {{ shipPct(h.qty) }}%</div>
@@ -269,7 +269,7 @@
           <ul class="rank-list">
             <li v-for="(h, i) in d.domestic.age_top" :key="h.product_id" class="rank-item">
               <span class="rank-no" :class="{ top: i === 0 }">{{ i + 1 }}</span>
-              <div class="rank-img">⏳</div>
+              <div class="rank-img"><img v-if="isImageUrl(h.image)" :src="h.image" referrerpolicy="no-referrer" @error="onImgError(h)" class="rank-thumb" /><span v-else>⏳</span></div>
               <div class="rank-info">
                 <div class="rank-name">{{ h.name || h.product_id }}</div>
                 <div class="rank-meta">库存 {{ h.stock }} 件 · 超 {{ h.days }} 天未出库</div>
@@ -396,6 +396,15 @@ function applyCustom() {
   }
   customRange.value = true
   load()
+}
+
+/* ---------- 产品图片 ---------- */
+function isImageUrl(v: unknown): boolean {
+  if (typeof v !== 'string' || !v) return false
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:image/')
+}
+function onImgError(item: any) {
+  item.image = ''
 }
 
 const periodText = computed(() => {
@@ -623,7 +632,8 @@ onMounted(() => {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .sub-title { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
 
-.insight-box { background: linear-gradient(135deg, rgba(236,245,255,.9), rgba(240,249,235,.9)); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
+.insight-box { background: linear-gradient(135deg, var(--insight-c1, rgba(236,245,255,.9)), var(--insight-c2, rgba(240,249,235,.9))); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; }
+html.dark .insight-box { --insight-c1: rgba(36,46,66,.5); --insight-c2: rgba(36,50,46,.5); }
 .insight-box .t { font-size: 13px; font-weight: 600; color: var(--accent, #409eff); margin-bottom: 8px; }
 .insight-item { font-size: 13px; color: var(--ink-2); line-height: 2.1; }
 .insight-item b { color: var(--ink); }
@@ -640,7 +650,8 @@ onMounted(() => {
 .rank-item:last-child { border-bottom: none; }
 .rank-no { width: 22px; height: 22px; border-radius: 6px; background: var(--bg-muted, #f4f4f5); color: var(--ink-3); font-size: 12px; font-weight: 700; text-align: center; line-height: 22px; flex-shrink: 0; }
 .rank-no.top { background: #f56c6c; color: #fff; }
-.rank-img { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--bg-muted, #f0f9eb); flex-shrink: 0; }
+.rank-img { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--bg-muted, #f0f9eb); flex-shrink: 0; overflow: hidden; }
+.rank-img .rank-thumb { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 8px; }
 .rank-info { flex: 1; min-width: 0; }
 .rank-name { font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rank-meta { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
@@ -668,14 +679,19 @@ onMounted(() => {
 .advice-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: var(--bg-muted, #f0f2f5); color: var(--ink-2); }
 .chip-warn { background: #fdf6ec; color: #e6a23c; }
+html.dark .chip-warn { background: rgba(230,162,60,.14); }
 .chip-info { background: #ecf5ff; color: #409eff; }
+html.dark .chip-info { background: rgba(64,158,255,.14); }
 .advice-tip { margin-top: 12px; font-size: 12px; color: #e6a23c; background: #fdf6ec; border-radius: 8px; padding: 8px 12px; }
+html.dark .advice-tip { background: rgba(230,162,60,.12); }
 
 .warn-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border, #ebeef5); }
 .warn-item:last-child { border-bottom: none; }
 .warn-tag { flex-shrink: 0; font-size: 12px; border-radius: 6px; padding: 2px 8px; }
 .warn-tag.red { background: #fef0f0; color: #f56c6c; }
+html.dark .warn-tag.red { background: rgba(245,108,108,.14); }
 .warn-tag.orange { background: #fdf6ec; color: #e6a23c; }
+html.dark .warn-tag.orange { background: rgba(230,162,60,.14); }
 .warn-info { flex: 1; font-size: 13px; color: var(--ink); }
 .warn-info .sub { font-size: 12px; color: var(--ink-3); }
 

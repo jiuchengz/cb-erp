@@ -216,7 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- 3. products + 国内库存 ----------
     const [productsRows, domInvRows] = await Promise.all([
-      supabase.from('products').select('id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost'),
+      supabase.from('products').select('id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text'),
       supabase
         .from('inventory')
         .select('product_id, quantity, created_at, warehouses!inner(wh_type)')
@@ -228,6 +228,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const productById = new Map<string, any>();
     for (const p of productsRows.data || []) productById.set(p.id, p);
+
+    // 链接 -> 产品图片（供热销/潜力榜展示产品图）
+    const linkImageMap = new Map<string, string>();
+    for (const p of productsRows.data || []) {
+      if (p.link_id && p.image_text) linkImageMap.set(p.link_id, p.image_text);
+    }
 
     const domStockMap = new Map<string, number>();
     const domAgeMap = new Map<string, string>(); // product_id -> 最早入库时间
@@ -288,6 +294,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         daily: Math.round(daily * 100) / 100,
         suggest,
         daysLeft,
+        image: p.image_text || '',
       });
     }
     replenish.sort((a, b) => (b.daily - a.daily) || (b.suggest - a.suggest));
@@ -297,7 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter(([pid]) => (domStockMap.get(pid) || 0) > 0)
       .map(([pid, t]) => {
         const days = Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 86400000));
-        return { product_id: pid, name: productById.get(pid)?.name || '', stock: Math.round(domStockMap.get(pid) || 0), days };
+        return { product_id: pid, name: productById.get(pid)?.name || '', stock: Math.round(domStockMap.get(pid) || 0), days, image: productById.get(pid)?.image_text || '' };
       })
       .sort((a, b) => b.days - a.days)
       .slice(0, 3);
@@ -306,6 +313,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       product_id: x.product_id,
       name: productById.get(x.product_id)?.name || '',
       qty: x.qty,
+      image: productById.get(x.product_id)?.image_text || '',
     }));
 
     // ---------- 4. after_sales：售后数 / 原因分布 / 趋势 ----------
@@ -399,8 +407,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           prev_after_count: prevAfterCount,
         },
         platforms,
-        hot_top: hotTop,
-        new_rise: newRise,
+        hot_top: hotTop.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || '' })),
+        new_rise: newRise.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || '' })),
         trend,
         warn: {
           low_stock: lowStock.slice(0, 5),

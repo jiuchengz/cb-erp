@@ -43,6 +43,10 @@
   --table-border: rgba(20, 24, 40, 0.12);
   --table-line: rgba(20, 24, 40, 0.14);
 
+  /* 弱化背景块（排名序号/排行图/标签底色，随明暗联动） */
+  --bg-muted: rgba(255, 255, 255, 0.55);
+  --bg-muted-strong: rgba(255, 255, 255, 0.75);
+
   /* 旧变量兼容映射（供历史 scoped 样式引用） */
   --color-primary: var(--accent);
   --color-bg: transparent;
@@ -87,6 +91,8 @@ html.dark {
   --table-bg: rgba(30, 36, 56, 0.48);
   --table-border: rgba(255, 255, 255, 0.16);
   --table-line: rgba(255, 255, 255, 0.22);
+  --bg-muted: rgba(255, 255, 255, 0.08);
+  --bg-muted-strong: rgba(255, 255, 255, 0.14);
   --color-text: var(--ink);
   --color-card: var(--glass-bg);
   --color-border: rgba(255, 255, 255, 0.16);
