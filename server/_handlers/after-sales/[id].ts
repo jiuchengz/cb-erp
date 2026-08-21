@@ -17,14 +17,25 @@ const AFTER_SALES_FLOW: Record<string, string[]> = {
   PLATFORM_INTERVENED: ['COMPLETED', 'REJECTED'],
 };
 
+const itemSchema = z.object({
+  product_id: z.string().uuid(),
+  quantity: z.coerce.number().positive(),
+});
+
 const updateSchema = z
   .object({
     status: z
       .enum(['PENDING', 'APPROVED', 'PROCESSING', 'COMPLETED', 'REJECTED', 'PLATFORM_INTERVENED'])
       .optional(),
+    order_no: z.string().min(1).max(64).optional(),
+    type: z.string().min(1).optional(),
+    sales_order_id: z.string().uuid().nullable().optional(),
+    warehouse_id: z.string().uuid().nullable().optional(),
+    reason: z.string().max(256).nullable().optional(),
     result: z.string().max(512).optional(),
+    items: z.array(itemSchema).min(1).max(200).optional(),
   })
-  .refine((v) => v.status !== undefined || v.result !== undefined, { message: '至少提供一个更新字段' });
+  .refine((v) => Object.keys(v).length > 0, { message: '至少提供一个更新字段' });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -60,10 +71,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       requirePermission(ctx, 'after_sales.write');
 
+      // 类型字典校验（若更新 type）
+      if (body.type !== undefined) {
+        const { data: typeMeta } = await supabase
+          .from('after_sale_types')
+          .select('value')
+          .eq('value', body.type)
+          .maybeSingle();
+        if (!typeMeta) throw Errors.badRequest(`未知售后类型：${body.type}`);
+      }
+
       const updatePayload: any = {};
+      if (body.order_no !== undefined) updatePayload.order_no = body.order_no;
+      if (body.type !== undefined) updatePayload.type = body.type;
+      if (body.sales_order_id !== undefined) updatePayload.sales_order_id = body.sales_order_id;
+      if (body.warehouse_id !== undefined) updatePayload.warehouse_id = body.warehouse_id;
+      if (body.reason !== undefined) updatePayload.reason = body.reason;
       if (body.result !== undefined) updatePayload.result = body.result;
 
-      const items = before.after_sale_items || [];
+      // 明细整体替换：先删旧明细，再插入新明细
+      if (body.items !== undefined) {
+        const { error: delItemsErr } = await supabase
+          .from('after_sale_items')
+          .delete()
+          .eq('after_sale_id', id);
+        if (delItemsErr) throw delItemsErr;
+        const { error: insItemsErr } = await supabase.from('after_sale_items').insert(
+          body.items.map((it) => ({ after_sale_id: id, product_id: it.product_id, quantity: it.quantity }))
+        );
+        if (insItemsErr) throw insItemsErr;
+      }
+
+      const items = body.items !== undefined ? body.items : before.after_sale_items || [];
       const isStatusUpdate = body.status !== undefined;
       const allowed = AFTER_SALES_FLOW[before.status] || [];
       if (isStatusUpdate && !allowed.includes(body.status!)) {

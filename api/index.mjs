@@ -27311,10 +27311,20 @@ var AFTER_SALES_FLOW = {
   REJECTED: [],
   PLATFORM_INTERVENED: ["COMPLETED", "REJECTED"]
 };
+var itemSchema6 = external_exports.object({
+  product_id: external_exports.string().uuid(),
+  quantity: external_exports.coerce.number().positive()
+});
 var updateSchema4 = external_exports.object({
   status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED", "PLATFORM_INTERVENED"]).optional(),
-  result: external_exports.string().max(512).optional()
-}).refine((v) => v.status !== void 0 || v.result !== void 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
+  order_no: external_exports.string().min(1).max(64).optional(),
+  type: external_exports.string().min(1).optional(),
+  sales_order_id: external_exports.string().uuid().nullable().optional(),
+  warehouse_id: external_exports.string().uuid().nullable().optional(),
+  reason: external_exports.string().max(256).nullable().optional(),
+  result: external_exports.string().max(512).optional(),
+  items: external_exports.array(itemSchema6).min(1).max(200).optional()
+}).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
 async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -27338,9 +27348,26 @@ async function handler27(req, res) {
         throw getErr;
       }
       requirePermission(ctx, "after_sales.write");
+      if (body.type !== void 0) {
+        const { data: typeMeta } = await supabase.from("after_sale_types").select("value").eq("value", body.type).maybeSingle();
+        if (!typeMeta) throw Errors.badRequest(`\u672A\u77E5\u552E\u540E\u7C7B\u578B\uFF1A${body.type}`);
+      }
       const updatePayload = {};
+      if (body.order_no !== void 0) updatePayload.order_no = body.order_no;
+      if (body.type !== void 0) updatePayload.type = body.type;
+      if (body.sales_order_id !== void 0) updatePayload.sales_order_id = body.sales_order_id;
+      if (body.warehouse_id !== void 0) updatePayload.warehouse_id = body.warehouse_id;
+      if (body.reason !== void 0) updatePayload.reason = body.reason;
       if (body.result !== void 0) updatePayload.result = body.result;
-      const items = before.after_sale_items || [];
+      if (body.items !== void 0) {
+        const { error: delItemsErr } = await supabase.from("after_sale_items").delete().eq("after_sale_id", id);
+        if (delItemsErr) throw delItemsErr;
+        const { error: insItemsErr } = await supabase.from("after_sale_items").insert(
+          body.items.map((it) => ({ after_sale_id: id, product_id: it.product_id, quantity: it.quantity }))
+        );
+        if (insItemsErr) throw insItemsErr;
+      }
+      const items = body.items !== void 0 ? body.items : before.after_sale_items || [];
       const isStatusUpdate = body.status !== void 0;
       const allowed = AFTER_SALES_FLOW[before.status] || [];
       if (isStatusUpdate && !allowed.includes(body.status)) {
@@ -27699,7 +27726,7 @@ var REPLENISHMENT_FLOW = {
   COMPLETED: [],
   CANCELLED: []
 };
-var itemSchema6 = external_exports.object({
+var itemSchema7 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
@@ -27708,7 +27735,7 @@ var updateSchema7 = external_exports.object({
   replenish_qty: external_exports.coerce.number().min(0).optional(),
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   warehouse_id: external_exports.string().uuid().optional(),
-  items: external_exports.array(itemSchema6).min(1).max(200).optional()
+  items: external_exports.array(itemSchema7).min(1).max(200).optional()
 }).refine(
   (v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0 || v.warehouse_id !== void 0 || v.items !== void 0,
   {

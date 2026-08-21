@@ -179,6 +179,69 @@
         </el-table-column>
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
       </el-table>
+      <template #footer>
+        <el-button v-if="canWrite" type="primary" @click="openDetailEdit">编辑</el-button>
+        <el-button @click="detailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 售后单编辑弹窗 -->
+    <el-dialog v-model="editVisible" title="编辑售后单" width="860px" destroy-on-close>
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="售后单号" required>
+          <el-input v-model="editForm.order_no" placeholder="唯一售后单号" />
+        </el-form-item>
+        <el-form-item label="类型" required>
+          <el-select v-model="editForm.type" style="width: 200px">
+            <el-option v-for="t in afterSaleTypes" :key="t.value" :label="t.name" :value="t.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联销售单">
+          <el-select v-model="editForm.sales_order_id" filterable clearable placeholder="可选" style="width: 100%">
+            <el-option v-for="s in salesOrders" :key="s.id" :label="s.order_no" :value="s.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="仓库">
+          <el-select v-model="editForm.warehouse_id" clearable placeholder="退货入库仓库（可选）" style="width: 100%">
+            <el-option-group v-if="domesticWh.length" label="国内仓库">
+              <el-option v-for="w in domesticWh" :key="w.id" :label="w.name" :value="w.id" />
+            </el-option-group>
+            <el-option-group v-if="overseasWh.length" label="海外仓库">
+              <el-option v-for="w in overseasWh" :key="w.id" :label="w.name" :value="w.id" />
+            </el-option-group>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="原因">
+          <el-input v-model="editForm.reason" type="textarea" :rows="2" maxlength="256" />
+        </el-form-item>
+        <el-form-item label="处理结果">
+          <el-input v-model="editForm.result" type="textarea" :rows="2" maxlength="512" placeholder="处理结果（可选）" />
+        </el-form-item>
+        <el-form-item label="商品明细" required>
+          <div class="items-editor">
+            <div v-for="(it, idx) in editForm.items" :key="idx" class="item-row">
+              <el-input v-model="it.link_id" placeholder="输入链ID" style="width: 200px" @change="resolveEditItem(it)" />
+              <template v-if="it.product_name">
+                <span class="item-name">{{ it.product_name }}</span>
+                <img
+                  v-if="isImageUrl(it.product_image)"
+                  :src="it.product_image"
+                  class="item-thumb"
+                  referrerpolicy="no-referrer"
+                  @error="it.product_image = ''"
+                />
+              </template>
+              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 140px" />
+              <el-button link type="danger" @click="removeEditItem(idx)">删除</el-button>
+            </div>
+            <el-button size="small" @click="addEditItem">添加明细</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="flowVisible" title="状态流转" width="420px" destroy-on-close>
@@ -459,6 +522,96 @@ async function openDetail(id: string) {
     detailVisible.value = true
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载详情失败')
+  }
+}
+
+// ===== 售后单编辑 =====
+const editVisible = ref(false)
+const editForm = reactive({
+  order_no: '',
+  type: 'return',
+  sales_order_id: '',
+  warehouse_id: '',
+  reason: '',
+  result: '',
+  items: [] as any[],
+})
+
+function openDetailEdit() {
+  const d = detail.value
+  if (!d) return
+  editForm.order_no = d.order_no || ''
+  editForm.type = d.type || 'return'
+  editForm.sales_order_id = d.sales_order_id || ''
+  editForm.warehouse_id = d.warehouse_id || ''
+  editForm.reason = d.reason || ''
+  editForm.result = d.result || ''
+  editForm.items = (d.after_sale_items || []).map((it: any) => ({
+    link_id: it.products?.link_id || '',
+    product_id: it.product_id,
+    product_name: it.products?.name || '',
+    product_image: it.products?.image_text || '',
+    quantity: it.quantity ?? 1,
+  }))
+  if (!editForm.items.length) addEditItem()
+  editVisible.value = true
+}
+
+function addEditItem() {
+  editForm.items.push({ link_id: '', product_id: '', product_name: '', product_image: '', quantity: 1 })
+}
+function removeEditItem(idx: number) {
+  editForm.items.splice(idx, 1)
+}
+function resolveEditItem(it: any) {
+  const linkId = (it.link_id || '').trim()
+  const p = products.value.find((x) => x.link_id === linkId)
+  if (p) {
+    it.product_id = p.id
+    it.product_name = p.name
+    it.product_image = p.image_text || ''
+  } else {
+    it.product_id = ''
+    it.product_name = ''
+    it.product_image = ''
+    if (linkId) ElMessage.warning(`未找到链ID：${linkId}`)
+  }
+}
+
+async function saveEdit() {
+  const d = detail.value
+  if (!d) return
+  if (!editForm.order_no.trim()) {
+    ElMessage.warning('请填写售后单号')
+    return
+  }
+  const items = editForm.items.filter((it) => it.product_id)
+  if (!items.length) {
+    ElMessage.warning('请至少添加一条商品明细')
+    return
+  }
+  const payload: any = {
+    order_no: editForm.order_no,
+    type: editForm.type,
+    reason: editForm.reason,
+    items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity })),
+  }
+  if (editForm.result) payload.result = editForm.result
+  if (editForm.sales_order_id) payload.sales_order_id = editForm.sales_order_id
+  else payload.sales_order_id = null
+  if (editForm.warehouse_id) payload.warehouse_id = editForm.warehouse_id
+  else payload.warehouse_id = null
+  saving.value = true
+  try {
+    await api.patch(`/after-sales/${d.id}`, payload)
+    ElMessage.success('保存成功')
+    editVisible.value = false
+    await openDetail(d.id)
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 

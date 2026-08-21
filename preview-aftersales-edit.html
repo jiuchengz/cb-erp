@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>售后单详情新增编辑功能 - 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  body { background: #f5f7fa; padding: 24px; }
+  .page { background: #fff; border-radius: 8px; padding: 24px; max-width: 980px; margin: 0 auto; }
+  .page h2 { font-size: 18px; color: #303133; margin-bottom: 16px; }
+  .badge { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 10px; font-size: 12px; margin-left: 8px; vertical-align: middle; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border: 1px solid #ebeef5; padding: 10px 12px; font-size: 13px; text-align: left; vertical-align: top; }
+  th { background: #f5f7fa; color: #909399; font-weight: 600; width: 120px; }
+  .ok { color: #67c23a; font-weight: 600; }
+  .note { margin-top: 16px; padding: 12px 16px; background: #f4f4f5; border-radius: 4px; color: #909399; font-size: 13px; line-height: 1.9; }
+  .note b { color: #606266; }
+  .mock { border: 1px solid #dcdfe6; border-radius: 8px; padding: 20px; margin-top: 16px; background: #fafafa; }
+  .mock-title { font-size: 14px; color: #606266; margin-bottom: 14px; font-weight: 600; }
+  .mock .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; }
+  .mock .row label { width: 90px; color: #909399; text-align: right; line-height: 30px; }
+  .mock .row input, .mock .row select, .mock .row textarea { flex: 1; min-width: 200px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 6px 10px; font-size: 13px; background: #fff; }
+  .mock .row textarea { height: 54px; resize: none; }
+  .btns { text-align: right; margin-top: 14px; }
+  .btn { display: inline-block; border: 1px solid #dcdfe6; border-radius: 4px; padding: 8px 16px; font-size: 13px; color: #606266; background: #fff; margin-left: 10px; cursor: default; }
+  .btn.primary { background: #409eff; border-color: #409eff; color: #fff; }
+  .tag { display: inline-block; background: #f0f9eb; color: #67c23a; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h2>售后单详情新增「编辑」功能<span class="badge">本次改动预览</span></h2>
+  <p style="font-size: 13px; color: #909399;">点击列表「详情」仍为只读查看全部信息；新增「编辑」按钮，可编辑全部字段并保存。</p>
+
+  <div class="mock">
+    <div class="mock-title">编辑售后单（点击详情 → 编辑 后弹出）</div>
+    <div class="row"><label>售后单号</label><input value="AF20260821-0001" disabled style="color:#909399;"></div>
+    <div class="row"><label>类型</label><select><option selected>退货退款</option><option>换货</option><option>仅退款</option></select></div>
+    <div class="row"><label>关联销售单</label><select><option selected>SO20260820-0012</option></select></div>
+    <div class="row"><label>仓库</label><select><option selected>深圳仓</option></select></div>
+    <div class="row"><label>原因</label><textarea>商品破损，客户申请退货</textarea></div>
+    <div class="row"><label>处理结果</label><textarea>已同意退货，等待入库</textarea></div>
+    <div class="row"><label>商品明细</label>
+      <div style="flex:1; font-size:13px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <input value="LINK-10086" style="flex:none; width:180px;">
+          <span>跨境蓝牙耳机 Pro</span>
+          <input type="number" value="2" style="flex:none; width:90px;">
+          <span class="btn" style="border:none; color:#f56c6c; padding:0;">删除</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <input value="LINK-10099" style="flex:none; width:180px;">
+          <span>Type-C 数据线</span>
+          <input type="number" value="1" style="flex:none; width:90px;">
+          <span class="btn" style="border:none; color:#f56c6c; padding:0;">删除</span>
+        </div>
+        <span class="btn" style="padding:4px 12px;">+ 添加明细</span>
+      </div>
+    </div>
+    <div class="btns">
+      <span class="btn">取消</span>
+      <span class="btn primary">保存</span>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>改动点</th><td>售后详情弹窗底部新增「编辑」按钮（有 <code>after_sales.write</code> 权限时显示），点击弹出「编辑售后单」弹窗。</td></tr>
+    <tr><th>可编辑字段</th><td>售后单号、类型、关联销售单、仓库、原因、处理结果、商品明细（链ID匹配回填 / 数量 / 增删明细）——全部字段均可编辑。</td></tr>
+    <tr><th>后端支持</th><td>PATCH <code>/after-sales/{id}</code> 由仅支持 status/result 扩展为支持 order_no、type、sales_order_id、warehouse_id、reason、result、items（明细整体替换）；类型变更时校验自定义字典。</td></tr>
+    <tr><th>状态流转</th><td>状态仍走「流转」按钮的合法状态机，编辑弹窗不直接改状态；编辑明细后如流转 COMPLETED 且类型需退货入库，按新明细入库。</td></tr>
+    <tr><th>保存后行为</th><td>保存成功 → 关闭编辑弹窗 → 刷新详情弹窗数据与列表。</td></tr>
+  </table>
+
+  <div class="note">
+    <b>待确认：</b>以上改动效果是否符合预期？确认后我再 commit + push 上线。线上是否生效以 Vercel Deployments 截图为准。
+  </div>
+</div>
+</body>
+</html>
