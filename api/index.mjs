@@ -26556,6 +26556,15 @@ async function handler13(req, res) {
       const completedIds = [];
       for (const row of rows) {
         const items = row.replenishment_order_items || [];
+        const firstItem = items[0];
+        if (firstItem) {
+          const records = purchaseByProduct[firstItem.product_id] || [];
+          if (records.length) {
+            row.arrival_date = records.map((r) => r.receive_date).sort().slice(-1)[0] || null;
+          } else {
+            row.arrival_date = null;
+          }
+        }
         const replenishTime = row.replenishment_time;
         if (!items.length || !replenishTime) continue;
         const allMatched = items.every((it) => {

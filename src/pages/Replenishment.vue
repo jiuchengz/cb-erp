@@ -80,6 +80,9 @@
           <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="到货时间" width="130">
+        <template #default="{ row }">{{ row.arrival_date || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="created_at" label="创建时间" min-width="170">
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>

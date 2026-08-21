@@ -74,6 +74,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const completedIds: string[] = [];
       for (const row of rows) {
         const items = row.replenishment_order_items || [];
+        // 到货时间：取首个明细产品在采购拿货中最晚的拿货日期
+        const firstItem = items[0];
+        if (firstItem) {
+          const records = purchaseByProduct[firstItem.product_id] || [];
+          if (records.length) {
+            row.arrival_date = records.map((r: any) => r.receive_date).sort().slice(-1)[0] || null;
+          } else {
+            row.arrival_date = null;
+          }
+        }
         const replenishTime = row.replenishment_time;
         if (!items.length || !replenishTime) continue;
         const allMatched = items.every((it: any) => {
