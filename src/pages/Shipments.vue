@@ -634,10 +634,24 @@ function onChangeAppointment(row: any, v: string) {
 const forwarders = ref<any[]>([])
 const activeForwarders = computed(() => forwarders.value.filter((f) => f.is_active))
 
+async function loadAllForwarders(): Promise<any[]> {
+  const all: any[] = []
+  let page = 1
+  const pageSize = 200
+  while (true) {
+    const res = await api.get('/forwarders', { params: { page, pageSize } })
+    const list = res.data.data ?? []
+    all.push(...list)
+    const total = res.data.total ?? 0
+    if (all.length >= total || list.length < pageSize) break
+    page++
+    if (page > 50) break
+  }
+  return all
+}
 async function loadOptions() {
   try {
-    const fwRes = await api.get('/forwarders', { params: { page: 1, pageSize: 200 } })
-    forwarders.value = fwRes.data.data ?? []
+    forwarders.value = await loadAllForwarders()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }
@@ -1137,8 +1151,7 @@ function openForwarderDialog() {
 
 async function loadForwarders() {
   try {
-    const { data } = await api.get('/forwarders', { params: { page: 1, pageSize: 200 } })
-    forwarders.value = data.data ?? []
+    forwarders.value = await loadAllForwarders()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载货代失败')
   }

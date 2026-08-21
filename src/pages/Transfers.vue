@@ -211,13 +211,24 @@ const warehouses = ref<any[]>([])
 function warehouseName(id: string) {
   return warehouses.value.find((w) => w.id === id)?.name || id
 }
+async function loadAllProducts(): Promise<any[]> {
+  const all: any[] = []
+  let page = 1
+  const pageSize = 200
+  while (true) {
+    const res = await api.get('/products', { params: { page, pageSize } })
+    const list = res.data.data ?? []
+    all.push(...list)
+    const total = res.data.total ?? 0
+    if (all.length >= total || list.length < pageSize) break
+    page++
+  }
+  return all
+}
 async function loadOptions() {
   try {
-    const [prodRes, whRes] = await Promise.all([
-      api.get('/products', { params: { page: 1, pageSize: 200 } }),
-      api.get('/warehouses'),
-    ])
-    products.value = prodRes.data.data ?? []
+    const whRes = await api.get('/warehouses')
+    products.value = await loadAllProducts()
     warehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')

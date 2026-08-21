@@ -325,16 +325,29 @@ function warehouseName(id: string) {
   if (!id) return '-'
   return warehouses.value.find((w) => w.id === id)?.name || id
 }
+async function loadAll(url: string): Promise<any[]> {
+  const all: any[] = []
+  let page = 1
+  const pageSize = 200
+  while (true) {
+    const res = await api.get(url, { params: { page, pageSize } })
+    const list = res.data.data ?? []
+    all.push(...list)
+    const total = res.data.total ?? 0
+    if (all.length >= total || list.length < pageSize) break
+    page++
+  }
+  return all
+}
+async function loadAllProducts(): Promise<any[]> {
+  return loadAll('/products')
+}
 async function loadOptions() {
   try {
-    const [prodRes, whRes, saleRes] = await Promise.all([
-      api.get('/products', { params: { page: 1, pageSize: 200 } }),
-      api.get('/warehouses'),
-      api.get('/sales', { params: { page: 1, pageSize: 200 } }),
-    ])
-    products.value = prodRes.data.data ?? []
+    const whRes = await api.get('/warehouses')
+    products.value = await loadAllProducts()
     warehouses.value = whRes.data.data ?? []
-    salesOrders.value = saleRes.data.data ?? []
+    salesOrders.value = await loadAll('/sales')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }

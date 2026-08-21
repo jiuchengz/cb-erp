@@ -246,14 +246,25 @@ const activeTab = ref('list')
 const warehouses = ref<any[]>([])
 const products = ref<any[]>([])
 
+async function loadAllProducts(): Promise<any[]> {
+  const all: any[] = []
+  let page = 1
+  const pageSize = 200
+  while (true) {
+    const res = await api.get('/products', { params: { page, pageSize } })
+    const list = res.data.data ?? []
+    all.push(...list)
+    const total = res.data.total ?? 0
+    if (all.length >= total || list.length < pageSize) break
+    page++
+  }
+  return all
+}
 async function loadOptions() {
   try {
-    const [whRes, prodRes] = await Promise.all([
-      api.get('/warehouses'),
-      api.get('/products', { params: { page: 1, pageSize: 200 } }),
-    ])
+    const whRes = await api.get('/warehouses')
     warehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
-    products.value = prodRes.data.data ?? []
+    products.value = await loadAllProducts()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }
