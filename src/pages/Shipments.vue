@@ -17,8 +17,11 @@
     </div>
 
     <div class="filters">
-      <el-select v-model="query.status" placeholder="状态" clearable style="width: 160px" @change="load">
-        <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
+      <el-select v-model="query.cargo_status" placeholder="货物状态" clearable style="width: 160px" @change="load">
+        <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name">
+          <span class="dot" :style="{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: s.color, marginRight: '6px', verticalAlign: 'middle' }" />
+          <span>{{ s.name }}</span>
+        </el-option>
       </el-select>
       <el-select v-model="query.bill_check_status" placeholder="账单核对" clearable style="width: 160px" @change="load">
         <el-option v-for="s in billCheckStatusOptions" :key="s.value" :label="s.label" :value="s.value" />
@@ -482,14 +485,6 @@ const SHIPMENT_FLOW: Record<string, string[]> = {
   CANCELLED: [],
 }
 
-const statusOptions = [
-  { label: '待发货', value: 'PENDING' },
-  { label: '已发出', value: 'SHIPPED' },
-  { label: '运输中', value: 'IN_TRANSIT' },
-  { label: '已送达', value: 'DELIVERED' },
-  { label: '已取消', value: 'CANCELLED' },
-]
-
 const statusMap: Record<string, { label: string; type: string }> = {
   PENDING: { label: '待发货', type: 'info' },
   SHIPPED: { label: '已发出', type: 'primary' },
@@ -579,7 +574,7 @@ function formatDateOnly(v: string) {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, status: '', bill_check_status: '' })
+const query = reactive({ page: 1, pageSize: 20, cargo_status: '', bill_check_status: '' })
 
 async function load() {
   loading.value = true

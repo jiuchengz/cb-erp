@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发货模块-状态搜索栏与状态管理联动预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+  body { background: #f0f2f5; padding: 24px; color: #303133; }
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px; margin-bottom: 20px; }
+  .card h3 { font-size: 15px; margin-bottom: 14px; color: #1f2d3d; }
+  .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .select { position: relative; width: 160px; }
+  .select .trigger { width: 100%; height: 34px; line-height: 32px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 12px; background: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+  .select .trigger .arrow { color: #c0c4cc; font-size: 12px; }
+  .dropdown { position: absolute; top: 38px; left: 0; right: 0; background: #fff; border: 1px solid #e4e7ed; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,.12); z-index: 100; max-height: 220px; overflow-y: auto; display: none; }
+  .dropdown.open { display: block; }
+  .dropdown .item { padding: 8px 12px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .dropdown .item:hover { background: #f5f7fa; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .btn { display: inline-block; height: 34px; line-height: 32px; padding: 0 18px; border-radius: 4px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+  .btn-primary { background: #409eff; color: #fff; }
+  .btn-primary:hover { background: #66b1ff; }
+  .btn-default { background: #fff; border-color: #dcdfe6; color: #606266; }
+  .btn-success { background: #67c23a; color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 10px; text-align: left; }
+  th { background: #f5f7fa; color: #909399; font-weight: 500; }
+  tr.row-colored td { }
+  .tag { display: inline-block; padding: 0 8px; height: 24px; line-height: 24px; border-radius: 4px; font-size: 12px; }
+  .empty { color: #909399; text-align: center; padding: 20px; font-size: 13px; }
+  .form-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .form-row input[type=text] { height: 34px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 12px; font-size: 13px; width: 160px; outline: none; }
+  .form-row input[type=color] { width: 60px; height: 34px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 2px; cursor: pointer; background: #fff; }
+  .note { font-size: 12px; color: #909399; margin-top: 8px; line-height: 1.7; }
+  .badge { display: inline-block; background: #fef0f0; color: #f56c6c; border: 1px solid #fde2e2; border-radius: 4px; padding: 0 6px; font-size: 12px; margin-left: 6px; }
+  .badge-green { background: #f0f9eb; color: #67c23a; border-color: #e1f3d8; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h3>发货管理 — 搜索栏（状态筛选已接入货物状态字典）</h3>
+  <div class="filters">
+    <div class="select" id="searchSelect">
+      <div class="trigger" onclick="toggleSearch()">
+        <span id="searchVal" style="color:#909399;">货物状态</span>
+        <span class="arrow">▾</span>
+      </div>
+      <div class="dropdown" id="searchDropdown"></div>
+    </div>
+    <span class="btn btn-default">账单核对</span>
+    <span class="btn btn-primary">查询</span>
+  </div>
+  <div class="note">
+    ▸ 搜索栏下拉选项来自「状态管理」字典（cargo_statuses），与行内编辑、整行着色共用同一份数据。<br>
+    ▸ 在下方状态管理新增/修改状态后，此下拉自动同步出现；搜索时按 cargo_status 字段精确过滤，与表格行内状态完全一致。
+  </div>
+</div>
+
+<div class="card">
+  <h3>状态管理（货物状态字典）<span class="badge badge-green">数据源 /api/cargo-statuses</span></h3>
+  <div class="form-row">
+    <input type="text" id="newName" placeholder="状态名称，如：待入仓">
+    <input type="color" id="newColor" value="#409eff">
+    <button class="btn btn-success" onclick="addStatus()">新增状态</button>
+  </div>
+  <table>
+    <thead>
+      <tr><th>状态名称</th><th>颜色</th><th>表格行预览</th><th>操作</th></tr>
+    </thead>
+    <tbody id="dictBody"></tbody>
+  </table>
+  <div class="note">
+    ▸ 演示：点击「新增状态」输入名称并选色，搜索栏下拉会立即出现该状态（含色点），表格行也按字典着色。<br>
+    ▸ 当前改动范围：Shipments.vue 搜索栏由写死的 statusOptions 改为动态 cargoStatuses；query.status 改为 query.cargo_status；后端 /shipments 已支持 cargo_status 过滤。
+  </div>
+</div>
+
+<div class="card">
+  <h3>发货列表（行内状态与整行着色，取自同一字典）</h3>
+  <table>
+    <thead>
+      <tr><th>发货时间</th><th>货代</th><th>货物状态</th><th>预约时间</th></tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div class="empty" id="tableEmpty" style="display:none;">暂无数据</div>
+</div>
+
+<script>
+  var statuses = [
+    { name: '转运中', color: '#e6a23c' },
+    { name: '已送达', color: '#67c23a' },
+    { name: '已取消', color: '#f56c6c' },
+  ];
+  var rows = [
+    { ship_date: '2026-08-21 10:24', forwarder: '顺丰国际', cargo_status: '转运中', appointment_time: '2026-08-22 14:00' },
+    { ship_date: '2026-08-20 16:02', forwarder: 'DHL', cargo_status: '已送达', appointment_time: '2026-08-21 09:30' },
+  ];
+  var searchOpen = false;
+  var selected = '';
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function luminance(hex){
+    var c = hex.replace('#','');
+    var r = parseInt(c.substring(0,2),16), g = parseInt(c.substring(2,4),16), b = parseInt(c.substring(4,6),16);
+    return (0.299*r + 0.587*g + 0.114*b) / 255;
+  }
+
+  function renderSearch(){
+    var el = document.getElementById('searchDropdown');
+    var html = '';
+    statuses.forEach(function(s){
+      html += '<div class="item" onclick="pick(\'' + esc(s.name) + '\')"><span class="dot" style="background:' + s.color + '"></span>' + esc(s.name) + '</div>';
+    });
+    el.innerHTML = html || '<div class="empty" style="padding:10px;">暂无状态</div>';
+  }
+
+  function toggleSearch(){ searchOpen = !searchOpen; document.getElementById('searchDropdown').classList.toggle('open', searchOpen); }
+  function pick(name){
+    selected = name;
+    var t = document.getElementById('searchVal');
+    t.textContent = name; t.style.color = '#303133';
+    searchOpen = false; document.getElementById('searchDropdown').classList.remove('open');
+    renderTable();
+  }
+
+  function renderDict(){
+    var html = '';
+    statuses.forEach(function(s, i){
+      var textColor = luminance(s.color) > 0.6 ? '#303133' : '#fff';
+      html += '<tr><td>' + esc(s.name) + '</td><td><span class="dot" style="background:' + s.color + '"></span> <code>' + esc(s.color) + '</code></td>' +
+        '<td><span class="tag" style="background:' + s.color + ';color:' + textColor + '">' + esc(s.name) + '</span></td>' +
+        '<td><button class="btn btn-default" onclick="delStatus(' + i + ')">删除</button></td></tr>';
+    });
+    document.getElementById('dictBody').innerHTML = html || '<tr><td colspan="4" class="empty">暂无状态</td></tr>';
+  }
+
+  function renderTable(){
+    var filtered = selected ? rows.filter(function(r){ return r.cargo_status === selected; }) : rows;
+    var html = '';
+    filtered.forEach(function(r){
+      var s = statuses.filter(function(x){ return x.name === r.cargo_status; })[0] || { color: '#ffffff' };
+      var bg = s.color, textColor = luminance(bg) > 0.6 ? '#303133' : '#fff';
+      html += '<tr style="background:' + bg + ';color:' + textColor + '"><td>' + esc(r.ship_date) + '</td><td>' + esc(r.forwarder) + '</td><td>' + esc(r.cargo_status) + '</td><td>' + esc(r.appointment_time) + '</td></tr>';
+    });
+    document.getElementById('tableBody').innerHTML = html || '<tr><td colspan="4" class="empty">暂无匹配数据</td></tr>';
+  }
+
+  function addStatus(){
+    var name = document.getElementById('newName').value.trim();
+    var color = document.getElementById('newColor').value;
+    if(!name){ alert('请输入状态名称'); return; }
+    if(statuses.some(function(s){ return s.name === name; })){ alert('该状态已存在'); return; }
+    statuses.push({ name: name, color: color });
+    document.getElementById('newName').value = '';
+    renderAll();
+  }
+
+  function delStatus(i){
+    statuses.splice(i, 1);
+    if(selected && !statuses.some(function(s){ return s.name === selected; })){ selected = ''; document.getElementById('searchVal').textContent = '货物状态'; document.getElementById('searchVal').style.color = '#909399'; }
+    renderAll();
+  }
+
+  function renderAll(){ renderSearch(); renderDict(); renderTable(); }
+  renderAll();
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('#searchSelect')){ searchOpen = false; document.getElementById('searchDropdown').classList.remove('open'); }
+  });
+</script>
+</body>
+</html>
