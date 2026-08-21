@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>预览：商品模块销量数据源修复</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f6fa; color: #2c3e50; padding: 24px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: #7f8c8d; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  h2 { font-size: 16px; margin-bottom: 12px; border-left: 4px solid #409eff; padding-left: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #e3e8ef; padding: 8px 10px; text-align: left; }
+  th { background: #f0f4f9; font-weight: 600; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+  .tag-fix { background: #e1f3e8; color: #1a7f4e; }
+  .tag-before { background: #fde8e8; color: #c0392b; }
+  .tag-after { background: #e1f3e8; color: #1a7f4e; }
+  .note { font-size: 13px; color: #555; line-height: 1.8; }
+  .note b { color: #2c3e50; }
+  ul { padding-left: 18px; font-size: 13px; line-height: 1.9; color: #555; }
+  .highlight { background: #fffbe6; border-left: 3px solid #e6a23c; padding: 8px 12px; font-size: 13px; color: #8a6d1a; border-radius: 0 6px 6px 0; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>商品模块销量列 · 数据源修复预览</h1>
+  <div class="sub">cb-erp | 修改文件：server/_handlers/products.ts（后端 GET /products）| 生成时间：2026-08-21</div>
+
+  <div class="card">
+    <h2>问题根因</h2>
+    <div class="note">
+      导入销售数据只写入 <b>daily_sales</b> 表（销售统计模块读取），而商品模块的「销量」列此前从 <b>sales_order_items</b> 订单明细表聚合。
+      两张表互不相通，导致：库存能对应（写入了 products.overseas_stock），销售统计有数据，但商品模块销量恒为 0，时间筛选也无效。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>修复内容</h2>
+    <ul>
+      <li>商品列表接口销量改为从 <b>daily_sales</b> 按商品的 <b>link_id</b> 聚合；</li>
+      <li>销量口径 = 销售数量 - 退款数量（实际销量），与销售统计模块一致；</li>
+      <li>时间筛选由「订单创建时间」改为按 <b>sale_date</b> 过滤，商品模块销量筛选正式生效。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>效果模拟（商品：前轮轴承 ZC075 / 链接 5442218762）</h2>
+    <table>
+      <tr>
+        <th>场景</th>
+        <th>筛选条件</th>
+        <th>修复前销量</th>
+        <th>修复后销量</th>
+      </tr>
+      <tr>
+        <td>全部时间</td>
+        <td>不选时间</td>
+        <td class="num"><span class="tag tag-before">0</span></td>
+        <td class="num"><span class="tag tag-after">3</span></td>
+      </tr>
+      <tr>
+        <td>单日筛选</td>
+        <td>2026-08-20 至 2026-08-20</td>
+        <td class="num"><span class="tag tag-before">0</span></td>
+        <td class="num"><span class="tag tag-after">3</span></td>
+      </tr>
+      <tr>
+        <td>跨日筛选</td>
+        <td>2026-08-01 至 2026-08-20</td>
+        <td class="num"><span class="tag tag-before">0</span></td>
+        <td class="num"><span class="tag tag-after">3</span></td>
+      </tr>
+    </table>
+    <div class="highlight">注：模拟数值取自销售统计模块 2026-08-20 导入结果（该链接当日销售数量 3、退款 0）。实际部署后以 daily_sales 真实数据为准，若其他日期还有该链接的销售记录，「全部时间」销量会相应累加。</div>
+  </div>
+
+  <div class="card">
+    <h2>验证状态</h2>
+    <ul>
+      <li>后端 TypeScript 编译通过（npm run build:api，esbuild 无报错）；</li>
+      <li>未影响库存、在途、商品基础信息等原有逻辑；</li>
+      <li>无链接 ID 的商品（历史商品）销量显示 0，符合预期。</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

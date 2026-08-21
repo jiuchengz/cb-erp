@@ -26216,6 +26216,12 @@ async function handler9(req, res) {
       if (error) throw error;
       const rows = data || [];
       const pageIds = rows.map((r) => r.id);
+      const pageLinkIds = rows.map((r) => String(r.link_id || "").trim()).filter(Boolean);
+      const linkToProduct = /* @__PURE__ */ new Map();
+      for (const r of rows) {
+        const lid = String(r.link_id || "").trim();
+        if (lid) linkToProduct.set(lid, r.id);
+      }
       const domMap = /* @__PURE__ */ new Map();
       const ovsMap = /* @__PURE__ */ new Map();
       const transitMap = /* @__PURE__ */ new Map();
@@ -26236,14 +26242,17 @@ async function handler9(req, res) {
           const pid = r.product_id;
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
-        let salesQuery = supabase.from("sales_order_items").select("product_id, quantity, sales_orders!inner(created_at, status)").in("product_id", pageIds).neq("sales_orders.status", "CANCELLED");
-        if (salesFrom) salesQuery = salesQuery.gte("sales_orders.created_at", salesFrom);
-        if (salesTo) salesQuery = salesQuery.lte("sales_orders.created_at", salesTo);
-        const { data: salesRows, error: salesErr } = await salesQuery;
-        if (salesErr) throw salesErr;
-        for (const r of salesRows || []) {
-          const pid = r.product_id;
-          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
+        if (pageLinkIds.length) {
+          let salesQuery = supabase.from("daily_sales").select("link_id, quantity, refund_qty").in("link_id", pageLinkIds);
+          if (salesFrom) salesQuery = salesQuery.gte("sale_date", salesFrom);
+          if (salesTo) salesQuery = salesQuery.lte("sale_date", salesTo);
+          const { data: salesRows, error: salesErr } = await salesQuery;
+          if (salesErr) throw salesErr;
+          for (const r of salesRows || []) {
+            const pid = linkToProduct.get(r.link_id);
+            if (!pid) continue;
+            salesMap.set(pid, (salesMap.get(pid) || 0) + (Number(r.quantity || 0) - Number(r.refund_qty || 0)));
+          }
         }
       }
       const enriched = rows.map((r) => ({

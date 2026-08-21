@@ -86,6 +86,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (error) throw error;
       const rows = data || [];
       const pageIds = rows.map((r: any) => r.id);
+      // 链接ID映射：daily_sales 按 link_id 关联商品
+      const pageLinkIds = rows.map((r: any) => String(r.link_id || '').trim()).filter(Boolean);
+      const linkToProduct = new Map<string, string>();
+      for (const r of rows) {
+        const lid = String(r.link_id || '').trim();
+        if (lid) linkToProduct.set(lid, r.id);
+      }
 
       // 当前页产品聚合：国内库存 / 国外库存 / 在途数量 / 销量
       const domMap = new Map<string, number>();
@@ -120,19 +127,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
 
-        // 销量：销售明细累计（排除已取消订单）；sales_from/sales_to 传了则按订单创建时间过滤
-        let salesQuery: any = supabase
-          .from('sales_order_items')
-          .select('product_id, quantity, sales_orders!inner(created_at, status)')
-          .in('product_id', pageIds)
-          .neq('sales_orders.status', 'CANCELLED');
-        if (salesFrom) salesQuery = salesQuery.gte('sales_orders.created_at', salesFrom);
-        if (salesTo) salesQuery = salesQuery.lte('sales_orders.created_at', salesTo);
-        const { data: salesRows, error: salesErr } = await salesQuery;
-        if (salesErr) throw salesErr;
-        for (const r of salesRows || []) {
-          const pid = r.product_id as string;
-          salesMap.set(pid, (salesMap.get(pid) || 0) + Number(r.quantity || 0));
+        // 销量：从 daily_sales 按 link_id 聚合（销售数量-退款数量=实际销量）；
+        // sales_from/sales_to 传了则按 sale_date 过滤
+        if (pageLinkIds.length) {
+          let salesQuery: any = supabase
+            .from('daily_sales')
+            .select('link_id, quantity, refund_qty')
+            .in('link_id', pageLinkIds);
+          if (salesFrom) salesQuery = salesQuery.gte('sale_date', salesFrom);
+          if (salesTo) salesQuery = salesQuery.lte('sale_date', salesTo);
+          const { data: salesRows, error: salesErr } = await salesQuery;
+          if (salesErr) throw salesErr;
+          for (const r of salesRows || []) {
+            const pid = linkToProduct.get(r.link_id as string);
+            if (!pid) continue;
+            salesMap.set(pid, (salesMap.get(pid) || 0) + (Number(r.quantity || 0) - Number(r.refund_qty || 0)));
+          }
         }
       }
 
