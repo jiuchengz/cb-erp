@@ -37,6 +37,47 @@
               <span class="scheme-name">{{ s.label }}</span>
               <span v-if="activeScheme === s.id" class="scheme-check">✓</span>
             </div>
+            <div
+              class="scheme-item"
+              :class="{ active: activeScheme === 'custom' }"
+              @click="openCustom"
+            >
+              <div class="scheme-preview custom-preview" :style="{ background: customPreview }">
+                <span class="custom-icon">🎨</span>
+              </div>
+              <span class="scheme-name">自定义配色</span>
+              <span v-if="activeScheme === 'custom'" class="scheme-check">✓</span>
+            </div>
+          </div>
+
+          <div v-if="activeScheme === 'custom'" class="custom-panel">
+            <div class="custom-panel-title">自由搭配背景渐变</div>
+            <div class="custom-row-flex">
+              <span class="custom-label">背景渐变色</span>
+              <el-color-picker
+                v-for="(c, i) in customColors"
+                :key="'c' + i"
+                v-model="customColors[i]"
+              />
+              <el-button size="small" @click="randomCustom">随机搭配</el-button>
+            </div>
+            <div class="custom-row-flex">
+              <span class="custom-label">光斑颜色</span>
+              <el-color-picker v-model="customGlow[0]" />
+              <el-color-picker v-model="customGlow[1]" />
+            </div>
+            <div class="custom-row-flex">
+              <span class="custom-label">渐变方向</span>
+              <el-select v-model="customAngle" size="small" style="width: 160px">
+                <el-option
+                  v-for="a in angleOptions"
+                  :key="a.value"
+                  :label="a.label"
+                  :value="a.value"
+                />
+              </el-select>
+              <el-button type="primary" size="small" @click="applyCustom">应用配色</el-button>
+            </div>
           </div>
 
           <div class="appearance-row custom-row">
@@ -371,6 +412,13 @@ const schemes: AppearanceScheme[] = [
     glow: ['#94a3b8', '#64748b'],
     preview: 'linear-gradient(135deg,#e2e8f0,#f1f5f9,#cbd5e1,#e2e8f0)',
   },
+  {
+    id: 'sci-fi',
+    label: '高级科幻',
+    colors: ['#050b1f', '#101d3d', '#0a1233', '#1a0f38'],
+    glow: ['#00e5ff', '#9d4edd'],
+    preview: 'linear-gradient(135deg,#050b1f,#101d3d,#0a1233,#1a0f38)',
+  },
 ]
 
 function applyOpacity(v: number | number[]) {
@@ -378,6 +426,78 @@ function applyOpacity(v: number | number[]) {
   glassOpacity.value = val
   document.documentElement.style.setProperty('--glass-alpha', String(val / 100))
   saveAppearance()
+}
+
+/* ---------- 自定义配色 ---------- */
+const CUSTOM_KEY = 'cb_custom_scheme'
+const customColors = ref<string[]>(['#7dd3fc', '#c4b5fd', '#f9a8d4', '#fde68a'])
+const customGlow = ref<string[]>(['#f472b6', '#60a5fa'])
+const customAngle = ref(135)
+const angleOptions = [
+  { value: 135, label: '135°（默认）' },
+  { value: 45, label: '45°' },
+  { value: 90, label: '90°' },
+  { value: 0, label: '0°（水平）' },
+  { value: 180, label: '180°' },
+]
+const customPreview = computed(
+  () => `linear-gradient(${customAngle.value}deg, ${customColors.value.join(',')})`
+)
+
+function openCustom() {
+  activeScheme.value = 'custom'
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw)
+      if (Array.isArray(saved.colors) && saved.colors.length >= 2) {
+        customColors.value = [...saved.colors]
+        while (customColors.value.length < 4) customColors.value.push('#f1f5f9')
+        customColors.value = customColors.value.slice(0, 4)
+      }
+      if (Array.isArray(saved.glow) && saved.glow.length >= 2) {
+        customGlow.value = [saved.glow[0], saved.glow[1]]
+      }
+      if (typeof saved.angle === 'number') customAngle.value = saved.angle
+    }
+  } catch {
+    /* ignore */
+  }
+  applyCustom()
+}
+
+function applyCustom() {
+  activeScheme.value = 'custom'
+  const root = document.documentElement.style
+  root.setProperty('--bg-c1', customColors.value[0])
+  root.setProperty('--bg-c2', customColors.value[1] ?? customColors.value[0])
+  root.setProperty('--bg-c3', customColors.value[2] ?? customColors.value[0])
+  root.setProperty('--bg-c4', customColors.value[3] ?? customColors.value[0])
+  root.setProperty('--glow-c1', customGlow.value[0])
+  root.setProperty('--glow-c2', customGlow.value[1])
+  root.setProperty('--bg-angle', customAngle.value + 'deg')
+  try {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify({ colors: customColors.value, glow: customGlow.value, angle: customAngle.value }))
+  } catch {
+    /* ignore */
+  }
+  saveAppearance()
+}
+
+function randomColor(): string {
+  const h = Math.floor(Math.random() * 360)
+  const s = 55 + Math.floor(Math.random() * 25)
+  const l = 65 + Math.floor(Math.random() * 20)
+  return `hsl(${h},${s}%,${l}%)`
+}
+
+function randomCustom() {
+  customColors.value = [randomColor(), randomColor(), randomColor(), randomColor()]
+  customGlow.value = [
+    `hsl(${Math.floor(Math.random() * 360)},80%,65%)`,
+    `hsl(${Math.floor(Math.random() * 360)},80%,65%)`,
+  ]
+  customAngle.value = angleOptions[Math.floor(Math.random() * angleOptions.length)].value
 }
 
 function applyScheme(s: AppearanceScheme) {
@@ -389,6 +509,7 @@ function applyScheme(s: AppearanceScheme) {
   root.setProperty('--bg-c4', s.colors[3])
   root.setProperty('--glow-c1', s.glow[0])
   root.setProperty('--glow-c2', s.glow[1])
+  root.setProperty('--bg-angle', '135deg')
   saveAppearance()
 }
 
@@ -457,9 +578,11 @@ function resetAppearance() {
   st.setProperty('--bg-c4', s.colors[3])
   st.setProperty('--glow-c1', s.glow[0])
   st.setProperty('--glow-c2', s.glow[1])
+  st.setProperty('--bg-angle', '135deg')
   try {
     localStorage.removeItem(APPEARANCE_KEY)
     localStorage.removeItem(DARK_KEY)
+    localStorage.removeItem(CUSTOM_KEY)
   } catch {
     /* ignore */
   }
@@ -467,15 +590,17 @@ function resetAppearance() {
 }
 
 function saveAppearance() {
-  const s = schemes.find((x) => x.id === activeScheme.value) ?? schemes[0]
+  const isCustom = activeScheme.value === 'custom'
+  const s = isCustom ? null : (schemes.find((x) => x.id === activeScheme.value) ?? schemes[0])
   try {
     localStorage.setItem(
       APPEARANCE_KEY,
       JSON.stringify({
         opacity: glassOpacity.value,
-        scheme: s.id,
-        colors: s.colors,
-        glow: s.glow,
+        scheme: isCustom ? 'custom' : s!.id,
+        colors: isCustom ? customColors.value : s!.colors,
+        glow: isCustom ? customGlow.value : s!.glow,
+        angle: isCustom ? customAngle.value : 135,
         accent: accentColor.value,
         radius: cornerRadius.value,
         glowEnabled: glowEnabled.value,
@@ -497,16 +622,36 @@ function loadAppearance() {
       document.documentElement.style.setProperty('--glass-alpha', String(saved.opacity / 100))
     }
     if (saved.scheme) {
-      const s = schemes.find((x) => x.id === saved.scheme)
-      if (s) {
-        activeScheme.value = s.id
+      if (saved.scheme === 'custom' && Array.isArray(saved.colors) && saved.colors.length >= 2) {
+        activeScheme.value = 'custom'
+        customColors.value = [...saved.colors]
+        while (customColors.value.length < 4) customColors.value.push('#f1f5f9')
+        customColors.value = customColors.value.slice(0, 4)
+        if (Array.isArray(saved.glow) && saved.glow.length >= 2) {
+          customGlow.value = [saved.glow[0], saved.glow[1]]
+        }
+        if (typeof saved.angle === 'number') customAngle.value = saved.angle
         const root = document.documentElement.style
-        root.setProperty('--bg-c1', s.colors[0])
-        root.setProperty('--bg-c2', s.colors[1])
-        root.setProperty('--bg-c3', s.colors[2])
-        root.setProperty('--bg-c4', s.colors[3])
-        root.setProperty('--glow-c1', s.glow[0])
-        root.setProperty('--glow-c2', s.glow[1])
+        root.setProperty('--bg-c1', customColors.value[0])
+        root.setProperty('--bg-c2', customColors.value[1])
+        root.setProperty('--bg-c3', customColors.value[2])
+        root.setProperty('--bg-c4', customColors.value[3])
+        root.setProperty('--glow-c1', customGlow.value[0])
+        root.setProperty('--glow-c2', customGlow.value[1])
+        root.setProperty('--bg-angle', customAngle.value + 'deg')
+      } else {
+        const s = schemes.find((x) => x.id === saved.scheme)
+        if (s) {
+          activeScheme.value = s.id
+          const root = document.documentElement.style
+          root.setProperty('--bg-c1', s.colors[0])
+          root.setProperty('--bg-c2', s.colors[1])
+          root.setProperty('--bg-c3', s.colors[2])
+          root.setProperty('--bg-c4', s.colors[3])
+          root.setProperty('--glow-c1', s.glow[0])
+          root.setProperty('--glow-c2', s.glow[1])
+          root.setProperty('--bg-angle', '135deg')
+        }
       }
     }
     if (typeof saved.accent === 'string' && saved.accent) {
@@ -876,6 +1021,44 @@ onMounted(() => {
 }
 .custom-row {
   margin-top: 22px;
+}
+.custom-preview {
+  position: relative;
+}
+.custom-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.custom-panel {
+  margin-top: 16px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px dashed rgba(120, 130, 180, 0.4);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.custom-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.custom-row-flex {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.custom-label {
+  font-size: 13px;
+  color: var(--ink-2);
+  width: 96px;
+  flex-shrink: 0;
 }
 .glow-row {
   margin-top: 14px;
