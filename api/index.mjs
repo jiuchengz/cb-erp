@@ -27139,8 +27139,348 @@ async function handler20(req, res) {
   }
 }
 
-// server/_handlers/dashboard.ts
+// server/_handlers/analysis.ts
+function fmt(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function addDays(s, n) {
+  const d = /* @__PURE__ */ new Date(s + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return fmt(d);
+}
+function diffDays(a, b) {
+  return Math.round(((/* @__PURE__ */ new Date(b + "T00:00:00")).getTime() - (/* @__PURE__ */ new Date(a + "T00:00:00")).getTime()) / 864e5);
+}
+function num(v) {
+  const n = Number(v || 0);
+  return isFinite(n) ? n : 0;
+}
+function ceilN(v) {
+  return Math.ceil(v);
+}
 async function handler21(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    requireAnyPermission(ctx, [
+      "products.read",
+      "inventory.read",
+      "sales.read",
+      "shipment.read",
+      "procurement.read",
+      "transfer.read",
+      "after_sales.read"
+    ]);
+    if (req.method !== "GET") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    const supabase = getAdminClient();
+    const daysRaw = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 30;
+    const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
+    const from = typeof req.query.from === "string" ? req.query.from.trim() : "";
+    const to = typeof req.query.to === "string" ? req.query.to.trim() : "";
+    const today = fmt(/* @__PURE__ */ new Date());
+    let start = from || addDays(today, -(days - 1));
+    let end = to || today;
+    if (start > end) {
+      const t = start;
+      start = end;
+      end = t;
+    }
+    const n = diffDays(start, end) + 1;
+    const prevEnd = addDays(start, -1);
+    const prevStart = addDays(prevEnd, -(n - 1));
+    const salesSelect = "sale_date, platform, link_id, product_name, quantity, refund_qty, refund_amount, unit_price";
+    const [curSales, prevSales] = await Promise.all([
+      supabase.from("daily_sales").select(salesSelect).gte("sale_date", start).lte("sale_date", end),
+      supabase.from("daily_sales").select(salesSelect).gte("sale_date", prevStart).lte("sale_date", prevEnd)
+    ]);
+    if (curSales.error) throw curSales.error;
+    if (prevSales.error) throw prevSales.error;
+    const curRows = curSales.data || [];
+    const prevRows = prevSales.data || [];
+    const summarize = (rows) => {
+      let qty = 0;
+      let refundQty = 0;
+      let refundAmount = 0;
+      let amount = 0;
+      for (const r of rows) {
+        const q = num(r.quantity);
+        const rq = num(r.refund_qty);
+        const ra = num(r.refund_amount);
+        qty += q;
+        refundQty += rq;
+        refundAmount += ra;
+        amount += q * num(r.unit_price) - ra;
+      }
+      return { qty, refundQty, refundAmount, amount };
+    };
+    const curSum = summarize(curRows);
+    const prevSum = summarize(prevRows);
+    const platformMap = /* @__PURE__ */ new Map();
+    for (const r of curRows) {
+      const k = r.platform || "\u672A\u5206\u7C7B";
+      platformMap.set(k, (platformMap.get(k) || 0) + num(r.quantity) - num(r.refund_qty));
+    }
+    const platforms = Array.from(platformMap.entries()).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value);
+    const linkMap = /* @__PURE__ */ new Map();
+    for (const r of curRows) {
+      const k = r.link_id || "unknown";
+      const cur = linkMap.get(k) || { name: r.product_name || "", qty: 0, refundQty: 0 };
+      cur.qty += num(r.quantity);
+      cur.refundQty += num(r.refund_qty);
+      if (!cur.name && r.product_name) cur.name = r.product_name;
+      linkMap.set(k, cur);
+    }
+    const prevLinkMap = /* @__PURE__ */ new Map();
+    for (const r of prevRows) {
+      const k = r.link_id || "unknown";
+      prevLinkMap.set(k, (prevLinkMap.get(k) || 0) + num(r.quantity) - num(r.refund_qty));
+    }
+    const hotTop = Array.from(linkMap.entries()).map(([linkId, v]) => ({
+      link_id: linkId,
+      name: v.name || linkId,
+      qty: Math.round(v.qty - v.refundQty)
+    })).filter((x) => x.qty > 0).sort((a, b) => b.qty - a.qty).slice(0, 5);
+    const newRise = Array.from(linkMap.entries()).map(([linkId, v]) => {
+      const curQty = Math.round(v.qty - v.refundQty);
+      const prevQty = Math.round(prevLinkMap.get(linkId) || 0);
+      let rise = 0;
+      if (prevQty > 0) rise = (curQty - prevQty) / prevQty * 100;
+      else if (curQty > 0) rise = 100;
+      return { link_id: linkId, name: v.name || linkId, qty: curQty, prevQty, rise: Math.round(rise) };
+    }).filter((x) => x.qty > 0).sort((a, b) => b.rise - a.rise).slice(0, 4);
+    const shipSelect = "ship_date, shipping_qty, cargo_status, source, shipment_no, product_code, shipment_items(product_id, quantity), forwarders(name)";
+    const [curShipments, prevShipments, inTransitRows, domShipItems] = await Promise.all([
+      supabase.from("shipments").select("ship_date, shipping_qty").gte("ship_date", start).lte("ship_date", end),
+      supabase.from("shipments").select("ship_date, shipping_qty").gte("ship_date", prevStart).lte("ship_date", prevEnd),
+      supabase.from("shipments").select(shipSelect).eq("source", "transfer").neq("cargo_status", "\u5DF2\u5165\u4ED3").order("created_at", { ascending: false }).limit(50),
+      supabase.from("shipment_items").select("product_id, quantity, shipments!inner(ship_date)").gte("shipments.ship_date", start).lte("shipments.ship_date", end)
+    ]);
+    if (curShipments.error) throw curShipments.error;
+    if (prevShipments.error) throw prevShipments.error;
+    if (inTransitRows.error) throw inTransitRows.error;
+    if (domShipItems.error) throw domShipItems.error;
+    let shipQty = 0;
+    let prevShipQty = 0;
+    for (const r of curShipments.data || []) shipQty += num(r.shipping_qty);
+    for (const r of prevShipments.data || []) prevShipQty += num(r.shipping_qty);
+    const inTransitList = [];
+    const seenTrack = /* @__PURE__ */ new Set();
+    for (const s of inTransitRows.data || []) {
+      const key = s.shipment_no || s.tracking_no || s.id;
+      if (seenTrack.has(key)) continue;
+      seenTrack.add(key);
+      inTransitList.push({
+        shipment_no: s.shipment_no || s.product_code || "",
+        product_code: s.product_code || "",
+        cargo_status: s.cargo_status || "\u8F6C\u8FD0\u4E2D",
+        shipping_qty: Math.round(num(s.shipping_qty)),
+        forwarder: s.forwarders?.name || ""
+      });
+    }
+    const domShipMap = /* @__PURE__ */ new Map();
+    for (const it of domShipItems.data || []) {
+      const pid = it.product_id;
+      if (!pid) continue;
+      domShipMap.set(pid, (domShipMap.get(pid) || 0) + num(it.quantity));
+    }
+    const domShipTopRaw = Array.from(domShipMap.entries()).map(([pid, q]) => ({ product_id: pid, qty: Math.round(q) })).sort((a, b) => b.qty - a.qty).slice(0, 5);
+    const [productsRows, domInvRows] = await Promise.all([
+      supabase.from("products").select("id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost"),
+      supabase.from("inventory").select("product_id, quantity, created_at, warehouses!inner(wh_type)").eq("warehouses.wh_type", "domestic").gt("quantity", 0)
+    ]);
+    if (productsRows.error) throw productsRows.error;
+    if (domInvRows.error) throw domInvRows.error;
+    const productById = /* @__PURE__ */ new Map();
+    for (const p of productsRows.data || []) productById.set(p.id, p);
+    const domStockMap = /* @__PURE__ */ new Map();
+    const domAgeMap = /* @__PURE__ */ new Map();
+    for (const inv of domInvRows.data || []) {
+      const pid = inv.product_id;
+      if (!pid) continue;
+      domStockMap.set(pid, (domStockMap.get(pid) || 0) + num(inv.quantity));
+      const t = inv.created_at;
+      if (t) {
+        const cur = domAgeMap.get(pid);
+        if (!cur || t < cur) domAgeMap.set(pid, t);
+      }
+    }
+    const lowStock = [];
+    let safetyTotal = 0;
+    let safetyPass = 0;
+    for (const p of productsRows.data || []) {
+      const safety = num(p.safety_stock);
+      if (safety <= 0) continue;
+      safetyTotal += 1;
+      const dom = domStockMap.get(p.id) || 0;
+      if (dom >= safety) safetyPass += 1;
+      if (dom < safety) {
+        lowStock.push({
+          product_id: p.id,
+          name: p.name,
+          sku: p.sku,
+          stock: Math.round(dom),
+          safety_stock: Math.round(safety),
+          gap: Math.round(safety - dom)
+        });
+      }
+    }
+    lowStock.sort((a, b) => b.gap - a.gap);
+    const linkToProduct = /* @__PURE__ */ new Map();
+    for (const p of productsRows.data || []) {
+      if (p.link_id) linkToProduct.set(p.link_id, p);
+    }
+    const replenish = [];
+    for (const p of productsRows.data || []) {
+      const safety = num(p.safety_stock);
+      if (safety <= 0) continue;
+      const dom = domStockMap.get(p.id) || 0;
+      if (dom >= safety * 2) continue;
+      const daily = p.link_id ? (linkMap.get(p.link_id)?.qty || 0) / n : 0;
+      const suggest = ceilN(Math.max(0, safety * 2 - dom));
+      const daysLeft = daily > 0 ? Math.floor(dom / daily) : null;
+      replenish.push({
+        product_id: p.id,
+        name: p.name,
+        sku: p.sku,
+        stock: Math.round(dom),
+        safety_stock: Math.round(safety),
+        daily: Math.round(daily * 100) / 100,
+        suggest,
+        daysLeft
+      });
+    }
+    replenish.sort((a, b) => b.daily - a.daily || b.suggest - a.suggest);
+    const domAgeTop = Array.from(domAgeMap.entries()).filter(([pid]) => (domStockMap.get(pid) || 0) > 0).map(([pid, t]) => {
+      const days2 = Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 864e5));
+      return { product_id: pid, name: productById.get(pid)?.name || "", stock: Math.round(domStockMap.get(pid) || 0), days: days2 };
+    }).sort((a, b) => b.days - a.days).slice(0, 3);
+    const domShipTop = domShipTopRaw.map((x) => ({
+      product_id: x.product_id,
+      name: productById.get(x.product_id)?.name || "",
+      qty: x.qty
+    }));
+    const afterFrom = start + "T00:00:00";
+    const afterTo = end + "T23:59:59";
+    const prevAfterFrom = prevStart + "T00:00:00";
+    const prevAfterTo = prevEnd + "T23:59:59";
+    const [afterRows, afterTrendRows, prevAfterRows] = await Promise.all([
+      supabase.from("after_sales").select("created_at, reason").gte("created_at", afterFrom).lte("created_at", afterTo),
+      supabase.from("after_sales").select("created_at").gte("created_at", afterFrom).lte("created_at", afterTo),
+      supabase.from("after_sales").select("created_at").gte("created_at", prevAfterFrom).lte("created_at", prevAfterTo)
+    ]);
+    if (afterRows.error) throw afterRows.error;
+    if (afterTrendRows.error) throw afterTrendRows.error;
+    if (prevAfterRows.error) throw prevAfterRows.error;
+    const afterCount = (afterTrendRows.data || []).length;
+    const prevAfterCount = (prevAfterRows.data || []).length;
+    const reasonMap = /* @__PURE__ */ new Map();
+    for (const a of afterRows.data || []) {
+      const reason = (a.reason || "\u5176\u4ED6").trim() || "\u5176\u4ED6";
+      reasonMap.set(reason, (reasonMap.get(reason) || 0) + 1);
+    }
+    const afterReason = Array.from(reasonMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+    const saleTrendMap = /* @__PURE__ */ new Map();
+    const amountTrendMap = /* @__PURE__ */ new Map();
+    for (const r of curRows) {
+      const d = r.sale_date;
+      saleTrendMap.set(d, (saleTrendMap.get(d) || 0) + num(r.quantity));
+      amountTrendMap.set(d, (amountTrendMap.get(d) || 0) + num(r.quantity) * num(r.unit_price) - num(r.refund_amount));
+    }
+    const shipTrendMap = /* @__PURE__ */ new Map();
+    for (const r of curShipments.data || []) {
+      const d = r.ship_date;
+      if (!d) continue;
+      shipTrendMap.set(d, (shipTrendMap.get(d) || 0) + num(r.shipping_qty));
+    }
+    const afterTrendMap = /* @__PURE__ */ new Map();
+    for (const a of afterTrendRows.data || []) {
+      const d = (a.created_at || "").slice(0, 10);
+      afterTrendMap.set(d, (afterTrendMap.get(d) || 0) + 1);
+    }
+    const trend = [];
+    for (let i = 0; i < n; i++) {
+      const d = addDays(start, i);
+      trend.push({
+        date: d,
+        sale: Math.round(saleTrendMap.get(d) || 0),
+        amount: Math.round(amountTrendMap.get(d) || 0),
+        ship: Math.round(shipTrendMap.get(d) || 0),
+        after: afterTrendMap.get(d) || 0
+      });
+    }
+    const transitByStatus = /* @__PURE__ */ new Map();
+    for (const s of inTransitRows.data || []) {
+      const k = s.cargo_status || "\u8F6C\u8FD0\u4E2D";
+      transitByStatus.set(k, (transitByStatus.get(k) || 0) + 1);
+    }
+    const forwarderMap = /* @__PURE__ */ new Map();
+    for (const s of inTransitRows.data || []) {
+      const k = s.forwarders?.name || "\u672A\u6307\u5B9A\u8D27\u4EE3";
+      forwarderMap.set(k, (forwarderMap.get(k) || 0) + 1);
+    }
+    const domesticStockValue = Math.round(
+      Array.from(domStockMap.entries()).reduce((sum, [pid, q]) => sum + q * num(productById.get(pid)?.purchase_cost || 0), 0)
+    );
+    return res.status(200).json({
+      data: {
+        period: { start, end, days: n, prevStart, prevEnd },
+        summary: {
+          sale_qty: Math.round(curSum.qty),
+          refund_qty: Math.round(curSum.refundQty),
+          refund_amount: Math.round(curSum.refundAmount),
+          sale_amount: Math.round(curSum.amount),
+          ship_qty: Math.round(shipQty),
+          after_count: afterCount,
+          link_count: linkMap.size,
+          prev_sale_qty: Math.round(prevSum.qty),
+          prev_sale_amount: Math.round(prevSum.amount),
+          prev_ship_qty: Math.round(prevShipQty),
+          prev_after_count: prevAfterCount
+        },
+        platforms,
+        hot_top: hotTop,
+        new_rise: newRise,
+        trend,
+        warn: {
+          low_stock: lowStock.slice(0, 5),
+          in_transit: inTransitList.slice(0, 5)
+        },
+        safety_rate: {
+          total: safetyTotal,
+          pass: safetyPass,
+          rate: safetyTotal > 0 ? Math.round(safetyPass / safetyTotal * 100) : null
+        },
+        replenish: replenish.slice(0, 5),
+        ship_advice: {
+          by_status: Array.from(transitByStatus.entries()).map(([name, value]) => ({ name, value })),
+          by_forwarder: Array.from(forwarderMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+        },
+        domestic: {
+          ship_top: domShipTop.slice(0, 3),
+          age_top: domAgeTop,
+          total_stock: Math.round(Array.from(domStockMap.values()).reduce((s, q) => s + q, 0))
+        },
+        after_reason: afterReason,
+        capital: {
+          sale_amount: Math.round(curSum.amount),
+          refund_amount: Math.round(curSum.refundAmount),
+          net_amount: Math.round(curSum.amount - curSum.refundAmount),
+          stock_value: domesticStockValue
+        }
+      }
+    });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/dashboard.ts
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27197,7 +27537,7 @@ var createSchema10 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler22(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27244,7 +27584,7 @@ var updateSchema = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler23(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27292,7 +27632,7 @@ var createSchema11 = external_exports.object({
   color: external_exports.string().max(7).default("#FFFFFF"),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler24(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27326,7 +27666,7 @@ var updateSchema2 = external_exports.object({
   color: external_exports.string().max(7).optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler25(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27375,7 +27715,7 @@ var createSchema12 = external_exports.object({
   need_stock_in: external_exports.boolean().default(false),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler26(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27409,7 +27749,7 @@ var updateSchema3 = external_exports.object({
   need_stock_in: external_exports.boolean().optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler27(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27473,7 +27813,7 @@ var updateSchema4 = external_exports.object({
   result: external_exports.string().max(512).optional(),
   items: external_exports.array(itemSchema6).min(1).max(200).optional()
 }).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler28(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27567,7 +27907,7 @@ async function handler28(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler29(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27604,7 +27944,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler30(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27639,7 +27979,7 @@ async function handler30(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler31(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27691,7 +28031,7 @@ var updateSchema5 = external_exports.object({
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional(),
   overseas_stock: external_exports.coerce.number().min(0).optional()
 });
-async function handler32(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27763,7 +28103,7 @@ var updateSchema6 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler33(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27891,7 +28231,7 @@ var updateSchema7 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler34(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27992,7 +28332,7 @@ var updateSchema8 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler35(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28085,7 +28425,7 @@ var updateSchema9 = external_exports.object({
   tracking_no: external_exports.string().max(100).nullable().optional(),
   items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive() })).min(1).max(200).optional()
 });
-async function handler36(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28183,7 +28523,7 @@ async function handler36(req, res) {
 }
 
 // server/_handlers/shipments/confirm-inbound.ts
-async function handler37(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -28260,7 +28600,7 @@ var TRANSFER_FLOW = {
 var updateSchema10 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler38(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28369,7 +28709,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler39(req, res) {
+async function handler40(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28437,7 +28777,7 @@ var updateSchema12 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler40(req, res) {
+async function handler41(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28484,45 +28824,46 @@ var routes = [
   { pattern: /^\/auth\/login$/, handler: handler3 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler21 },
+  { pattern: /^\/dashboard\/stats$/, handler: handler22 },
+  { pattern: /^\/analysis$/, handler: handler21 },
   { pattern: /^\/daily-sales$/, handler: handler20 },
-  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler25, params: ["id"] },
-  { pattern: /^\/cargo-statuses$/, handler: handler24 },
-  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler27, params: ["id"] },
-  { pattern: /^\/after-sale-types$/, handler: handler26 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler23, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler22 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler28, params: ["id"] },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler26, params: ["id"] },
+  { pattern: /^\/cargo-statuses$/, handler: handler25 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler28, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler27 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler24, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler23 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler29, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler4 },
   { pattern: /^\/audit-logs$/, handler: handler5 },
   { pattern: /^\/db-usage$/, handler: handler6 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler30 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler31 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler29, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler31 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler32 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler30, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler7 },
   { pattern: /^\/permissions$/, handler: handler8 },
   { pattern: /^\/products\/batch-delete$/, handler: handler10 },
   { pattern: /^\/products\/upload-image$/, handler: handler11 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler33, params: ["id"] },
   { pattern: /^\/products$/, handler: handler9 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler33, params: ["id"] },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler34, params: ["id"] },
   { pattern: /^\/purchase-orders$/, handler: handler12 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler35, params: ["id"] },
   { pattern: /^\/replenishment$/, handler: handler13 },
   { pattern: /^\/roles$/, handler: handler14 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler35, params: ["id"] },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler36, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler15 },
-  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler37, params: ["id"] },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler36, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler38, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler37, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler16 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler38, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler39, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler17 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler39, params: ["id"] },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler40, params: ["id"] },
   { pattern: /^\/users$/, handler: handler18 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler40, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler41, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler19 }
 ];
-async function handler41(req, res) {
+async function handler42(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -28545,5 +28886,5 @@ async function handler41(req, res) {
   }
 }
 export {
-  handler41 as default
+  handler42 as default
 };

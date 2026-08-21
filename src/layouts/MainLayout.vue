@@ -110,7 +110,8 @@ auth.init().finally(() => {
 })
 
 const soloMenus = [
-  { path: '/dashboard', label: '首页', icon: HomeFilled }
+  { path: '/dashboard', label: '概况', icon: HomeFilled },
+  { path: '/analysis', label: '经营分析', icon: TrendCharts }
 ]
 
 const menuGroups = reactive([
