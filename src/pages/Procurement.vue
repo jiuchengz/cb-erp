@@ -48,31 +48,10 @@
         <template #default="{ row }">{{ firstItem(row)?.quantity ?? '-' }}</template>
       </el-table-column>
       <el-table-column label="拿货日期" width="170">
-        <template #default="{ row }">
-          <el-date-picker
-            v-if="canWrite"
-            v-model="row.receive_date"
-            type="date"
-            value-format="YYYY-MM-DD"
-            size="small"
-            placeholder="选择日期"
-            style="width: 140px"
-            @change="(v: any) => updateReceiveDate(row, v)"
-          />
-          <span v-else>{{ row.receive_date || '-' }}</span>
-        </template>
+        <template #default="{ row }">{{ row.receive_date || '-' }}</template>
       </el-table-column>
       <el-table-column label="备注" min-width="160">
-        <template #default="{ row }">
-          <el-input
-            v-if="canWrite"
-            v-model="row.remark"
-            size="small"
-            placeholder="点击填写备注"
-            @change="(v: any) => updateRemark(row, v)"
-          />
-          <span v-else>{{ row.remark || '-' }}</span>
-        </template>
+        <template #default="{ row }">{{ row.remark || '-' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
@@ -590,26 +569,6 @@ async function onImportFile(e: Event) {
 }
 
 const exporting = ref(false)
-async function updateReceiveDate(row: any, val: any) {
-  try {
-    const { data } = await api.patch(`/purchase-orders/${row.id}`, { receive_date: val || null })
-    if (data?.data) Object.assign(row, data.data)
-    ElMessage.success('已保存')
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
-    load()
-  }
-}
-async function updateRemark(row: any, val: any) {
-  try {
-    const { data } = await api.patch(`/purchase-orders/${row.id}`, { remark: val || null })
-    if (data?.data) Object.assign(row, data.data)
-    ElMessage.success('已保存')
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
-    load()
-  }
-}
 function exportRows() {
   const columns = [
     { key: 'sku', label: '编码', value: (r: any) => firstItem(r)?.products?.sku || '-' },
