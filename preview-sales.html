@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>销售管理 - 表头改动预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  body { background: #f5f7fa; padding: 24px; }
+  .page { background: #fff; border-radius: 8px; padding: 24px; max-width: 1180px; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .header h2 { font-size: 18px; color: #303133; }
+  .badge { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 10px; font-size: 12px; }
+  .note { margin: 12px 0 16px; padding: 10px 14px; background: #fdf6ec; border: 1px solid #faecd8; border-radius: 6px; color: #8a6d1a; font-size: 13px; line-height: 1.8; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #ebeef5; padding: 10px 12px; font-size: 13px; text-align: left; vertical-align: middle; }
+  th { background: #f5f7fa; color: #606266; font-weight: 600; white-space: nowrap; }
+  td { color: #303133; }
+  .num { text-align: right; }
+  .checkbox { width: 16px; height: 16px; display: block; margin: 0 auto; border: 1px solid #dcdfe6; border-radius: 3px; background: #fff; }
+  .empty-img { display: inline-block; width: 42px; height: 42px; border-radius: 4px; background: #f5f7fa; border: 1px dashed #dcdfe6; line-height: 42px; text-align: center; color: #c0c4cc; font-size: 12px; }
+  .op a { color: #409eff; text-decoration: none; margin-right: 10px; font-size: 13px; }
+  .op a.danger { color: #f56c6c; }
+  .foot { margin-top: 16px; color: #909399; font-size: 12px; text-align: right; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h2>销售管理</h2>
+    <span class="badge">本次改动预览</span>
+  </div>
+  <div class="note">
+    表头已按需求改为：<b>产品编号、图片、链接ID、产品名称、单价、数量、销售日期、平台</b>，每个商品一行（由原订单行展开）。
+    保留「详情 / 流转 / 取消」操作与勾选批量删除；导出 Excel 同步为新表头。以下为效果示意。
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40px;"><span class="checkbox"></span></th>
+        <th>产品编号</th>
+        <th>图片</th>
+        <th>链接ID</th>
+        <th>产品名称</th>
+        <th style="text-align: right;">单价</th>
+        <th style="text-align: right;">数量</th>
+        <th>销售日期</th>
+        <th>平台</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="checkbox"></span></td>
+        <td>SP-DLB-001</td>
+        <td><span class="empty-img">无图</span></td>
+        <td>ML-1001-283</td>
+        <td>多功能料理锅（大号）</td>
+        <td class="num">329.00</td>
+        <td class="num">2</td>
+        <td>2026-08-20 14:32</td>
+        <td>ML</td>
+        <td class="op"><a>详情</a><a>流转</a><a class="danger">取消</a></td>
+      </tr>
+      <tr>
+        <td><span class="checkbox"></span></td>
+        <td>SP-DLB-002</td>
+        <td><span class="empty-img">无图</span></td>
+        <td>ML-1001-284</td>
+        <td>便携榨汁杯 500ml</td>
+        <td class="num">89.00</td>
+        <td class="num">5</td>
+        <td>2026-08-20 14:32</td>
+        <td>ML</td>
+        <td class="op"><a>详情</a><a>流转</a><a class="danger">取消</a></td>
+      </tr>
+      <tr>
+        <td><span class="checkbox"></span></td>
+        <td>SP-DLB-003</td>
+        <td><span class="empty-img">无图</span></td>
+        <td>ML-1001-310</td>
+        <td>蓝牙耳机 Pro（黑色）</td>
+        <td class="num">199.00</td>
+        <td class="num">1</td>
+        <td>2026-08-19 09:05</td>
+        <td>AMZ</td>
+        <td class="op"><a>详情</a><a>流转</a><a class="danger">取消</a></td>
+      </tr>
+      <tr>
+        <td><span class="checkbox"></span></td>
+        <td>SKU-DLB-004</td>
+        <td><span class="empty-img">无图</span></td>
+        <td>ML-1001-311</td>
+        <td>USB 充电线 2 米</td>
+        <td class="num">25.00</td>
+        <td class="num">10</td>
+        <td>2026-08-18 16:47</td>
+        <td>-</td>
+        <td class="op"><a>详情</a><a>流转</a><a class="danger">取消</a></td>
+      </tr>
+      <tr>
+        <td><span class="checkbox"></span></td>
+        <td>SP-DLB-005</td>
+        <td><span class="empty-img">无图</span></td>
+        <td>ML-1001-320</td>
+        <td>不锈钢保温杯 1L</td>
+        <td class="num">139.00</td>
+        <td class="num">3</td>
+        <td>2026-08-17 11:20</td>
+        <td>SHOPEE</td>
+        <td class="op"><a>详情</a><a>流转</a><a class="danger">取消</a></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="foot">预览为静态示意，线上实际数据来自销售订单明细。</div>
+</div>
+</body>
+</html>

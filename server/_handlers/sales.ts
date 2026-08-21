@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let query: any = supabase
         .from('sales_orders')
         .select(
-          '*, sales_order_items(product_id, sku, quantity, unit_price, discount, subtotal, products(id, sku, name, link_id, image_text, purchase_cost))',
+          '*, sales_order_items(product_id, sku, quantity, unit_price, discount, subtotal, products(id, sku, code, name, link_id, image_text, purchase_cost))',
           { count: 'exact' }
         );
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';

@@ -29,14 +29,17 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+    <el-table v-loading="loading" :data="detailRows" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
+      <el-table-column label="产品编号" min-width="130" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.code || row.sku || '-' }}</template>
+      </el-table-column>
       <el-table-column label="图片" width="70">
         <template #default="{ row }">
           <el-image
-            v-if="firstProductImage(row)"
-            :src="firstProductImage(row)"
-            :preview-src-list="[firstProductImage(row)]"
+            v-if="row.image_text && isImageUrl(row.image_text)"
+            :src="row.image_text"
+            :preview-src-list="[row.image_text]"
             preview-teleported
             fit="cover"
             style="width: 42px; height: 42px; border-radius: 4px"
@@ -45,37 +48,27 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="order_no" label="订单号" min-width="160" />
-      <el-table-column label="链接ID" min-width="110">
-        <template #default="{ row }">{{ firstProductLinkId(row) || '-' }}</template>
+      <el-table-column label="链接ID" min-width="120" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.link_id || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="产品名称" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.name || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="单价" width="110" align="right">
+        <template #default="{ row }">{{ row.unit_price != null ? Number(row.unit_price) : '-' }}</template>
+      </el-table-column>
+      <el-table-column label="数量" width="90" align="right">
+        <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
+      </el-table-column>
+      <el-table-column label="销售日期" min-width="120">
+        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
       <el-table-column label="平台" width="90">
         <template #default="{ row }">{{ row.platform || '-' }}</template>
       </el-table-column>
-      <el-table-column label="利润" width="120" align="right">
-        <template #default="{ row }">
-          <template v-if="orderProfit(row).known">
-            <span :style="{ color: orderProfit(row).profit >= 0 ? '#67c23a' : '#f56c6c' }">
-              {{ orderProfit(row).profit >= 0 ? '+' : '' }}{{ orderProfit(row).profit.toFixed(2) }}
-            </span>
-          </template>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="customer_id" label="客户ID" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="currency" label="币种" width="80" />
-      <el-table-column prop="total_amount" label="总金额" width="120" align="right" />
-      <el-table-column label="状态" width="110">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" min-width="170">
-        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-      </el-table-column>
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row.id)">详情</el-button>
+          <el-button link type="primary" @click="openDetail(row.order_id)">详情</el-button>
           <el-button v-if="canWrite && nextStatuses(row.status).length" link type="primary" @click="openFlow(row)">
             流转
           </el-button>
@@ -227,38 +220,54 @@ function formatDate(v: string) {
   return new Date(v).toLocaleString('zh-CN', { hour12: false })
 }
 
-function firstProductImage(row: any): string {
-  const it = (row?.sales_order_items || [])[0]
-  const img = it?.products?.image_text
-  return img && isImageUrl(img) ? img : ''
-}
-function firstProductLinkId(row: any): string {
-  const it = (row?.sales_order_items || [])[0]
-  return it?.products?.link_id || ''
-}
 function isImageUrl(v: string): boolean {
   return typeof v === 'string' && /^(https?:\/\/|\/|data:image\/)/i.test(v)
 }
 function onImgError(e: Event) {
   ;(e.target as HTMLImageElement).style.visibility = 'hidden'
 }
-// 利润 = 明细小计 - 数量×采购成本；任一明细缺成本则 known=false（显示 '-'）
-function orderProfit(row: any): { profit: number; known: boolean } {
-  const items = row?.sales_order_items || []
-  if (!items.length) return { profit: 0, known: false }
-  let profit = 0
-  for (const it of items) {
-    const cost = it?.products?.purchase_cost
-    if (cost === undefined || cost === null || cost === '') return { profit: 0, known: false }
-    profit += Number(it.subtotal || 0) - Number(it.quantity || 0) * Number(cost)
-  }
-  return { profit, known: true }
-}
 
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
 const query = reactive({ page: 1, pageSize: 20, keyword: '', status: '' })
+
+// 将订单行展开为明细行（每个商品一行），供表格展示
+const detailRows = computed(() => {
+  const out: any[] = []
+  for (const o of rows.value) {
+    const items = o.sales_order_items || []
+    if (!items.length) {
+      out.push({
+        ...o,
+        order_id: o.id,
+        code: '',
+        sku: '',
+        name: '',
+        link_id: '',
+        image_text: '',
+        unit_price: null,
+        quantity: null,
+      })
+      continue
+    }
+    for (const it of items) {
+      const p = it.products || {}
+      out.push({
+        ...o,
+        order_id: o.id,
+        code: p.code || '',
+        sku: p.sku || it.sku || '',
+        name: p.name || '',
+        link_id: p.link_id || '',
+        image_text: p.image_text || '',
+        unit_price: it.unit_price,
+        quantity: it.quantity,
+      })
+    }
+  }
+  return out
+})
 
 async function load() {
   loading.value = true
@@ -386,7 +395,7 @@ async function submitFlow() {
   if (!flowRow.value || !flowTarget.value) return
   saving.value = true
   try {
-    await api.patch(`/sales/${flowRow.value.id}`, { status: flowTarget.value })
+    await api.patch(`/sales/${flowRow.value.order_id}`, { status: flowTarget.value })
     ElMessage.success('状态更新成功')
     flowVisible.value = false
     load()
@@ -530,19 +539,17 @@ async function onImportFile(e: Event) {
 const exporting = ref(false)
 function exportRows() {
   const columns = [
-    { key: 'order_no', label: '订单号' },
-    { key: 'link_id', label: '链接ID', value: (r: any) => firstProductLinkId(r) },
-    { key: 'platform', label: '平台', value: (r: any) => r.platform || '-' },
-    { key: 'profit', label: '利润', value: (r: any) => (orderProfit(r).known ? orderProfit(r).profit.toFixed(2) : '-') },
-    { key: 'customer_id', label: '客户ID' },
-    { key: 'currency', label: '币种' },
-    { key: 'total_amount', label: '总金额' },
-    { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
-    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+    { key: 'code', label: '产品编号', value: (r: any) => r.code || r.sku || '' },
+    { key: 'link_id', label: '链接ID', value: (r: any) => r.link_id || '' },
+    { key: 'name', label: '产品名称', value: (r: any) => r.name || '' },
+    { key: 'unit_price', label: '单价', value: (r: any) => (r.unit_price != null ? Number(r.unit_price) : '') },
+    { key: 'quantity', label: '数量', value: (r: any) => r.quantity ?? '' },
+    { key: 'created_at', label: '销售日期', value: (r: any) => formatDate(r.created_at) },
+    { key: 'platform', label: '平台', value: (r: any) => r.platform || '' },
   ]
   exporting.value = true
   try {
-    exportTable(rows.value, columns, `销售列表_${todayStr()}.xlsx`)
+    exportTable(detailRows.value, columns, `销售列表_${todayStr()}.xlsx`)
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {
@@ -554,14 +561,14 @@ async function batchRemove() {
   if (!selected.value.length) return
   try {
     await ElMessageBox.confirm(
-      `确定删除选中的 ${selected.value.length} 个销售单吗？此操作不可恢复。`,
+      `确定删除选中的 ${selected.value.length} 个销售明细对应的销售单吗？此操作不可恢复。`,
       '批量删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
     )
   } catch {
     return
   }
-  const ids = selected.value.map((r) => r.id)
+  const ids = [...new Set(selected.value.map((r) => r.order_id || r.id))]
   let ok = 0
   let fail = 0
   for (const id of ids) {
@@ -572,7 +579,7 @@ async function batchRemove() {
       fail++
     }
   }
-  ElMessage.success(`删除完成：成功 ${ok} 条${fail ? `，失败 ${fail} 条` : ''}`)
+  ElMessage.success(`删除完成：成功 ${ok} 单${fail ? `，失败 ${fail} 单` : ''}`)
   selected.value = []
   load()
 }
