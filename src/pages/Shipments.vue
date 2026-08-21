@@ -610,7 +610,40 @@ function onChangeForwarder(row: any, v: string) {
   patchShipment(row, { forwarder_id: v || null })
 }
 function onChangeCargo(row: any, v: string) {
+  if (v === '已入仓' && row.cargo_status !== '已入仓') {
+    ElMessageBox.confirm(
+      '确认该货件已入仓？确认后将按销售统计最新库存更新关联产品的海外仓库存（销售统计无记录的产品保持原值）。',
+      '确认入仓',
+      { type: 'warning', confirmButtonText: '确认入仓', cancelButtonText: '取消' }
+    )
+      .then(async () => {
+        const ok = await patchShipment(row, { cargo_status: v })
+        if (ok) await confirmInbound(row.id)
+      })
+      .catch(() => { /* 取消：不修改状态 */ })
+    return
+  }
   patchShipment(row, { cargo_status: v })
+}
+
+async function confirmInbound(id: string) {
+  try {
+    const { data } = await api.post(`/shipments/${id}/confirm-inbound`)
+    const r = data?.data ?? {}
+    const updated = r.updated ?? []
+    const skipped = r.skipped ?? []
+    if (updated.length) {
+      const detail = updated.map((u: any) => `${u.link_id}: ${u.old_stock} → ${u.new_stock}`).join('、')
+      ElMessage.success(`已确认入仓，按销售统计更新海外仓库存：${detail}`)
+    } else if (skipped.length) {
+      ElMessage.success('已确认入仓（销售统计无记录或库存未变化，海外仓库存保持原值）')
+    } else {
+      ElMessage.success('已确认入仓')
+    }
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '同步海外仓库存失败')
+  }
 }
 function onChangeWarehouseStatus(row: any, v: string) {
   patchShipment(row, { warehouse_status: v || null })
@@ -724,9 +757,11 @@ const editVisible = ref(false)
 const editSaving = ref(false)
 const editForm = ref<any>({})
 const editId = ref<string>('')
+const editPrevCargo = ref<string>('')
 
 function openEdit(row: any) {
   editId.value = row.id
+  editPrevCargo.value = row.cargo_status ?? ''
   editForm.value = {
     warehouse_no: row.warehouse_no ?? null,
     ship_date: row.ship_date ?? null,
@@ -757,6 +792,18 @@ async function saveEdit() {
     ElMessage.warning('请输入货件号')
     return
   }
+  // 货物状态从非「已入仓」改为「已入仓」时，弹窗确认后按销售统计同步海外仓库存
+  if (f.cargo_status === '已入仓' && editPrevCargo.value !== '已入仓') {
+    try {
+      await ElMessageBox.confirm(
+        '货物状态将变为「已入仓」，确认后按销售统计最新库存更新关联产品的海外仓库存（销售统计无记录的产品保持原值）。',
+        '确认入仓',
+        { type: 'warning', confirmButtonText: '确认入仓', cancelButtonText: '取消' }
+      )
+    } catch {
+      return
+    }
+  }
   editSaving.value = true
   try {
     const payload: any = {
@@ -781,9 +828,13 @@ async function saveEdit() {
       bill_check_status: f.bill_check_status,
     }
     await api.patch(`/shipments/${editId.value}`, payload)
-    ElMessage.success('更新成功')
     editVisible.value = false
-    load()
+    if (f.cargo_status === '已入仓' && editPrevCargo.value !== '已入仓') {
+      await confirmInbound(editId.value)
+    } else {
+      ElMessage.success('更新成功')
+      load()
+    }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '更新失败')
   } finally {

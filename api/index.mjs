@@ -28180,6 +28180,72 @@ async function handler36(req, res) {
   }
 }
 
+// server/_handlers/shipments/confirm-inbound.ts
+async function handler37(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: { message: "Method Not Allowed" } });
+    }
+    const ctx = await requireAuth(req);
+    requirePermission(ctx, "shipment.write");
+    const id = parse(uuidSchema, String(req.query.id));
+    const supabase = getAdminClient();
+    const { data: shipment, error: shipErr } = await supabase.from("shipments").select("*, shipment_items(*)").eq("id", id).single();
+    if (shipErr || !shipment) {
+      throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
+    }
+    const items = shipment.shipment_items ?? [];
+    if (items.length === 0) {
+      return res.json({ data: { updated: [], skipped: [], message: "\u8BE5\u8D27\u4EF6\u65E0\u4EA7\u54C1\u660E\u7EC6\uFF0C\u65E0\u9700\u540C\u6B65" } });
+    }
+    const productIds = Array.from(new Set(items.map((it) => it.product_id).filter(Boolean)));
+    const { data: products, error: prodErr } = await supabase.from("products").select("id, link_id, overseas_stock").in("id", productIds);
+    if (prodErr) throw prodErr;
+    const withLink = (products ?? []).filter((p) => p.link_id && String(p.link_id).trim());
+    const linkIds = Array.from(new Set(withLink.map((p) => String(p.link_id).trim())));
+    const latestByLink = /* @__PURE__ */ new Map();
+    if (linkIds.length > 0) {
+      const { data: sales, error: saleErr } = await supabase.from("daily_sales").select("link_id, sale_date, overseas_stock").in("link_id", linkIds);
+      if (saleErr) throw saleErr;
+      const byLink = /* @__PURE__ */ new Map();
+      for (const row of sales ?? []) {
+        const lid = String(row.link_id).trim();
+        const cur = byLink.get(lid);
+        const d = String(row.sale_date || "");
+        if (!cur || d > cur.sale_date) {
+          byLink.set(lid, { sale_date: d, overseas_stock: Number(row.overseas_stock ?? 0) });
+        }
+      }
+      byLink.forEach((v, k) => latestByLink.set(k, v.overseas_stock));
+    }
+    const updated = [];
+    const skipped = [];
+    for (const p of withLink) {
+      const lid = String(p.link_id).trim();
+      if (!latestByLink.has(lid)) {
+        skipped.push({ product_id: p.id, link_id: lid, reason: "\u9500\u552E\u7EDF\u8BA1\u65E0\u8BB0\u5F55\uFF0C\u4FDD\u6301\u539F\u503C" });
+        continue;
+      }
+      const newStock = latestByLink.get(lid);
+      const oldStock = Number(p.overseas_stock ?? 0);
+      if (oldStock === newStock) {
+        skipped.push({ product_id: p.id, link_id: lid, reason: "\u5E93\u5B58\u672A\u53D8\u5316" });
+        continue;
+      }
+      const { error: updErr } = await supabase.from("products").update({ overseas_stock: newStock }).eq("id", p.id);
+      if (updErr) {
+        skipped.push({ product_id: p.id, link_id: lid, reason: "\u66F4\u65B0\u5931\u8D25: " + updErr.message });
+        continue;
+      }
+      updated.push({ product_id: p.id, link_id: lid, old_stock: oldStock, new_stock: newStock });
+    }
+    return res.json({ data: { updated, skipped } });
+  } catch (e) {
+    return handleError2(e, res);
+  }
+}
+
 // server/_handlers/transfers/[id].ts
 var TRANSFER_FLOW = {
   DRAFT: ["APPROVED", "CANCELLED"],
@@ -28192,7 +28258,7 @@ var TRANSFER_FLOW = {
 var updateSchema10 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler37(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28301,7 +28367,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler38(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28369,7 +28435,7 @@ var updateSchema12 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler39(req, res) {
+async function handler40(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28444,16 +28510,17 @@ var routes = [
   { pattern: /^\/roles$/, handler: handler14 },
   { pattern: /^\/sales\/([^/]+)$/, handler: handler35, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler15 },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler37, params: ["id"] },
   { pattern: /^\/shipments\/([^/]+)$/, handler: handler36, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler16 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler37, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler38, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler17 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler38, params: ["id"] },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler39, params: ["id"] },
   { pattern: /^\/users$/, handler: handler18 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler39, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler40, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler19 }
 ];
-async function handler40(req, res) {
+async function handler41(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -28476,5 +28543,5 @@ async function handler40(req, res) {
   }
 }
 export {
-  handler40 as default
+  handler41 as default
 };

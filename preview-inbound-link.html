@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发货管理 · 已入仓联动预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; padding: 24px; color: #303133; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 6px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card h2 { font-size: 15px; margin-bottom: 14px; padding-left: 8px; border-left: 4px solid #409eff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 10px 8px; text-align: left; }
+  th { background: #f5f7fa; font-weight: 600; white-space: nowrap; }
+  .status { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 12px; }
+  .st-arrive { background: #28a745; color: #fff; }
+  .st-wait { background: #ffffff; border: 1px solid #dcdfe6; color: #606266; }
+  .btn { display: inline-block; background: #409eff; color: #fff; border: none; padding: 8px 18px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .btn:hover { background: #66b1ff; }
+  .btn:disabled { background: #c0c4cc; cursor: not-allowed; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border: 1px solid #b3d8ff; border-radius: 4px; padding: 1px 8px; font-size: 12px; margin-right: 6px; }
+  .flow { font-size: 13px; line-height: 2; color: #606266; }
+  .flow b { color: #303133; }
+  .hl { background: #fff3cd; padding: 0 4px; border-radius: 3px; }
+  .modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 999; align-items: center; justify-content: center; }
+  .modal-mask.show { display: flex; }
+  .modal { background: #fff; border-radius: 8px; width: 460px; max-width: 92vw; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+  .modal-head { padding: 16px 20px; font-size: 15px; font-weight: 600; border-bottom: 1px solid #ebeef5; display: flex; align-items: center; gap: 8px; }
+  .modal-body { padding: 20px; font-size: 13px; color: #606266; line-height: 1.9; }
+  .modal-foot { padding: 12px 20px; border-top: 1px solid #ebeef5; text-align: right; display: flex; justify-content: flex-end; gap: 10px; }
+  .btn-plain { background: #fff; color: #606266; border: 1px solid #dcdfe6; padding: 8px 18px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .result { display: none; margin-top: 14px; background: #f0f9eb; border: 1px solid #e1f3d8; border-radius: 6px; padding: 12px 14px; font-size: 13px; color: #529b2e; line-height: 1.8; }
+  .result.show { display: block; }
+  .warn { color: #e6a23c; }
+  .muted { color: #909399; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>发货管理 · 已入仓联动预览</h1>
+  <div class="sub">模拟：货物状态改为「已入仓」→ 弹窗确认 → 按销售统计最新库存更新商品海外仓库存</div>
+
+  <div class="card">
+    <h2>联动规则说明</h2>
+    <div class="flow">
+      1. 在发货管理中，将某货件的<b>货物状态</b>改为「已入仓」（行内下拉或编辑弹窗）<br>
+      2. 若原状态不是「已入仓」，弹出确认框：<span class="hl">确认后按销售统计最新库存更新关联产品海外仓库存</span><br>
+      3. 点击「确认入仓」→ 状态置为已入仓，同时后端按货件明细产品（shipment_items → product_id → link_id）<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;从销售统计（daily_sales）取每个产品<b>最新销售日期（sale_date）的 overseas_stock</b>，覆盖商品模块海外仓库存（products.overseas_stock）<br>
+      4. 销售统计中<b>无记录</b>的产品：海外仓库存保持原值不变<br>
+      5. 销售统计每日重新导入重写时，以销售统计自身为准（原有逻辑不变）<br><br>
+      <span class="tag">示例 A</span>产品A 海外仓 60，销售统计最新 56 → 变 <b>56</b><br>
+      <span class="tag">示例 B</span>产品B 海外仓 60，销售统计无记录 → 保持 <b>60</b>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>发货管理 · 操作演示</h2>
+    <table>
+      <tr>
+        <th>货件号</th><th>货代号</th><th>来源</th><th>货物状态</th><th>操作</th>
+      </tr>
+      <tr>
+        <td>TRF-20260821-001</td><td>CARGO-A</td><td><span class="tag">调拨</span></td>
+        <td><span class="status st-wait" id="st1">转运中</span></td>
+        <td><button class="btn" id="btn1">改为已入仓</button></td>
+      </tr>
+      <tr>
+        <td>TRF-20260821-002</td><td>CARGO-B</td><td><span class="tag">调拨</span></td>
+        <td><span class="status st-wait" id="st2">转运中</span></td>
+        <td><button class="btn" id="btn2">改为已入仓</button></td>
+      </tr>
+    </table>
+    <div class="result" id="result"></div>
+  </div>
+
+  <div class="card">
+    <h2>商品模块 · 海外仓库存变化</h2>
+    <table>
+      <tr><th>产品</th><th>Link ID</th><th>当前海外仓</th><th>销售统计最新</th><th>确认入仓后</th></tr>
+      <tr><td>产品A</td><td>MLM-A001</td><td>60</td><td>56</td><td><b id="rA">56</b>（以销售统计为准）</td></tr>
+      <tr><td>产品B</td><td>MLM-B002</td><td>60</td><td class="muted">无记录</td><td><b id="rB">60</b>（保持不变）</td></tr>
+    </table>
+    <p class="muted" style="margin-top:10px">说明：演示仅展示联动效果，真实数据以线上商品模块「海外库存」列与销售统计为准。</p>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <div class="modal-head"><span style="color:#e6a23c">⚠</span> 确认入仓</div>
+    <div class="modal-body">
+      确认该货件已入仓？<br>
+      确认后将按<b>销售统计最新库存</b>更新关联产品的海外仓库存<br>
+      （销售统计无记录的产品保持原值）。
+    </div>
+    <div class="modal-foot">
+      <button class="btn-plain" id="cancelBtn">取消</button>
+      <button class="btn" id="okBtn">确认入仓</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let pendingId = null;
+  const modal = document.getElementById('modal');
+  function showModal(id) { pendingId = id; modal.classList.add('show'); }
+  function hideModal() { modal.classList.remove('show'); pendingId = null; }
+
+  document.getElementById('btn1').addEventListener('click', function () {
+    if (this.disabled) return;
+    showModal('1');
+  });
+  document.getElementById('btn2').addEventListener('click', function () {
+    if (this.disabled) return;
+    showModal('2');
+  });
+  document.getElementById('cancelBtn').addEventListener('click', function () {
+    hideModal();
+  });
+  document.getElementById('okBtn').addEventListener('click', function () {
+    if (!pendingId) return;
+    const id = pendingId;
+    hideModal();
+    const st = document.getElementById('st' + id);
+    const btn = document.getElementById('btn' + id);
+    st.className = 'status st-arrive';
+    st.textContent = '已入仓';
+    btn.disabled = true;
+    btn.textContent = '已入仓';
+    const result = document.getElementById('result');
+    if (id === '1') {
+      result.textContent = '已确认入仓，按销售统计更新海外仓库存：MLM-A001: 60 → 56';
+    } else {
+      result.textContent = '已确认入仓（销售统计无记录或库存未变化，海外仓库存保持原值）';
+    }
+    result.classList.add('show');
+  });
+</script>
+</body>
+</html>
