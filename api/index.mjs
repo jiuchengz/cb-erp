@@ -26166,6 +26166,8 @@ var createSchema2 = external_exports.object({
   first_leg_freight: external_exports.coerce.number().min(0).optional().default(0),
   last_mile_delivery_peso: external_exports.coerce.number().min(0).optional().default(0),
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional().default(0.165),
+  // 海外库存（平台可用库存快照，批量导入写入）
+  overseas_stock: external_exports.coerce.number().min(0).optional().default(0),
   // 批量导入内联图片：前端压缩后的 base64，由后端上传 Storage 并写入 image_text
   image_base64: external_exports.string().max(6e6).optional()
 });
@@ -26247,7 +26249,8 @@ async function handler9(req, res) {
       const enriched = rows.map((r) => ({
         ...r,
         domestic_stock: domMap.get(r.id) || 0,
-        overseas_stock: ovsMap.get(r.id) || 0,
+        warehouse_overseas_stock: ovsMap.get(r.id) || 0,
+        overseas_stock: Number(r.overseas_stock ?? 0),
         in_transit_qty: transitMap.get(r.id) || 0,
         sales_qty: salesMap.get(r.id) || 0
       }));
@@ -26633,7 +26636,9 @@ async function handler14(req, res) {
 
 // server/_handlers/sales.ts
 var itemSchema3 = external_exports.object({
-  product_id: external_exports.string().uuid(),
+  product_id: external_exports.string().uuid().nullable().optional(),
+  sku: external_exports.string().max(100).nullable().optional(),
+  product_name: external_exports.string().max(200).nullable().optional(),
   quantity: external_exports.coerce.number().positive(),
   unit_price: external_exports.coerce.number().min(0).optional(),
   discount: external_exports.coerce.number().min(0).optional()
@@ -26642,6 +26647,8 @@ var createSchema5 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   customer_id: external_exports.string().uuid().nullable().optional(),
   currency: external_exports.string().max(8).optional(),
+  platform: external_exports.string().max(50).nullable().optional(),
+  sale_date: external_exports.string().max(20).nullable().optional(),
   items: external_exports.array(itemSchema3).min(1).max(200)
 });
 async function handler15(req, res) {
@@ -26653,7 +26660,7 @@ async function handler15(req, res) {
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query = supabase.from("sales_orders").select(
-        "*, sales_order_items(product_id, sku, quantity, unit_price, discount, subtotal, products(id, sku, code, name, link_id, image_text, purchase_cost))",
+        "*, sales_order_items(product_id, sku, product_name, quantity, unit_price, discount, subtotal, products(id, sku, code, name, link_id, image_text, purchase_cost))",
         { count: "exact" }
       );
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -26684,12 +26691,12 @@ async function handler15(req, res) {
       requirePermission(ctx, "sales.write");
       const body = parse(createSchema5, req.body || {});
       const supabase = getAdminClient();
-      const prodIds = [...new Set(body.items.map((it) => it.product_id))];
-      const { data: prods, error: prodErr } = await supabase.from("products").select("id, sku").in("id", prodIds);
+      const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
+      const { data: prods, error: prodErr } = await supabase.from("products").select("id, sku, name").in("id", prodIds);
       if (prodErr) throw prodErr;
       const skuMap = {};
       (prods || []).forEach((p) => {
-        skuMap[p.id] = p.sku;
+        skuMap[p.id] = { sku: p.sku, name: p.name };
       });
       if (prodIds.some((id) => !skuMap[id])) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u5546\u54C1 ID");
       let total = 0;
@@ -26699,12 +26706,23 @@ async function handler15(req, res) {
         const disc = it.discount ?? 0;
         const subtotal = Math.max(0, qty * price - disc);
         total += subtotal;
-        return { product_id: it.product_id, sku: skuMap[it.product_id], quantity: qty, unit_price: price, discount: disc, subtotal };
+        const matched = it.product_id ? skuMap[it.product_id] : void 0;
+        return {
+          product_id: it.product_id ?? null,
+          sku: matched?.sku ?? it.sku ?? "",
+          product_name: matched?.name ?? it.product_name ?? "",
+          quantity: qty,
+          unit_price: price,
+          discount: disc,
+          subtotal
+        };
       });
       const { data: order, error } = await supabase.from("sales_orders").insert({
         order_no: body.order_no,
         customer_id: body.customer_id ?? null,
         currency: body.currency ?? "CNY",
+        platform: body.platform ?? null,
+        sale_date: body.sale_date ?? null,
         total_amount: total,
         created_by: ctx.userId
       }).select().single();
@@ -26991,8 +27009,86 @@ async function handler19(req, res) {
   }
 }
 
-// server/_handlers/dashboard.ts
+// server/_handlers/daily-sales.ts
+var importRowSchema = external_exports.object({
+  sale_date: external_exports.string().min(1).max(20),
+  platform: external_exports.string().max(50).optional().default(""),
+  link_id: external_exports.string().min(1).max(200),
+  product_name: external_exports.string().max(200).optional().default(""),
+  quantity: external_exports.coerce.number().positive(),
+  unit_price: external_exports.coerce.number().min(0).optional().default(0),
+  overseas_stock: external_exports.coerce.number().min(0).optional().default(0)
+});
+var importSchema = external_exports.object({
+  rows: external_exports.array(importRowSchema).min(1).max(5e3)
+});
 async function handler20(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    const supabase = getAdminClient();
+    if (req.method === "GET") {
+      requirePermission(ctx, "sales.read");
+      const q = parse(paginationSchema, req.query);
+      const saleFrom = typeof req.query.sale_from === "string" ? req.query.sale_from.trim() : "";
+      const saleTo = typeof req.query.sale_to === "string" ? req.query.sale_to.trim() : "";
+      const keyword = typeof req.query.keyword === "string" ? req.query.keyword.trim() : "";
+      let query = supabase.from("daily_sales").select("*", { count: "exact" });
+      if (saleFrom) query = query.gte("sale_date", saleFrom);
+      if (saleTo) query = query.lte("sale_date", saleTo);
+      if (keyword) {
+        query = query.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
+      }
+      query = query.order("sale_date", { ascending: false }).order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      let statQuery = supabase.from("daily_sales").select("quantity", { count: "exact" });
+      if (saleFrom) statQuery = statQuery.gte("sale_date", saleFrom);
+      if (saleTo) statQuery = statQuery.lte("sale_date", saleTo);
+      if (keyword) {
+        statQuery = statQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
+      }
+      const { data: statRows, count: statCount } = await statQuery;
+      const totalQty = (statRows || []).reduce((s, r) => s + Number(r.quantity || 0), 0);
+      return res.status(200).json({
+        data: data || [],
+        total: count ?? 0,
+        page: q.page,
+        pageSize: q.pageSize,
+        summary: { rows: statCount ?? 0, quantity: totalQty }
+      });
+    }
+    if (req.method === "POST") {
+      requirePermission(ctx, "sales.write");
+      const body = parse(importSchema, req.body || {});
+      const { error } = await supabase.from("daily_sales").upsert(
+        body.rows.map((r) => ({
+          sale_date: r.sale_date,
+          platform: r.platform,
+          link_id: r.link_id,
+          product_name: r.product_name,
+          quantity: r.quantity,
+          unit_price: r.unit_price,
+          overseas_stock: r.overseas_stock,
+          updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        })),
+        { onConflict: "sale_date,platform,link_id" }
+      );
+      if (error) throw error;
+      await writeAudit(ctx, req, "create", "daily_sales", null, null, {
+        rows: body.rows.length,
+        sale_date: body.rows[0].sale_date
+      });
+      return res.status(201).json({ data: { imported: body.rows.length } });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/dashboard.ts
+async function handler21(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27049,7 +27145,7 @@ var createSchema10 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler21(req, res) {
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27096,7 +27192,7 @@ var updateSchema = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler22(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27144,7 +27240,7 @@ var createSchema11 = external_exports.object({
   color: external_exports.string().max(7).default("#FFFFFF"),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler23(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27178,7 +27274,7 @@ var updateSchema2 = external_exports.object({
   color: external_exports.string().max(7).optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler24(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27227,7 +27323,7 @@ var createSchema12 = external_exports.object({
   need_stock_in: external_exports.boolean().default(false),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler25(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27261,7 +27357,7 @@ var updateSchema3 = external_exports.object({
   need_stock_in: external_exports.boolean().optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler26(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27325,7 +27421,7 @@ var updateSchema4 = external_exports.object({
   result: external_exports.string().max(512).optional(),
   items: external_exports.array(itemSchema6).min(1).max(200).optional()
 }).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler27(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27419,7 +27515,7 @@ async function handler27(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler28(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27456,7 +27552,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler29(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27491,7 +27587,7 @@ async function handler29(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler30(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27540,9 +27636,10 @@ var updateSchema5 = external_exports.object({
   purchase_cost: external_exports.coerce.number().min(0).optional(),
   first_leg_freight: external_exports.coerce.number().min(0).optional(),
   last_mile_delivery_peso: external_exports.coerce.number().min(0).optional(),
-  ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional()
+  ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional(),
+  overseas_stock: external_exports.coerce.number().min(0).optional()
 });
-async function handler31(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27614,7 +27711,7 @@ var updateSchema6 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler32(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27742,7 +27839,7 @@ var updateSchema7 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler33(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27843,7 +27940,7 @@ var updateSchema8 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler34(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -27932,7 +28029,7 @@ var updateSchema9 = external_exports.object({
   pull_declare_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
   estimated_arrival: external_exports.string().max(32).nullable().optional()
 });
-async function handler35(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28027,7 +28124,7 @@ var TRANSFER_FLOW = {
 var updateSchema10 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler36(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28136,7 +28233,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler37(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28204,7 +28301,7 @@ var updateSchema12 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler38(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -28251,43 +28348,44 @@ var routes = [
   { pattern: /^\/auth\/login$/, handler: handler3 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler20 },
-  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler24, params: ["id"] },
-  { pattern: /^\/cargo-statuses$/, handler: handler23 },
-  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler26, params: ["id"] },
-  { pattern: /^\/after-sale-types$/, handler: handler25 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler22, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler21 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler27, params: ["id"] },
+  { pattern: /^\/dashboard\/stats$/, handler: handler21 },
+  { pattern: /^\/daily-sales$/, handler: handler20 },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler25, params: ["id"] },
+  { pattern: /^\/cargo-statuses$/, handler: handler24 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler27, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler26 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler23, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler22 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler28, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler4 },
   { pattern: /^\/audit-logs$/, handler: handler5 },
   { pattern: /^\/db-usage$/, handler: handler6 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler29 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler30 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler28, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler30 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler31 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler29, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler7 },
   { pattern: /^\/permissions$/, handler: handler8 },
   { pattern: /^\/products\/batch-delete$/, handler: handler10 },
   { pattern: /^\/products\/upload-image$/, handler: handler11 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler31, params: ["id"] },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler32, params: ["id"] },
   { pattern: /^\/products$/, handler: handler9 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler33, params: ["id"] },
   { pattern: /^\/purchase-orders$/, handler: handler12 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler33, params: ["id"] },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler34, params: ["id"] },
   { pattern: /^\/replenishment$/, handler: handler13 },
   { pattern: /^\/roles$/, handler: handler14 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler35, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler15 },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler35, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler36, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler16 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler36, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler37, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler17 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler37, params: ["id"] },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler38, params: ["id"] },
   { pattern: /^\/users$/, handler: handler18 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler38, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler39, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler19 }
 ];
-async function handler39(req, res) {
+async function handler40(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -28310,5 +28408,5 @@ async function handler39(req, res) {
   }
 }
 export {
-  handler39 as default
+  handler40 as default
 };

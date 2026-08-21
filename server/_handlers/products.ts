@@ -28,6 +28,8 @@ const createSchema = z.object({
   first_leg_freight: z.coerce.number().min(0).optional().default(0),
   last_mile_delivery_peso: z.coerce.number().min(0).optional().default(0),
   ml_commission_rate: z.coerce.number().min(0).max(1).optional().default(0.165),
+  // 海外库存（平台可用库存快照，批量导入写入）
+  overseas_stock: z.coerce.number().min(0).optional().default(0),
   // 批量导入内联图片：前端压缩后的 base64，由后端上传 Storage 并写入 image_text
   image_base64: z.string().max(6_000_000).optional(),
 });
@@ -137,7 +139,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const enriched = rows.map((r: any) => ({
         ...r,
         domestic_stock: domMap.get(r.id) || 0,
-        overseas_stock: ovsMap.get(r.id) || 0,
+        warehouse_overseas_stock: ovsMap.get(r.id) || 0,
+        overseas_stock: Number(r.overseas_stock ?? 0),
         in_transit_qty: transitMap.get(r.id) || 0,
         sales_qty: salesMap.get(r.id) || 0,
       }));

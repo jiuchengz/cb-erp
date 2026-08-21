@@ -18,6 +18,7 @@ import shipments from './_handlers/shipments';
 import transfers from './_handlers/transfers';
 import users from './_handlers/users';
 import warehouses from './_handlers/warehouses';
+import dailySales from './_handlers/daily-sales';
 import dashboard from './_handlers/dashboard';
 import forwarders from './_handlers/forwarders';
 import forwardersId from './_handlers/forwarders/[id]';
@@ -51,6 +52,7 @@ const routes: Route[] = [
   { pattern: /^\/auth\/password$/, handler: authPassword },
   { pattern: /^\/auth\/me$/, handler: authMe },
   { pattern: /^\/dashboard\/stats$/, handler: dashboard },
+  { pattern: /^\/daily-sales$/, handler: dailySales },
   { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: cargoStatusesId, params: ['id'] },
   { pattern: /^\/cargo-statuses$/, handler: cargoStatuses },
   { pattern: /^\/after-sale-types\/([^/]+)$/, handler: afterSaleTypesId, params: ['id'] },

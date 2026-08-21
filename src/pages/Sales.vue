@@ -1,82 +1,105 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h2>销售管理</h2>
+      <h2>销售统计</h2>
       <div>
         <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
-        <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
-          批量删除{{ selected.length ? `(${selected.length})` : '' }}
-        </el-button>
         <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
-        <el-button v-if="canWrite" type="primary" @click="openCreate">新增销售单</el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
     </div>
 
     <div class="filters">
+      <el-button-group>
+        <el-button
+          v-for="r in quickRanges"
+          :key="r.days"
+          :type="quickDays === r.days ? 'primary' : 'default'"
+          size="default"
+          @click="applyQuick(r.days)"
+        >{{ r.label }}</el-button>
+      </el-button-group>
+      <el-date-picker
+        v-model="dateRange"
+        type="daterange"
+        range-separator="至"
+        start-placeholder="开始日期"
+        end-placeholder="结束日期"
+        value-format="YYYY-MM-DD"
+        :clearable="false"
+        style="width: 260px"
+        @change="onDateChange"
+      />
       <el-input
         v-model="query.keyword"
-        placeholder="订单号/链接ID/产品名"
+        placeholder="链接ID/产品名"
         clearable
-        style="width: 240px"
+        style="width: 200px"
         @keyup.enter="load"
         @clear="load"
       />
-      <el-select v-model="query.status" placeholder="状态" clearable style="width: 160px" @change="load">
-        <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
-      </el-select>
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="detailRows" border stripe @selection-change="onSelectionChange">
-      <el-table-column type="selection" width="46" />
-      <el-table-column label="产品编号" min-width="130" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.code || row.sku || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="图片" width="70">
+    <!-- 指标卡 -->
+    <el-row :gutter="14" class="kpi-row" v-loading="loading">
+      <el-col v-for="k in kpiCards" :key="k.label" :xs="12" :sm="6">
+        <el-card shadow="hover" class="kpi-card">
+          <div class="kpi-label">{{ k.label }}</div>
+          <div class="kpi-value">{{ k.value }}<small v-if="k.unit">{{ k.unit }}</small></div>
+          <div class="kpi-trend" :class="trendClass(k.trend)">
+            <template v-if="k.trend != null">
+              环比 {{ k.trend >= 0 ? '+' : '' }}{{ k.trend.toFixed(1) }}%
+            </template>
+            <template v-else>—</template>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-alert v-if="summary" type="info" :closable="false" class="summary-bar">
+      当前范围共出单 {{ summary.rows }} 条，总出单数量 {{ summary.quantity }}
+    </el-alert>
+
+    <el-table
+      v-loading="loading"
+      :data="pagedRows"
+      border
+      stripe
+      @sort-change="onSortChange"
+    >
+      <el-table-column label="图片" width="70" align="center">
         <template #default="{ row }">
-          <el-image
-            v-if="row.image_text && isImageUrl(row.image_text)"
-            :src="row.image_text"
-            :preview-src-list="[row.image_text]"
-            preview-teleported
-            fit="cover"
-            style="width: 42px; height: 42px; border-radius: 4px"
-            @error="onImgError"
-          />
-          <span v-else>-</span>
+          <el-tooltip v-if="row.image" :show-after="200" :offset="10">
+            <template #content>
+              <img :src="row.image" class="img-preview" referrerpolicy="no-referrer" @error="onImgError($event)" />
+            </template>
+            <img :src="row.image" class="product-thumb" referrerpolicy="no-referrer" @error="onImgError($event)" />
+          </el-tooltip>
+          <div v-else class="img-fallback">无图</div>
         </template>
       </el-table-column>
-      <el-table-column label="链接ID" min-width="120" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.link_id || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="产品名称" min-width="180" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.name || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="单价" width="110" align="right">
-        <template #default="{ row }">{{ row.unit_price != null ? Number(row.unit_price) : '-' }}</template>
-      </el-table-column>
-      <el-table-column label="数量" width="90" align="right">
-        <template #default="{ row }">{{ row.quantity ?? '-' }}</template>
-      </el-table-column>
-      <el-table-column label="销售日期" min-width="120">
-        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column label="平台" width="90">
-        <template #default="{ row }">{{ row.platform || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right">
+      <el-table-column prop="link_id" label="链接ID" min-width="120" sortable="custom" show-overflow-tooltip />
+      <el-table-column prop="product_name" label="产品名称" min-width="170" sortable="custom" show-overflow-tooltip />
+      <el-table-column prop="platform" label="平台/站点" min-width="100" sortable="custom" />
+      <el-table-column prop="quantity" label="出单数量" width="110" align="right" sortable="custom" />
+      <el-table-column label="环比变化" width="110" align="right" sortable="custom" prop="changeRate">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row.order_id)">详情</el-button>
-          <el-button v-if="canWrite && nextStatuses(row.status).length" link type="primary" @click="openFlow(row)">
-            流转
-          </el-button>
-          <el-button v-if="canCancel && nextStatuses(row.status).includes('CANCELLED')" link type="danger" @click="openFlow(row, 'CANCELLED')">
-            取消
-          </el-button>
+          <span v-if="row.prevQty == null" class="flat">新增</span>
+          <span v-else-if="row.changeRate == null" class="flat">—</span>
+          <span v-else :class="row.changeRate >= 0 ? 'up' : 'down'">
+            {{ row.changeRate >= 0 ? '+' : '' }}{{ row.changeRate.toFixed(1) }}%
+          </span>
         </template>
       </el-table-column>
+      <el-table-column label="平均售价(MXN)" min-width="120" align="right" sortable="custom" prop="avg_price">
+        <template #default="{ row }">{{ row.avg_price != null ? Number(row.avg_price) : '-' }}</template>
+      </el-table-column>
+      <el-table-column label="可用库存" min-width="110" align="right" sortable="custom" prop="overseas_stock">
+        <template #default="{ row }">{{ row.overseas_stock != null ? Number(row.overseas_stock) : '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="days" label="出单天数" width="100" align="right" sortable="custom" />
     </el-table>
 
     <el-pagination
@@ -86,195 +109,229 @@
       v-model:current-page="query.page"
       v-model:page-size="query.pageSize"
       :page-sizes="[20, 50, 100]"
-      @current-change="load"
+      @current-change="onPageChange"
       @size-change="onSizeChange"
     />
-
-    <el-dialog v-model="createVisible" title="新增销售单" width="860px" destroy-on-close>
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="订单号" required>
-          <el-input v-model="form.order_no" placeholder="唯一订单号" />
-        </el-form-item>
-        <el-form-item label="币种">
-          <el-select v-model="form.currency" style="width: 160px">
-            <el-option label="CNY" value="CNY" />
-            <el-option label="MXN" value="MXN" />
-            <el-option label="USD" value="USD" />
-            <el-option label="PHP" value="PHP" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="客户ID">
-          <el-input v-model="form.customer_id" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="商品明细" required>
-          <div class="items-editor">
-            <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable placeholder="商品" style="width: 320px">
-                <el-option v-for="p in products" :key="p.id" :label="`${p.sku} - ${p.name}`" :value="p.id" />
-              </el-select>
-              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 120px" />
-              <el-input-number v-model="it.unit_price" :min="0" :precision="2" placeholder="单价" style="width: 140px" />
-              <el-input-number v-model="it.discount" :min="0" :precision="2" placeholder="折扣" style="width: 140px" />
-              <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
-            </div>
-            <el-button size="small" @click="addItem">添加明细</el-button>
-          </div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="detailVisible" title="销售单详情" width="760px">
-      <el-descriptions v-if="detail" :column="2" border>
-        <el-descriptions-item label="订单号">{{ detail.order_no }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
-        <el-descriptions-item label="币种">{{ detail.currency }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">{{ detail.total_amount }}</el-descriptions-item>
-        <el-descriptions-item label="客户ID" :span="2">{{ detail.customer_id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
-      </el-descriptions>
-      <el-table v-if="detail" :data="detail.sales_order_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column prop="sku" label="SKU" min-width="140" />
-        <el-table-column prop="quantity" label="数量" width="90" align="right" />
-        <el-table-column prop="unit_price" label="单价" width="110" align="right" />
-        <el-table-column prop="discount" label="折扣" width="100" align="right" />
-        <el-table-column prop="subtotal" label="小计" width="110" align="right" />
-      </el-table>
-    </el-dialog>
-
-    <el-dialog v-model="flowVisible" title="状态流转" width="420px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="当前状态">
-          <el-tag>{{ statusLabel(flowRow?.status) }}</el-tag>
-        </el-form-item>
-        <el-form-item label="目标状态" required>
-          <el-select v-model="flowTarget" style="width: 100%">
-            <el-option v-for="s in nextStatuses(flowRow?.status)" :key="s" :label="statusLabel(s)" :value="s" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="flowVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitFlow">确认流转</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { exportTable, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('sales.write'))
-const canCancel = computed(() => auth.hasPermission('sales.cancel'))
 
-const SALES_FLOW: Record<string, string[]> = {
-  DRAFT: ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED: ['PAID', 'CANCELLED'],
-  PAID: ['PROCESSING', 'CANCELLED'],
-  PROCESSING: ['SHIPPED', 'CANCELLED'],
-  SHIPPED: ['DELIVERED'],
-  DELIVERED: [],
-  CANCELLED: [],
-}
-
-const statusOptions = [
-  { label: '草稿', value: 'DRAFT' },
-  { label: '已确认', value: 'CONFIRMED' },
-  { label: '已付款', value: 'PAID' },
-  { label: '处理中', value: 'PROCESSING' },
-  { label: '已发货', value: 'SHIPPED' },
-  { label: '已送达', value: 'DELIVERED' },
-  { label: '已取消', value: 'CANCELLED' },
-]
-
-const statusMap: Record<string, { label: string; type: string }> = {
-  DRAFT: { label: '草稿', type: 'info' },
-  CONFIRMED: { label: '已确认', type: 'primary' },
-  PAID: { label: '已付款', type: 'success' },
-  PROCESSING: { label: '处理中', type: 'warning' },
-  SHIPPED: { label: '已发货', type: 'primary' },
-  DELIVERED: { label: '已送达', type: 'success' },
-  CANCELLED: { label: '已取消', type: 'danger' },
-}
-
-function statusLabel(s: string) {
-  return statusMap[s]?.label || s
-}
-function statusType(s: string) {
-  return statusMap[s]?.type || 'info'
-}
-function nextStatuses(s?: string) {
-  return (s && SALES_FLOW[s]) || []
-}
-function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
-}
-
-function isImageUrl(v: string): boolean {
-  return typeof v === 'string' && /^(https?:\/\/|\/|data:image\/)/i.test(v)
-}
-function onImgError(e: Event) {
-  ;(e.target as HTMLImageElement).style.visibility = 'hidden'
-}
-
-const rows = ref<any[]>([])
+const aggRows = ref<any[]>([])
 const total = ref(0)
+const summary = ref<any>(null)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, keyword: '', status: '' })
 
-// 将订单行展开为明细行（每个商品一行），供表格展示
-const detailRows = computed(() => {
-  const out: any[] = []
-  for (const o of rows.value) {
-    const items = o.sales_order_items || []
-    if (!items.length) {
-      out.push({
-        ...o,
-        order_id: o.id,
-        code: '',
-        sku: '',
-        name: '',
-        link_id: '',
-        image_text: '',
-        unit_price: null,
-        quantity: null,
-      })
-      continue
-    }
-    for (const it of items) {
-      const p = it.products || {}
-      out.push({
-        ...o,
-        order_id: o.id,
-        code: p.code || '',
-        sku: p.sku || it.sku || '',
-        name: p.name || '',
-        link_id: p.link_id || '',
-        image_text: p.image_text || '',
-        unit_price: it.unit_price,
-        quantity: it.quantity,
-      })
-    }
-  }
-  return out
+const quickRanges = [
+  { label: '今天', days: 0 },
+  { label: '近7天', days: 7 },
+  { label: '近30天', days: 30 },
+  { label: '近60天', days: 60 },
+]
+const quickDays = ref<number>(0)
+
+function fmtDate(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// 默认查看当天
+function todayRange(): [string, string] {
+  const t = fmtDate(new Date())
+  return [t, t]
+}
+
+const dateRange = ref<any[]>(todayRange())
+const query = reactive({ page: 1, pageSize: 20, keyword: '' })
+
+const sortState = reactive<{ prop: string; order: 'ascending' | 'descending' | null }>({
+  prop: '',
+  order: null,
 })
+
+function applyQuick(days: number) {
+  quickDays.value = days
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - days)
+  dateRange.value = [fmtDate(start), fmtDate(end)]
+  query.page = 1
+  load()
+}
+
+function onDateChange() {
+  // 手动选择日期范围后，取消快捷周期高亮
+  const len = dateRange.value?.[0] && dateRange.value?.[1]
+    ? dayDiff(dateRange.value[0], dateRange.value[1]) + 1
+    : 0
+  if (len === 1) quickDays.value = 0
+  else if (len === 7) quickDays.value = 7
+  else if (len === 30) quickDays.value = 30
+  else if (len === 60) quickDays.value = 60
+  else quickDays.value = -1
+  query.page = 1
+  load()
+}
+
+function dayDiff(a: string, b: string) {
+  const da = new Date(a).getTime()
+  const db = new Date(b).getTime()
+  return Math.round((db - da) / 86400000)
+}
+
+function shiftDate(d: string, offsetDays: number) {
+  const dt = new Date(d)
+  dt.setDate(dt.getDate() + offsetDays)
+  return fmtDate(dt)
+}
+
+// 聚合明细为按链接ID的数据（指定区间），返回 { map, totalQty, totalAmount, dateSet, rows }
+function aggregate(rows: any[]) {
+  const map = new Map<string, any>()
+  const dateSet = new Set<string>()
+  let totalQty = 0
+  let totalAmount = 0
+  for (const r of rows) {
+    const key = String(r.link_id || '')
+    const d = String(r.sale_date || '')
+    if (d) dateSet.add(d)
+    const qty = Number(r.quantity || 0)
+    const amount = qty * Number(r.unit_price || 0)
+    totalQty += qty
+    totalAmount += amount
+    const cur = map.get(key) || {
+      link_id: key,
+      product_name: r.product_name || '',
+      platform: r.platform || '',
+      quantity: 0,
+      amount: 0,
+      days: new Set<string>(),
+      latest_date: '',
+      overseas_stock: null as any,
+      avg_price: null as any,
+    }
+    cur.quantity += qty
+    cur.amount += amount
+    cur.days.add(d)
+    if (!cur.latest_date || d > cur.latest_date) {
+      cur.latest_date = d
+      cur.overseas_stock = r.overseas_stock != null ? Number(r.overseas_stock) : null
+      if (r.product_name) cur.product_name = r.product_name
+      if (r.platform) cur.platform = r.platform
+    }
+    map.set(key, cur)
+  }
+  const aggRows: any[] = []
+  for (const v of map.values()) {
+    aggRows.push({
+      ...v,
+      days: v.days.size,
+      avg_price: v.quantity > 0 ? Number((v.amount / v.quantity).toFixed(2)) : v.avg_price,
+    })
+  }
+  return { aggRows, totalQty, totalAmount, dateSet }
+}
+
+// 全量翻页拉取 daily_sales
+async function fetchDailySales(saleFrom: string, saleTo: string, keyword: string) {
+  const all: any[] = []
+  const params: any = { page: 1, pageSize: 200, sale_from: saleFrom, sale_to: saleTo, keyword }
+  for (;;) {
+    const { data } = await api.get('/daily-sales', { params })
+    ;(data.data ?? []).forEach((r: any) => all.push(r))
+    if (all.length >= (data.total ?? 0) || !(data.data ?? []).length) break
+    params.page++
+  }
+  return all
+}
 
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/sales', { params: query })
-    rows.value = data.data ?? []
-    total.value = data.total ?? 0
+    const from = dateRange.value?.[0] || ''
+    const to = dateRange.value?.[1] || ''
+
+    // 当前周期
+    const curRows = await fetchDailySales(from, to, query.keyword)
+    const cur = aggregate(curRows)
+
+    // 上一等长周期（用于环比）：从当前周期长度往前推
+    const prevFrom = from ? shiftDate(from, -(dayDiff(from, to) + 1)) : ''
+    const prevTo = from ? shiftDate(from, -1) : ''
+    let prevMap = new Map<string, any>()
+    let prevTotalQty = 0
+    let prevTotalAmount = 0
+    let prevDateSet = new Set<string>()
+    if (prevFrom && prevTo) {
+      const prevRows = await fetchDailySales(prevFrom, prevTo, query.keyword)
+      const prev = aggregate(prevRows)
+      prevMap = new Map(prev.aggRows.map((r) => [String(r.link_id), r]))
+      prevTotalQty = prev.totalQty
+      prevTotalAmount = prev.totalAmount
+      prevDateSet = prev.dateSet
+    }
+
+    // 拉取商品图片映射
+    const imageMap: Record<string, string> = {}
+    {
+      let page = 1
+      for (;;) {
+        const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+        ;(data.data ?? []).forEach((p: any) => {
+          const lid = String(p.link_id || '').trim()
+          if (lid && p.image_text) imageMap[lid] = p.image_text
+        })
+        if (page * 200 >= (data.total ?? 0)) break
+        page++
+      }
+    }
+
+    // 合并环比数据
+    aggRows.value = cur.aggRows.map((r: any) => {
+      const key = String(r.link_id)
+      const prev = prevMap.get(key)
+      const prevQty = prev ? Number(prev.quantity || 0) : 0
+      let changeRate: number | null = null
+      if (prevQty > 0) changeRate = Number((((r.quantity - prevQty) / prevQty) * 100).toFixed(1))
+      return {
+        ...r,
+        image: imageMap[key] || '',
+        prevQty: prevQty > 0 ? prevQty : null,
+        changeRate,
+      }
+    })
+    total.value = aggRows.value.length
+
+    const kpi: any = {
+      links: aggRows.value.length,
+      qty: cur.totalQty,
+      amount: cur.totalAmount,
+      days: cur.dateSet.size,
+    }
+    const prevKpi: any = {
+      links: prevMap.size,
+      qty: prevTotalQty,
+      amount: prevTotalAmount,
+      days: prevDateSet.size,
+    }
+    summary.value = {
+      rows: aggRows.value.length,
+      quantity: cur.totalQty,
+      kpi,
+      prevKpi,
+      hasPrev: prevFrom !== '' && prevTo !== '',
+    }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载失败')
   } finally {
@@ -282,133 +339,74 @@ async function load() {
   }
 }
 
+const kpiCards = computed(() => {
+  const k = summary.value?.kpi || {}
+  const pk = summary.value?.prevKpi || {}
+  const hasPrev = summary.value?.hasPrev
+  const trendOf = (cur: number, prev: number) => (hasPrev && prev > 0 ? Number((((cur - prev) / prev) * 100).toFixed(1)) : null)
+  return [
+    { label: '出单链接数', value: k.links ?? 0, unit: '个', trend: trendOf(k.links ?? 0, pk.links ?? 0) },
+    { label: '总出单数量', value: k.qty ?? 0, unit: '件', trend: trendOf(k.qty ?? 0, pk.qty ?? 0) },
+    { label: '总销售额', value: fmtMoney(k.amount ?? 0), unit: 'MXN', trend: trendOf(k.amount ?? 0, pk.amount ?? 0) },
+    { label: '有销量天数', value: k.days ?? 0, unit: '天', trend: trendOf(k.days ?? 0, pk.days ?? 0) },
+  ]
+})
+
+function fmtMoney(v: number) {
+  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+}
+
+function trendClass(t: number | null) {
+  if (t == null) return 'flat'
+  if (t > 0) return 'up'
+  if (t < 0) return 'down'
+  return 'flat'
+}
+
+const pagedRows = computed(() => {
+  let rows = aggRows.value
+  if (sortState.prop && sortState.order) {
+    const prop = sortState.prop
+    const dir = sortState.order === 'ascending' ? 1 : -1
+    rows = [...rows].sort((a, b) => {
+      const va = a[prop]
+      const vb = b[prop]
+      if (va == null && vb == null) return 0
+      if (va == null) return 1
+      if (vb == null) return -1
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+      return String(va).localeCompare(String(vb)) * dir
+    })
+  }
+  const start = (query.page - 1) * query.pageSize
+  return rows.slice(start, start + query.pageSize)
+})
+
+function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  sortState.prop = prop || ''
+  sortState.order = order
+  query.page = 1
+}
+
+function onPageChange() {}
+
 function onSizeChange() {
   query.page = 1
   load()
 }
 
-const products = ref<any[]>([])
-async function loadAllProducts(): Promise<any[]> {
-  const all: any[] = []
-  let page = 1
-  const pageSize = 200
-  while (true) {
-    const res = await api.get('/products', { params: { page, pageSize } })
-    const list = res.data.data ?? []
-    all.push(...list)
-    const total = res.data.total ?? 0
-    if (all.length >= total || list.length < pageSize) break
-    page++
-  }
-  return all
-}
-async function loadProducts() {
-  try {
-    products.value = await loadAllProducts()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '加载商品失败')
-  }
+function isImageUrl(v: unknown): v is string {
+  if (typeof v !== 'string' || !v) return false
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:image/')
 }
 
-const createVisible = ref(false)
-const saving = ref(false)
-const form = reactive({
-  order_no: '',
-  customer_id: '',
-  currency: 'CNY',
-  items: [] as any[],
-})
-
-function addItem() {
-  form.items.push({ product_id: '', quantity: 1, unit_price: 0, discount: 0 })
-}
-function removeItem(idx: number) {
-  form.items.splice(idx, 1)
-}
-
-function openCreate() {
-  form.order_no = ''
-  form.customer_id = ''
-  form.currency = 'CNY'
-  form.items = []
-  addItem()
-  createVisible.value = true
-}
-
-async function save() {
-  if (!form.order_no.trim()) {
-    ElMessage.warning('请填写订单号')
-    return
-  }
-  const items = form.items.filter((it) => it.product_id)
-  if (!items.length) {
-    ElMessage.warning('请至少添加一条商品明细')
-    return
-  }
-  const payload: any = {
-    order_no: form.order_no,
-    currency: form.currency,
-    items: items.map((it) => ({
-      product_id: it.product_id,
-      quantity: it.quantity,
-      unit_price: it.unit_price,
-      discount: it.discount,
-    })),
-  }
-  if (form.customer_id.trim()) payload.customer_id = form.customer_id.trim()
-  saving.value = true
-  try {
-    await api.post('/sales', payload)
-    ElMessage.success('创建成功')
-    createVisible.value = false
-    load()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-const detailVisible = ref(false)
-const detail = ref<any>(null)
-async function openDetail(id: string) {
-  try {
-    const { data } = await api.get(`/sales/${id}`)
-    detail.value = data.data
-    detailVisible.value = true
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '加载详情失败')
-  }
-}
-
-const flowVisible = ref(false)
-const flowRow = ref<any>(null)
-const flowTarget = ref('')
-function openFlow(row: any, preset?: string) {
-  flowRow.value = row
-  const next = nextStatuses(row.status)
-  flowTarget.value = preset && next.includes(preset) ? preset : next[0] ?? ''
-  flowVisible.value = true
-}
-
-async function submitFlow() {
-  if (!flowRow.value || !flowTarget.value) return
-  saving.value = true
-  try {
-    await api.patch(`/sales/${flowRow.value.order_id}`, { status: flowTarget.value })
-    ElMessage.success('状态更新成功')
-    flowVisible.value = false
-    load()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '状态更新失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-const selected = ref<any[]>([])
-function onSelectionChange(rows: any[]) {
-  selected.value = rows
+function onImgError(e: Event) {
+  const img = e.target as HTMLImageElement
+  img.src =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="#F5F7FA" width="40" height="40"/><text x="20" y="24" text-anchor="middle" font-size="12" fill="#C0C4CC">?</text></svg>'
+    )
 }
 
 const importing = ref(false)
@@ -417,17 +415,15 @@ const importFile = ref<any>(null)
 function downloadTpl() {
   downloadTemplate(
     [
-      { label: '订单号', sample: 'MLM-SALE-IMP001' },
-      { label: '商品SKU', sample: 'SKU-DLB-001' },
-      { label: '数量', sample: 2 },
-      { label: '单价', sample: 329 },
-      { label: '折扣', sample: 0 },
-      { label: '销售日期', sample: '2026-08-05' },
-      { label: '平台', sample: 'ML' },
-      { label: '客户ID', sample: '' },
+      { label: '日期', sample: '2026-08-04' },
+      { label: '站点', sample: 'Mexico' },
+      { label: '商品ID', sample: 'MLM2553999543' },
+      { label: '实际销量', sample: 8 },
+      { label: '平均售价(MXN)', sample: 248.51 },
+      { label: '可用库存', sample: 27 },
     ],
-    '销售导入模板',
-    '销售批量导入模板.xlsx'
+    '历史分析-商品销售明细',
+    '历史分析-商品销售明细模板.xlsx'
   )
 }
 
@@ -444,90 +440,92 @@ async function onImportFile(e: Event) {
   try {
     const { headers, rows } = await readExcelFile(file)
     const col = buildColMap(headers, {
-      order_no: ['订单号', 'order_no', 'orderNo'],
-      sku: ['商品SKU', 'SKU', '产品编号', '编码', '链接ID', 'code', 'linkId', 'sku'],
-      quantity: ['数量', 'quantity', 'qty'],
-      unit_price: ['单价', 'price', 'unit_price'],
-      discount: ['折扣', 'discount'],
-      customer_id: ['客户ID', 'customer_id', 'customerId'],
+      sale_date: ['日期', 'date', 'sale_date'],
+      platform: ['站点', '平台', 'platform'],
+      link_id: ['商品ID', '链接ID', 'link_id', 'linkId'],
+      quantity: ['实际销量', '销量', 'quantity', 'qty'],
+      unit_price: ['平均售价(MXN)', '平均售价', '单价', 'price', 'unit_price'],
+      overseas_stock: ['可用库存', '海外库存', 'overseas_stock', 'stock'],
     })
-    if (col.sku === undefined || col.quantity === undefined) {
-      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品SKU"和"数量"列')
+    if (col.link_id === undefined || col.quantity === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品ID"和"实际销量"列')
       return
     }
-    // 拉取全量商品建立 SKU 映射
-    const skuMap: Record<string, any> = {}
+    const linkMap: Record<string, any> = {}
     let page = 1
     for (;;) {
       const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
       ;(data.data ?? []).forEach((p: any) => {
-        if (p.sku) skuMap[p.sku] = p
-        if (p.code) skuMap[p.code] = p
+        if (p.link_id) linkMap[String(p.link_id).trim()] = p
       })
       if (page * 200 >= (data.total ?? 0)) break
       page++
     }
-    // 按订单号分组合并明细
-    const groups = new Map<string, { order_no: string; customer_id: string; rows: any[][] }>()
-    let autoSeq = 0
-    const failures: string[] = []
-    rows.forEach((row, idx) => {
+    const payloadRows: any[] = []
+    const errLines: string[] = []
+    const stockMap = new Map<string, { sale_date: string; stock: number }>()
+    for (let idx = 0; idx < rows.length; idx++) {
+      const row = rows[idx]
       const lineNo = idx + 2
-      const sku = cellStr(row, col.sku)
+      const rawId = cellStr(row, col.link_id)
+      const linkId = rawId.replace(/^MLM/i, '').trim()
       const qty = cellNum(row, col.quantity)
-      if (!sku) {
-        failures.push(`第${lineNo}行：商品SKU为空`)
-        return
+      if (!rawId) {
+        errLines.push(`第${lineNo}行：商品ID为空`)
+        continue
       }
       if (qty <= 0) {
-        failures.push(`第${lineNo}行：数量必须大于 0`)
-        return
+        errLines.push(`第${lineNo}行：实际销量必须大于 0`)
+        continue
       }
-      const product = skuMap[sku]
-      if (!product) {
-        failures.push(`第${lineNo}行：SKU「${sku}」未匹配到商品`)
-        return
+      const product = linkMap[linkId]
+      const item: any = {
+        link_id: linkId,
+        quantity: qty,
+        unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
+        overseas_stock: col.overseas_stock !== undefined ? cellNum(row, col.overseas_stock) : 0,
       }
-      const rawNo = cellStr(row, col.order_no)
-      const orderNo = rawNo || autoNo('SALE-IMP', ++autoSeq)
-      const key = orderNo
-      if (!groups.has(key)) {
-        groups.set(key, { order_no: orderNo, customer_id: cellStr(row, col.customer_id), rows: [] })
+      if (col.sale_date !== undefined) {
+        const d = cellStr(row, col.sale_date).slice(0, 10)
+        if (d) item.sale_date = d
       }
-      groups.get(key)!.rows.push(row)
-    })
-    let ok = 0
-    const errLines: string[] = []
-    for (const g of groups.values()) {
-      const items = g.rows
-        .map((row) => {
-          const product = skuMap[cellStr(row, col.sku)]
-          return {
-            product_id: product.id,
-            quantity: cellNum(row, col.quantity),
-            unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : undefined,
-            discount: col.discount !== undefined ? cellNum(row, col.discount) : undefined,
-          }
-        })
-        .filter((it) => it.quantity > 0)
-      // 超过 200 条明细时按 200 拆分
-      for (let i = 0; i < items.length; i += 200) {
-        const payload: any = { order_no: g.order_no, items: items.slice(i, i + 200) }
-        if (g.customer_id) payload.customer_id = g.customer_id
-        try {
-          await api.post('/sales', payload)
-          ok++
-        } catch (err: any) {
-          errLines.push(`单号${g.order_no}：${err?.response?.data?.error?.message || '创建失败'}`)
+      if (col.platform !== undefined) {
+        const p = cellStr(row, col.platform)
+        if (p) item.platform = p
+      }
+      item.product_name = product ? product.name || '' : '未匹配'
+      payloadRows.push(item)
+      if (product && col.overseas_stock !== undefined) {
+        const stock = cellNum(row, col.overseas_stock)
+        const d = item.sale_date || ''
+        const cur = stockMap.get(product.id)
+        if (!cur || d >= cur.sale_date) {
+          stockMap.set(product.id, { sale_date: d, stock })
         }
       }
     }
-    if (failures.length) errLines.push(...failures)
-    if (errLines.length) {
-      ElMessage.warning(`成功导入 ${ok} 单，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
-    } else {
-      ElMessage.success(`成功导入 ${ok} 单`)
+    for (const [pid, v] of stockMap) {
+      await api.patch(`/products/${pid}`, { overseas_stock: v.stock })
     }
+    if (!payloadRows.length) {
+      ElMessage.warning('没有可导入的数据')
+      return
+    }
+    try {
+      const { data } = await api.post('/daily-sales', { rows: payloadRows })
+      const ok = data.data?.imported ?? payloadRows.length
+      if (errLines.length) {
+        ElMessage.warning(`成功导入 ${ok} 条，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+      } else {
+        ElMessage.success(`成功导入 ${ok} 条`)
+      }
+    } catch (err: any) {
+      errLines.push(err?.response?.data?.error?.message || '导入失败')
+      ElMessage.error('导入失败：' + errLines.slice(-1)[0])
+    }
+    dateRange.value = todayRange()
+    quickDays.value = 0
+    query.page = 1
     load()
   } catch (err: any) {
     ElMessage.error(err?.message || '导入失败')
@@ -539,17 +537,26 @@ async function onImportFile(e: Event) {
 const exporting = ref(false)
 function exportRows() {
   const columns = [
-    { key: 'code', label: '产品编号', value: (r: any) => r.code || r.sku || '' },
     { key: 'link_id', label: '链接ID', value: (r: any) => r.link_id || '' },
-    { key: 'name', label: '产品名称', value: (r: any) => r.name || '' },
-    { key: 'unit_price', label: '单价', value: (r: any) => (r.unit_price != null ? Number(r.unit_price) : '') },
-    { key: 'quantity', label: '数量', value: (r: any) => r.quantity ?? '' },
-    { key: 'created_at', label: '销售日期', value: (r: any) => formatDate(r.created_at) },
-    { key: 'platform', label: '平台', value: (r: any) => r.platform || '' },
+    { key: 'product_name', label: '产品名称', value: (r: any) => r.product_name || '' },
+    { key: 'platform', label: '平台/站点', value: (r: any) => r.platform || '' },
+    { key: 'quantity', label: '出单数量', value: (r: any) => r.quantity ?? '' },
+    {
+      key: 'changeRate',
+      label: '环比变化',
+      value: (r: any) => {
+        if (r.prevQty == null) return '新增'
+        if (r.changeRate == null) return ''
+        return `${r.changeRate >= 0 ? '+' : ''}${r.changeRate.toFixed(1)}%`
+      },
+    },
+    { key: 'avg_price', label: '平均售价(MXN)', value: (r: any) => (r.avg_price != null ? Number(r.avg_price) : '') },
+    { key: 'overseas_stock', label: '可用库存', value: (r: any) => (r.overseas_stock != null ? Number(r.overseas_stock) : '') },
+    { key: 'days', label: '出单天数', value: (r: any) => r.days ?? '' },
   ]
   exporting.value = true
   try {
-    exportTable(detailRows.value, columns, `销售列表_${todayStr()}.xlsx`)
+    exportTable(aggRows.value, columns, `销售统计_${todayStr()}.xlsx`)
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {
@@ -557,36 +564,8 @@ function exportRows() {
   }
 }
 
-async function batchRemove() {
-  if (!selected.value.length) return
-  try {
-    await ElMessageBox.confirm(
-      `确定删除选中的 ${selected.value.length} 个销售明细对应的销售单吗？此操作不可恢复。`,
-      '批量删除确认',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-    )
-  } catch {
-    return
-  }
-  const ids = [...new Set(selected.value.map((r) => r.order_id || r.id))]
-  let ok = 0
-  let fail = 0
-  for (const id of ids) {
-    try {
-      await api.delete(`/sales/${id}`)
-      ok++
-    } catch {
-      fail++
-    }
-  }
-  ElMessage.success(`删除完成：成功 ${ok} 单${fail ? `，失败 ${fail} 单` : ''}`)
-  selected.value = []
-  load()
-}
-
 onMounted(() => {
   load()
-  loadProducts()
 })
 </script>
 
@@ -600,19 +579,76 @@ onMounted(() => {
 .filters {
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.kpi-row {
+  margin-bottom: 12px;
+}
+.kpi-card {
+  margin-bottom: 2px;
+}
+.kpi-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #303133;
+  line-height: 1.2;
+}
+.kpi-value small {
+  font-size: 13px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 4px;
+}
+.kpi-trend {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.up {
+  color: #67c23a;
+}
+.down {
+  color: #f56c6c;
+}
+.flat {
+  color: #909399;
+}
+.summary-bar {
+  margin-bottom: 12px;
+}
+.product-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.img-preview {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 6px;
+}
+.img-fallback {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  border-radius: 4px;
+  background: #f5f7fa;
+  color: #c0c4cc;
+  font-size: 12px;
+  text-align: center;
+  margin: 0 auto;
 }
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
-}
-.items-editor {
-  width: 100%;
-}
-.item-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
 }
 </style>
