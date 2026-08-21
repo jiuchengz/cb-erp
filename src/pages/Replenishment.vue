@@ -24,19 +24,7 @@
     <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column label="补货时间" width="170">
-        <template #default="{ row }">
-          <el-date-picker
-            v-if="canWrite"
-            v-model="row.replenishment_time"
-            type="date"
-            value-format="YYYY-MM-DD"
-            size="small"
-            placeholder="选择日期"
-            style="width: 140px"
-            @change="(v: any) => updateField(row, 'replenishment_time', v)"
-          />
-          <span v-else>{{ row.replenishment_time || '-' }}</span>
-        </template>
+        <template #default="{ row }">{{ row.replenishment_time || '-' }}</template>
       </el-table-column>
       <el-table-column label="产品编码" width="130" show-overflow-tooltip>
         <template #default="{ row }">{{ firstItemCode(row) }}</template>
@@ -61,19 +49,7 @@
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
       </el-table-column>
       <el-table-column label="补货数量" width="150" align="right">
-        <template #default="{ row }">
-          <el-input-number
-            v-if="canWrite"
-            v-model="row.replenish_qty"
-            :min="0"
-            :precision="0"
-            size="small"
-            controls-position="right"
-            style="width: 120px"
-            @change="(v: any) => updateField(row, 'replenish_qty', v)"
-          />
-          <span v-else>{{ row.replenish_qty ?? '-' }}</span>
-        </template>
+        <template #default="{ row }">{{ row.replenish_qty ?? '-' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
@@ -405,24 +381,6 @@ async function removeOne(row: any) {
 const selected = ref<any[]>([])
 function onSelectionChange(rows: any[]) {
   selected.value = rows
-}
-
-// 内联编辑：失焦/回车后 PATCH /replenishment/[id] 保存
-const updating = ref(false)
-async function updateField(row: any, key: string, val: any) {
-  if (updating.value) return
-  updating.value = true
-  try {
-    const payload: any = { [key]: val === null || val === undefined ? null : val }
-    const { data } = await api.patch(`/replenishment/${row.id}`, payload)
-    if (data?.data) Object.assign(row, data.data)
-    ElMessage.success('已保存')
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
-    load()
-  } finally {
-    updating.value = false
-  }
 }
 
 const exporting = ref(false)
