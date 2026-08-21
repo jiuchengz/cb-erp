@@ -140,7 +140,7 @@
           </el-table-column>
           <el-table-column label="货物状态" width="110">
             <template #default="{ row }">
-              <el-tag :type="itCargoType(row.cargo_status)">{{ itCargoLabel(row.cargo_status) }}</el-tag>
+              <span>{{ itCargoLabel(row.cargo_status) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="carrier" label="承运商" min-width="130">
@@ -285,18 +285,15 @@ const itQuery = reactive({ page: 1, pageSize: 20, tracking_no: '' })
 const itDetailVisible = ref(false)
 const itDetail = ref<any>(null)
 
-const itCargoMap: Record<string, { label: string; type: string }> = {
-  in_warehouse: { label: '已入仓', type: 'success' },
-  transporting: { label: '运输中', type: 'warning' },
-  arrived_port: { label: '已到港', type: 'primary' },
-  cleared: { label: '已清关', type: 'info' },
+const itCargoMap: Record<string, string> = {
+  in_warehouse: '已入仓',
+  transporting: '运输中',
+  arrived_port: '已到港',
+  cleared: '已清关',
 }
 
 function itCargoLabel(s: string) {
-  return itCargoMap[s]?.label || s || '-'
-}
-function itCargoType(s: string) {
-  return itCargoMap[s]?.type || 'info'
+  return itCargoMap[s] || s || '-'
 }
 
 async function loadInTransit() {

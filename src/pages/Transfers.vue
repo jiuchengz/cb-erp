@@ -24,7 +24,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange" :row-style="rowStyle">
+      <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="46" />
         <el-table-column prop="tracking_no" label="货件号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="cargo_code" label="货代号" min-width="140" show-overflow-tooltip />
@@ -47,9 +47,7 @@
         </el-table-column>
         <el-table-column label="货物状态" width="120">
           <template #default="{ row }">
-            <el-tag :style="{ backgroundColor: getCargoColor(row.cargo_status), color: getCargoTextColor(row.cargo_status), borderColor: getCargoColor(row.cargo_status) }">
-              {{ row.cargo_status || '-' }}
-            </el-tag>
+            <span>{{ row.cargo_status || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" min-width="160">
@@ -280,14 +278,6 @@ function onSizeChange() {
   load()
 }
 
-function rowStyle({ row }: { row: any }) {
-  const color = getCargoColor(row.cargo_status)
-  if (color && color !== '#FFFFFF') {
-    return { backgroundColor: color + '22' }
-  }
-  return {}
-}
-
 const forwarders = ref<any[]>([])
 function forwarderName(id: string) {
   return forwarders.value.find((f) => f.id === id)?.name || '-'
@@ -303,14 +293,6 @@ function productInfo(pid: string) {
 }
 
 const cargoStatuses = ref<any[]>([])
-function getCargoColor(name: string) {
-  return cargoStatuses.value.find((x) => x.name === name)?.color || '#FFFFFF'
-}
-function getCargoTextColor(name: string) {
-  const color = getCargoColor(name)
-  if (!color || color === '#FFFFFF') return '#606266'
-  return '#FFFFFF'
-}
 
 async function loadOptions() {
   try {

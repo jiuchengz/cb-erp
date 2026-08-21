@@ -37,9 +37,7 @@
         </el-table-column>
         <el-table-column label="货物状态" width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.cargo_status" :style="{ backgroundColor: cargoStatusColors[row.cargo_status] || undefined }" :type="cargoStatusColors[row.cargo_status] ? '' : 'info'">
-              {{ row.cargo_status }}
-            </el-tag>
+            <span v-if="row.cargo_status">{{ row.cargo_status }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -69,15 +67,6 @@ const stats = ref<any>({
   after_sales_count: 0,
   recent_shipments: [],
 })
-
-// 货物状态固定颜色映射（与发货模块 cargo_statuses 字典解耦，无匹配 fallback info 灰 #909399）
-const cargoStatusColors: Record<string, string> = {
-  转运中: '#17A2B8',
-  到港: '#F0AD4E',
-  清关: '#6F42C1',
-  已预约: '#007BFF',
-  已入仓: '#28A745',
-}
 
 const statCards = computed(() => [
   { label: '商品总数', value: stats.value.products_count ?? 0 },
