@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>售后管理 - 按钮修复预览</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; margin: 0; padding: 24px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; max-width: 900px; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  h2 { margin: 0 0 16px; font-size: 20px; color: #303133; }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 4px; font-size: 14px; border: 1px solid #dcdfe6; background: #fff; color: #606266; cursor: pointer; margin-right: 8px; user-select: none; }
+  .btn-primary { background: #409eff; border-color: #409eff; color: #fff; }
+  .btn-danger { background: #f56c6c; border-color: #f56c6c; color: #fff; }
+  .btn-new { background: #fff; border-color: #409eff; color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,.25); }
+  .tag { font-size: 12px; color: #e6a23c; margin-left: 6px; }
+  .table { border: 1px solid #ebeef5; border-radius: 4px; margin-top: 16px; overflow: hidden; }
+  .row { display: flex; padding: 10px 16px; font-size: 14px; color: #606266; border-bottom: 1px solid #ebeef5; }
+  .row.head { background: #f5f7fa; color: #909399; font-weight: 600; }
+  .row:last-child { border-bottom: none; }
+  .c1 { flex: 1; } .c2 { flex: 1.5; } .c3 { flex: 1; } .c4 { flex: 1; }
+  .tip { margin-top: 16px; padding: 10px 14px; background: #fdf6ec; border: 1px solid #faecd8; border-radius: 4px; font-size: 13px; color: #b88230; }
+  .tip b { color: #e6a23c; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>售后管理<span class="tag">（改动预览，仅供参考）</span></h2>
+  <div>
+    <span class="btn">导出</span>
+    <span class="btn btn-danger">批量删除</span>
+    <span class="btn btn-primary">新增售后单</span>
+    <span class="btn btn-new">类型管理 <span class="tag">← 本次新增</span></span>
+  </div>
+  <div class="table">
+    <div class="row head">
+      <div class="c1">售后单号</div><div class="c2">类型</div><div class="c3">状态</div><div class="c4">操作</div>
+    </div>
+    <div class="row">
+      <div class="c1">AS20260820-001</div><div class="c2">退货</div><div class="c3">待处理</div><div class="c4">详情</div>
+    </div>
+    <div class="row">
+      <div class="c1">AS20260820-002</div><div class="c2">换货</div><div class="c3">已入库</div><div class="c4">详情</div>
+    </div>
+  </div>
+  <div class="tip">
+    修复说明：原代码已包含「类型管理」弹窗与保存逻辑，但<b>漏写了右上角的入口按钮</b>，导致页面刷新后看不到该功能。本次在「新增售后单」右侧补上「类型管理」按钮（有写权限时显示），点击后弹出类型字典管理弹窗（支持新增/编辑/删除、退货入库开关、排序）。
+  </div>
+</div>
+</body>
+</html>

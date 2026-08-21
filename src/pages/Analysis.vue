@@ -97,7 +97,7 @@
 
     <!-- 趋势 -->
     <div class="card">
-      <h2>销售 / 发货 / 售后趋势 <span class="more">每日 {{ periodText }}</span></h2>
+      <h2>销售额 / 销量 / 售后趋势 <span class="more">每日 {{ periodText }}</span></h2>
       <div class="trend-wrap">
         <svg :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none" v-if="d.trend && d.trend.length">
           <line v-for="(yv, xi) in yLines" :key="'y' + xi" :x1="0" :y1="yv" :x2="W" :y2="yv" stroke="#ebeef5" stroke-width="1" />
@@ -107,7 +107,7 @@
         </svg>
       </div>
       <div class="legend">
-        <span><i style="background:#409eff"></i>销售额(MXN/100)</span>
+        <span><i style="background:#409eff"></i>销售额(MXN)</span>
         <span><i style="background:#67c23a"></i>销售数量</span>
         <span><i style="background:#e6a23c"></i>售后工单</span>
       </div>

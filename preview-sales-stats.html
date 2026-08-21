@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cb-erp 销售统计改造预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #303133; padding: 24px; }
+  .container { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 12px; border-left: 4px solid #409eff; padding-left: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin: 2px 4px 2px 0; }
+  .tag-green { background: #f0f9eb; color: #67c23a; }
+  .tag-orange { background: #fdf6ec; color: #e6a23c; }
+  .note { font-size: 12px; color: #909399; margin-top: 8px; line-height: 1.7; }
+  .sql-block { background: #282c34; color: #abb2bf; border-radius: 6px; padding: 14px 16px; font-family: Consolas, monospace; font-size: 12.5px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+  .ok { color: #67c23a; font-weight: 600; }
+  .warn { color: #e6a23c; font-weight: 600; }
+  .arrow { color: #409eff; font-weight: 700; padding: 0 6px; }
+  .btn { display: inline-block; background: #409eff; color: #fff; border-radius: 4px; padding: 6px 16px; font-size: 13px; margin-right: 8px; }
+  .btn-plain { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+  .btn-warn { background: #e6a23c; color: #fff; }
+  .filters-demo { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .input-demo { border: 1px solid #dcdfe6; border-radius: 4px; padding: 7px 12px; font-size: 13px; width: 200px; background: #fff; color: #c0c4cc; }
+  .range-demo { border: 1px solid #409eff; border-radius: 4px; padding: 7px 12px; font-size: 13px; background: #fff; color: #303133; }
+  .summary-demo { background: #f4f4f5; color: #909399; border-radius: 4px; padding: 8px 14px; font-size: 13px; margin-bottom: 12px; }
+  .mock-table th, .mock-table td { border: 1px solid #ebeef5; padding: 9px 10px; text-align: left; font-size: 13px; }
+  .mock-table th { background: #fafafa; font-weight: 600; }
+  .mock-table td.num { text-align: right; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>销售统计板块改造 · 离线预览</h1>
+  <div class="sub">cb-erp · 2026-08-21 · 仅供确认，未上线</div>
+
+  <div class="card">
+    <h2>1. 页面效果预览（销售 → 销售统计）</h2>
+    <p style="margin-bottom:14px;font-size:13px;color:#606266;">板块不再创建销售单，改为按日期查看「哪些产品出单、出单数量」。顶部新增<b>日期范围选择器</b>（位于搜索框之后），<span class="tag tag-green">默认当天</span>，可自定义任意日期范围。</p>
+    <div class="filters-demo">
+      <span class="input-demo">链接ID / 产品名</span>
+      <span class="range-demo">2026-08-21 至 2026-08-21 ▾</span>
+      <span class="btn">查询</span>
+      <span class="btn btn-plain">下载模板</span>
+      <span class="btn btn-plain">导出</span>
+      <span class="btn btn-warn">批量导入</span>
+    </div>
+    <div class="summary-demo">当前范围共出单 3 个链接，总出单数量 19</div>
+    <table class="mock-table">
+      <tr><th>链接ID</th><th>产品名称</th><th>平台/站点</th><th class="num">出单数量</th><th class="num">平均售价(MXN)</th><th class="num">可用库存</th><th class="num">出单天数</th></tr>
+      <tr><td>2553999543</td><td>无线蓝牙耳机 Pro</td><td>Mexico</td><td class="num">8</td><td class="num">248.51</td><td class="num">27</td><td class="num">1</td></tr>
+      <tr><td>2554001122</td><td>Type-C 快充数据线 2m</td><td>Mexico</td><td class="num">6</td><td class="num">89.00</td><td class="num">15</td><td class="num">1</td></tr>
+      <tr><td>2553999001</td><td>运动手环 5 代</td><td>Chile</td><td class="num">5</td><td class="num">320.00</td><td class="num">42</td><td class="num">1</td></tr>
+    </table>
+    <p class="note">按链接ID聚合展示：<b>一个链接只显示一行</b>；出单数量 = 所选日期范围内的总销量合计；可用库存 = 截止所选范围结束日期的最新库存；平均售价 = 销量加权平均；出单天数 = 范围内实际出单的天数。</p>
+  </div>
+
+  <div class="card">
+    <h2>2. 累计规则示例（对应您的例子）</h2>
+    <table class="mock-table">
+      <tr><th>上传</th><th>销售日期</th><th>平台</th><th>链接ID</th><th class="num">销量</th><th class="num">可用库存</th><th>结果</th></tr>
+      <tr><td>第1次</td><td>2026-08-21</td><td>Mexico</td><td>2553999543</td><td class="num">2</td><td class="num">40</td><td><span class="tag tag-green">写入一行</span></td></tr>
+      <tr><td>第2次</td><td>2026-08-22</td><td>Mexico</td><td>2553999543</td><td class="num">3</td><td class="num">47</td><td><span class="tag tag-green">日期不同，新增一行</span></td></tr>
+      <tr><td>第3次（重复）</td><td>2026-08-22</td><td>Mexico</td><td>2553999543</td><td class="num">3</td><td class="num">47</td><td><span class="tag tag-orange">同日同商品同销量同库存，覆盖更新不累计</span></td></tr>
+    </table>
+    <p class="note">统计口径：查询 8.21~8.22 范围时，该商品出单 2+3=5（一个链接一行，只显示合计 5，不显示重复行）；商品表海外库存最终为最新日期（8.22）的 47；若 8.23 无上传，则保持 47 不变。</p>
+  </div>
+
+  <div class="card">
+    <h2>3. 核心行为变更</h2>
+    <table>
+      <tr><th>项目</th><th>变更前</th><th>变更后</th></tr>
+      <tr><td>导入行为</td><td>逐行创建销售单（HIS-IMP 订单号）</td><td><span class="tag tag-green">不建单</span>，直接写入销售统计表 daily_sales</td></tr>
+      <tr><td>重复导入</td><td>每次生成新订单，可能重复累计</td><td>同一天同一站点同一商品<b>覆盖更新</b>，不重复累计；<b>不同日期（表格日期不同）各自累计</b>（数据层）</td></tr>
+      <tr><td>展示方式</td><td>逐行展示</td><td><span class="tag tag-green">按链接ID聚合</span>：一个链接一行，出单数量 = 所选范围内总销量合计，不出现重复链接</td></tr>
+      <tr><td>海外库存</td><td>—</td><td>导入的「可用库存」即海外库存，同步写入商品表 overseas_stock，取<b>最新上传日期</b>的值；展示列 = 截止所选范围结束日期的最新库存</td></tr>
+      <tr><td>默认视图</td><td>全部订单列表</td><td><span class="tag tag-green">默认当天</span>销售统计</td></tr>
+      <tr><td>时间筛选</td><td>无日期筛选</td><td>日期范围选择器（搜索框后），可自定义任意天数</td></tr>
+      <tr><td>汇总</td><td>无</td><td>显示当前范围总出单条数与总出单数量</td></tr>
+      <tr><td>页面操作</td><td>新增销售单 / 详情 / 流转 / 批量删除</td><td>移除建单类操作，仅保留下载模板 / 导出 / 批量导入</td></tr>
+      <tr><td>数据表</td><td>sales_orders + sales_order_items</td><td>新增 daily_sales 独立统计表（原销售单表保留不动）</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>3. 需要您在 Supabase 手动执行的 SQL（新增统计表）</h2>
+    <p style="font-size:13px;color:#606266;margin-bottom:10px;">已写入项目 <b>supabase/migrations/030_daily_sales.sql</b>，请复制到 Supabase SQL Editor 执行：</p>
+    <div class="sql-block">create table if not exists public.daily_sales (
+  id uuid primary key default gen_random_uuid(),
+  sale_date date not null,
+  platform text not null default '',
+  link_id text not null,
+  product_id uuid,
+  product_name text,
+  quantity numeric(18,2) not null default 0,
+  unit_price numeric(18,2) not null default 0,
+  overseas_stock numeric(18,2) not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint daily_sales_unique unique (sale_date, platform, link_id)
+);
+create index if not exists idx_daily_sales_date on public.daily_sales(sale_date);
+create index if not exists idx_daily_sales_link on public.daily_sales(link_id);
+alter table public.daily_sales enable row level security;
+create policy "daily_sales_select" on public.daily_sales for select using (auth.role() = 'authenticated');
+create policy "daily_sales_insert" on public.daily_sales for insert with check (auth.role() = 'authenticated');
+create policy "daily_sales_update" on public.daily_sales for update using (auth.role() = 'authenticated');
+create policy "daily_sales_delete" on public.daily_sales for delete using (auth.role() = 'authenticated');</div>
+    <p class="note">若之前 029 迁移尚未执行，请一并执行（029 为销售订单新增日期/平台列，已不再需要，可跳过；030 是本次统计表核心）。</p>
+  </div>
+
+  <div class="card">
+    <h2>5. 改动文件清单</h2>
+    <table>
+      <tr><th>文件</th><th>改动</th></tr>
+      <tr><td>supabase/migrations/030_daily_sales.sql</td><td><span class="tag tag-green">新增</span>销售统计表 + RLS 策略</td></tr>
+      <tr><td>server/_handlers/daily-sales.ts</td><td><span class="tag tag-green">新增</span>统计查询（日期范围/关键词/汇总）与批量导入（upsert 覆盖）接口</td></tr>
+      <tr><td>server/index.ts</td><td>注册 /daily-sales 路由</td></tr>
+      <tr><td>src/pages/Sales.vue</td><td>改造为销售统计页：默认当天 + 日期范围筛选 + 统计汇总 + 不建单导入</td></tr>
+      <tr><td>api/index.mjs</td><td>已重新构建（build:api），随提交一并推送</td></tr>
+    </table>
+    <p class="note"><span class="warn">注意：</span>SQL 需您手动执行；代码尚未 commit/push，确认效果后再上线。</p>
+  </div>
+</div>
+</body>
+</html>

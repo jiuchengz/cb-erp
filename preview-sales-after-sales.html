@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>售后管理改造预览</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; margin: 0; padding: 24px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; max-width: 1000px; margin: 0 auto 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  h2 { margin: 0 0 16px; font-size: 20px; color: #303133; }
+  h3 { font-size: 15px; color: #409eff; margin: 0 0 12px; }
+  .tag { font-size: 12px; color: #e6a23c; margin-left: 6px; }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 4px; font-size: 14px; border: 1px solid #dcdfe6; background: #fff; color: #606266; cursor: pointer; margin-right: 8px; user-select: none; }
+  .btn-primary { background: #409eff; border-color: #409eff; color: #fff; }
+  .btn-danger { background: #f56c6c; border-color: #f56c6c; color: #fff; }
+  .table { border: 1px solid #ebeef5; border-radius: 4px; overflow: hidden; }
+  .row { display: flex; padding: 10px 16px; font-size: 14px; color: #606266; border-bottom: 1px solid #ebeef5; align-items: center; }
+  .row.head { background: #f5f7fa; color: #909399; font-weight: 600; }
+  .row:last-child { border-bottom: none; }
+  .c1 { flex: 1.2; } .c2 { flex: .8; } .c3 { flex: 1; } .c4 { flex: 1; } .c5 { flex: 1.2; } .c6 { flex: .8; } .c7 { flex: 1; }
+  .thumb { width: 40px; height: 40px; border-radius: 4px; border: 1px solid #ebeef5; object-fit: cover; background: #f0f2f5; display: inline-block; vertical-align: middle; }
+  .flow { display: flex; gap: 12px; flex-wrap: wrap; }
+  .st { display: inline-block; padding: 6px 14px; border-radius: 16px; font-size: 13px; }
+  .st-pending { background: #f4f4f5; color: #909399; }
+  .st-done { background: #f0f9eb; color: #67c23a; }
+  .st-proc { background: #fdf6ec; color: #e6a23c; }
+  .st-cancel { background: #fef0f0; color: #f56c6c; }
+  .st-plat { background: #fdf6ec; color: #e6a23c; border: 1px dashed #e6a23c; }
+  .arrow { color: #c0c4cc; }
+  .form-item { margin-bottom: 14px; }
+  .label { display: inline-block; width: 90px; color: #606266; font-size: 14px; text-align: right; margin-right: 12px; }
+  .input { display: inline-block; width: 260px; padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; }
+  .input-sm { width: 120px; }
+  .tip { margin-top: 16px; padding: 10px 14px; background: #fdf6ec; border: 1px solid #faecd8; border-radius: 4px; font-size: 13px; color: #b88230; }
+  .tip b { color: #e6a23c; }
+  .old { text-decoration: line-through; color: #c0c4cc; }
+  .new { color: #67c23a; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>售后管理改造预览<span class="tag">（改动预览，仅供参考）</span></h2>
+
+  <h3>一、状态流转改动</h3>
+  <div class="flow">
+    <span class="st st-pending">待处理</span>
+    <span class="arrow">→</span>
+    <span class="st st-done">已完成<span class="tag">原：已通过</span></span>
+    <span class="arrow">/</span>
+    <span class="st st-cancel">已取消<span class="tag">原：已驳回</span></span>
+    <span class="arrow">/</span>
+    <span class="st st-plat">平台已介入（新增）</span>
+  </div>
+  <div class="flow" style="margin-top:10px">
+    <span class="st st-proc">处理中</span>
+    <span class="arrow">→</span>
+    <span class="st st-done">已完成</span>
+    <span class="arrow">/</span>
+    <span class="st st-plat">平台已介入</span>
+  </div>
+
+  <h3 style="margin-top:20px">二、新增售后单：商品明细改为输入链ID</h3>
+  <div class="form-item">
+    <span class="label">商品明细</span>
+    <span class="input">输入链ID</span>
+    <span style="margin:0 8px;color:#67c23a">→</span>
+    <span style="font-size:14px;color:#303133">3C数码配件-无线耳机</span>
+    <img class="thumb" style="margin-left:8px" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='100%25' height='100%25' fill='%23e6f4ff'/%3E%3Ctext x='50%25' y='55%25' fill='%23409eff' font-size='10' text-anchor='middle'%3E图片%3C/text%3E%3C/svg%3E" />
+    <span class="input input-sm" style="margin-left:8px">数量</span>
+  </div>
+  <div class="form-item">
+    <span class="label"></span>
+    <span style="font-size:12px;color:#909399">输入链ID后自动匹配商品，显示中文名称与图片；未匹配则提示"未找到链ID"</span>
+  </div>
+
+  <h3 style="margin-top:20px">三、列表：仓库列后新增 商品名称 / 图片 列</h3>
+  <div class="table">
+    <div class="row head">
+      <div class="c1">售后单号</div><div class="c2">类型</div><div class="c3">仓库</div>
+      <div class="c4">商品名称<span class="tag">新</span></div><div class="c5">图片<span class="tag">新</span></div>
+      <div class="c6">状态</div><div class="c7">操作</div>
+    </div>
+    <div class="row">
+      <div class="c1">AS20260820-001</div><div class="c2">退货</div><div class="c3">深圳仓</div>
+      <div class="c4">3C数码配件-无线耳机</div>
+      <div class="c5"><span class="thumb" style="display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#409eff">图片</span></div>
+      <div class="c6"><span class="st st-plat">平台已介入</span></div>
+      <div class="c7"><span style="color:#409eff">详情 / 流转</span></div>
+    </div>
+    <div class="row">
+      <div class="c1">AS20260820-002</div><div class="c2">换货</div><div class="c3">东莞仓</div>
+      <div class="c4">家居收纳盒-大号</div>
+      <div class="c5"><span class="thumb" style="display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#409eff">图片</span></div>
+      <div class="c6"><span class="st st-done">已完成</span></div>
+      <div class="c7"><span style="color:#409eff">详情 / 流转</span></div>
+    </div>
+  </div>
+
+  <div class="tip">
+    说明：<br>
+    1. 状态文案调整：<span class="old">已通过</span> → <span class="new">已完成</span>，<span class="old">已驳回</span> → <span class="new">已取消</span>，新增 <b>平台已介入</b>（数据库需执行 027 迁移，由您在 Supabase SQL Editor 手动执行）。<br>
+    2. 商品明细改为输入链ID，匹配后回填商品名称与图片；列表仓库列后新增商品名称/图片列。<br>
+    3. 详情弹窗商品明细同步显示 图片 / 链ID / 商品名称 / 数量。
+  </div>
+</div>
+</body>
+</html>

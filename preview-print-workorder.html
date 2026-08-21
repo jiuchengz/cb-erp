@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发货工单 - 打印预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "SimSun", sans-serif; background: #f0f2f5; color: #000; }
+  .toolbar { max-width: 900px; margin: 24px auto; text-align: right; }
+  .toolbar button { padding: 10px 24px; background: #409eff; color: #fff; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; }
+  .sheet { max-width: 900px; margin: 0 auto 40px; background: #fff; padding: 40px 48px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .sheet h1 { text-align: center; font-size: 26px; letter-spacing: 12px; margin-bottom: 24px; font-weight: 700; }
+  .meta { border: 1.5px solid #000; margin-bottom: 16px; }
+  .meta table { width: 100%; border-collapse: collapse; }
+  .meta td { border: 1px solid #000; padding: 8px 12px; font-size: 14px; }
+  .meta .label { background: #f5f5f5; width: 110px; text-align: right; font-weight: 600; }
+  .meta .val { min-width: 190px; }
+  .items { border: 1.5px solid #000; margin-bottom: 8px; }
+  .items table { width: 100%; border-collapse: collapse; table-layout: auto; }
+  .items th, .items td { border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
+  .items th { background: #f5f5f5; font-weight: 600; }
+  .items td.num { text-align: right; font-weight: 600; white-space: nowrap; }
+  .sum-row td { background: #fafafa; font-weight: 700; white-space: nowrap; }
+  .img-ph { width: 60px; height: 60px; margin: 0 auto; border: 1px solid #ccc; background: #fafafa; color: #aaa; font-size: 11px; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+  .print-time { text-align: right; margin-top: 14px; font-size: 11px; color: #666; }
+  @media print {
+    @page { size: A4 portrait; margin: 15mm; }
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { box-shadow: none; margin: 0 auto; padding: 0; max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">打印 / 导出 PDF</button>
+  </div>
+
+  <div class="sheet">
+    <h1>发货工单</h1>
+    <div class="meta">
+      <table>
+        <tr>
+          <td class="label">货件号</td>
+          <td class="val">JS-20260815-001</td>
+          <td class="label">货代号</td>
+          <td class="val">HD-8821</td>
+        </tr>
+        <tr>
+          <td class="label">货　代</td>
+          <td class="val">中外运国际</td>
+          <td class="label">运输方式</td>
+          <td class="val">空运</td>
+        </tr>
+        <tr>
+          <td class="label">箱　数</td>
+          <td class="val">12 箱</td>
+          <td class="label">发货时间</td>
+          <td class="val">2026-08-15</td>
+        </tr>
+        <tr>
+          <td class="label">货物状态</td>
+          <td class="val" colspan="3">转运中</td>
+        </tr>
+      </table>
+    </div>
+    <div class="items">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:46px">序号</th>
+            <th style="min-width:110px">产品编码</th>
+            <th style="width:76px">图片</th>
+            <th style="min-width:150px">产品中文名称</th>
+            <th style="min-width:110px">SKU</th>
+            <th style="min-width:160px">条形码</th>
+            <th style="width:80px">数量</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>SKU-DLB-001</td>
+            <td><div class="img-ph">图</div></td>
+            <td>无线蓝牙耳机</td>
+            <td>DLB-001</td>
+            <td>6901234567890</td>
+            <td class="num">500</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>SKU-DLB-002</td>
+            <td><div class="img-ph">图</div></td>
+            <td>智能手环</td>
+            <td>DLB-002</td>
+            <td>6901234567891</td>
+            <td class="num">360</td>
+          </tr>
+          <tr class="sum-row">
+            <td colspan="6" style="text-align:right">合计数量（总数）</td>
+            <td class="num">860</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="print-time">制单时间：2026-08-21 17:20:33</div>
+  </div>
+</body>
+</html>

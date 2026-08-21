@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>预览：发货工单（调整功能 + 图片无边框）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --img-size: 60px; --zoom: 1; }
+  body { font-family: "Microsoft YaHei", "SimSun", sans-serif; color: #000; padding: 24px; zoom: var(--zoom); background: #f0f2f5; }
+  .print-toolbar { position: fixed; top: 8px; right: 12px; z-index: 999; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .print-toolbar .btn { border: 1px solid #409EFF; background: #fff; color: #409EFF; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .print-toolbar .btn:hover { background: #ecf5ff; }
+  .print-toolbar .btn.print-btn { background: #409EFF; color: #fff; }
+  .print-toolbar .btn.print-btn:hover { background: #66b1ff; }
+  .print-panel { background: #fff; border: 1px solid #dcdfe6; border-radius: 6px; padding: 10px 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 12px; color: #333; display: none; width: 210px; }
+  .print-panel .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .print-panel .row:last-child { margin-bottom: 0; }
+  .print-panel input[type=range] { width: 110px; }
+  .print-panel .val { width: 46px; text-align: right; color: #409EFF; }
+  .sheet { width: 210mm; min-height: 297mm; background: #fff; margin: 0 auto; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+  h1 { text-align: center; font-size: 26px; letter-spacing: 12px; margin-bottom: 24px; font-weight: 700; }
+  .meta { border: 1.5px solid #000; margin-bottom: 16px; }
+  .meta table { width: 100%; border-collapse: collapse; }
+  .meta td { border: 1px solid #000; padding: 8px 12px; font-size: 14px; }
+  .meta .label { background: #f5f5f5; font-weight: 600; width: 110px; white-space: nowrap; }
+  .detail { border: 1.5px solid #000; }
+  .detail table { width: 100%; border-collapse: collapse; }
+  .detail th { border: 1px solid #000; padding: 8px; font-size: 14px; background: #f5f5f5; }
+  .detail td { border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; }
+  .detail img { width: var(--img-size, 60px); height: var(--img-size, 60px); object-fit: contain; border: none; background: #fff; }
+  .print-time { margin-top: 16px; text-align: right; font-size: 11px; color: #888; }
+  @media print {
+    @page { size: A4 portrait; margin: 15mm; }
+    body { padding: 0; background: #fff; }
+    .sheet { width: auto; min-height: auto; box-shadow: none; padding: 0; }
+    .print-toolbar, .print-panel { display: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-toolbar">
+    <button class="btn print-btn" onclick="window.print()">打印</button>
+    <button class="btn" onclick="togglePanel()">调整</button>
+    <div class="print-panel" id="panel">
+      <div class="row"><span>图片大小</span><input type="range" id="imgSize" min="30" max="120" value="60" oninput="applyAdjust()" /><span class="val" id="imgVal">60px</span></div>
+      <div class="row"><span>缩放比例</span><input type="range" id="zoomScale" min="70" max="150" value="100" oninput="applyAdjust()" /><span class="val" id="zoomVal">100%</span></div>
+      <div class="row"><button class="btn" onclick="resetAdjust()" style="width:100%">恢复默认</button></div>
+    </div>
+  </div>
+  <div class="sheet">
+    <h1>发货工单</h1>
+    <div class="meta">
+      <table>
+        <tr><td class="label">货件号</td><td>TR20260821001</td><td class="label">货代号</td><td>CARGO-DEMO-01</td></tr>
+        <tr><td class="label">发货仓库</td><td>深圳仓</td><td class="label">收货仓库</td><td>美国洛杉矶仓</td></tr>
+        <tr><td class="label">承运商</td><td>DHL</td><td class="label">运输方式</td><td>空运</td></tr>
+        <tr><td class="label">发货日期</td><td>2026-08-21</td><td class="label">箱数 / 数量</td><td>3 箱 / 12 件</td></tr>
+      </table>
+    </div>
+    <div class="detail">
+      <table>
+        <thead>
+          <tr><th>序号</th><th>产品编码</th><th>图片</th><th>中文名</th><th>SKU</th><th>条形码</th><th>数量</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>P-10001</td><td><img src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23fde68a'/%3E%3Ctext x='30' y='34' font-size='10' text-anchor='middle' fill='%23333'%3E%E4%BA%A7%E5%93%81A%3C/text%3E%3C/svg%3E" alt="" /></td><td>蓝牙耳机 Pro</td><td>SKU-BT-001</td><td>6901234567890</td><td>5</td></tr>
+          <tr><td>2</td><td>P-10002</td><td><img src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23a5f3fc'/%3E%3Ctext x='30' y='34' font-size='10' text-anchor='middle' fill='%23333'%3E%E4%BA%A7%E5%93%81B%3C/text%3E%3C/svg%3E" alt="" /></td><td>智能手表</td><td>SKU-WT-002</td><td>6901234567891</td><td>7</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="print-time">制单时间：2026-08-21 18:00</div>
+  </div>
+<script>
+  function togglePanel() {
+    var p = document.getElementById('panel');
+    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+  }
+  function applyAdjust() {
+    var img = document.getElementById('imgSize').value;
+    var zoom = document.getElementById('zoomScale').value;
+    document.getElementById('imgVal').textContent = img + 'px';
+    document.getElementById('zoomVal').textContent = zoom + '%';
+    document.documentElement.style.setProperty('--img-size', img + 'px');
+    document.documentElement.style.setProperty('--zoom', zoom / 100);
+  }
+  function resetAdjust() {
+    document.getElementById('imgSize').value = 60;
+    document.getElementById('zoomScale').value = 100;
+    applyAdjust();
+  }
+</script>
+</body>
+</html>

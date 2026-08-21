@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调拨发货管理 - 静态预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f5f7fa; color: #303133; }
+  .app { display: flex; height: 100vh; }
+  .sidebar { width: 200px; background: #001529; color: #fff; padding: 12px 0; flex-shrink: 0; }
+  .logo { padding: 16px 20px; font-size: 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .menu-item { padding: 12px 20px; cursor: pointer; font-size: 14px; color: rgba(255,255,255,.75); }
+  .menu-item.active { background: #409eff; color: #fff; }
+  .menu-item.sub { padding-left: 36px; }
+  .main { flex: 1; padding: 20px; overflow: auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .page-header h2 { font-size: 20px; font-weight: 600; }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 4px; border: 1px solid #dcdfe6; background: #fff; font-size: 14px; cursor: pointer; margin-left: 8px; }
+  .btn.primary { background: #409eff; border-color: #409eff; color: #fff; }
+  .btn.danger { background: #fff; border-color: #f56c6c; color: #f56c6c; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+  .input, .select { height: 32px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 12px; font-size: 14px; background: #fff; }
+  .table-wrap { background: #fff; border: 1px solid #ebeef5; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px 10px; border-bottom: 1px solid #ebeef5; text-align: left; font-size: 14px; white-space: nowrap; }
+  th { background: #fafafa; color: #909399; font-weight: 500; }
+  td { color: #606266; }
+  .tag { display: inline-block; padding: 0 8px; height: 24px; line-height: 24px; border-radius: 4px; font-size: 12px; }
+  .tag-air { background: rgba(64,158,255,.12); color: #409eff; border: 1px solid rgba(64,158,255,.4); }
+  .tag-sea { background: rgba(230,162,60,.12); color: #e6a23c; border: 1px solid rgba(230,162,60,.4); }
+  .tag-status { background: #409eff; color: #fff; border: 1px solid #409eff; }
+  .link { color: #409eff; cursor: pointer; margin-right: 8px; font-size: 14px; }
+  .link.danger { color: #f56c6c; }
+  .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; color: #606266; }
+  .pagination .num { width: 28px; height: 28px; border: 1px solid #dcdfe6; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; background: #fff; cursor: pointer; }
+  .pagination .num.active { background: #409eff; border-color: #409eff; color: #fff; }
+  .mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: flex-start; justify-content: center; padding-top: 8vh; }
+  .mask.show { display: flex; }
+  .dialog { width: 720px; background: #fff; border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,.2); }
+  .dialog-title { padding: 16px 20px; font-size: 16px; font-weight: 600; border-bottom: 1px solid #ebeef5; }
+  .dialog-body { padding: 20px; }
+  .form-row { display: flex; gap: 12px; margin-bottom: 16px; }
+  .form-item { flex: 1; }
+  .form-item label { display: block; font-size: 13px; color: #606266; margin-bottom: 6px; }
+  .form-item label .req { color: #f56c6c; margin-right: 2px; }
+  .form-item .input, .form-item .select { width: 100%; height: 32px; }
+  .radio-group { display: flex; gap: 16px; align-items: center; height: 32px; }
+  .radio { display: flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; }
+  .radio input { accent-color: #409eff; }
+  .items-editor { border: 1px solid #ebeef5; border-radius: 4px; padding: 12px; background: #fafafa; }
+  .item-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .item-row .input { flex: 1; }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .total-hint { margin-top: 8px; font-size: 13px; color: #606266; }
+  .total-hint b { color: #f56c6c; }
+  .dialog-footer { padding: 12px 20px; border-top: 1px solid #ebeef5; text-align: right; }
+  .notice { background: #f0f9eb; border: 1px solid #e1f3d8; color: #67c23a; padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="logo">cb-erp 供应链</div>
+    <div class="menu-item">采购</div>
+    <div class="menu-item active">调拨发货</div>
+    <div class="menu-item">发货管理</div>
+    <div class="menu-item">库存</div>
+    <div class="menu-item">系统管理</div>
+  </div>
+  <div class="main">
+    <div class="page-header">
+      <h2>调拨发货管理</h2>
+      <div>
+        <button class="btn">导出</button>
+        <button class="btn danger" disabled>批量删除</button>
+        <button class="btn primary" onclick="openCreate()">新增调拨发货</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <input class="input" style="width:200px" placeholder="货件号" value="JS-20260815">
+      <select class="select" style="width:140px"><option value="">空海运（全部）</option><option>空运</option><option>海运</option></select>
+      <select class="select" style="width:160px"><option value="">货物状态（全部）</option><option>转运中</option><option>到港</option><option>清关</option><option>已预约</option><option>已入仓</option></select>
+      <button class="btn primary">查询</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px"><input type="checkbox"></th>
+            <th>货件号</th>
+            <th>货代号</th>
+            <th>货代</th>
+            <th>空海运</th>
+            <th>箱数</th>
+            <th>总数</th>
+            <th>发货时间</th>
+            <th>货物状态</th>
+            <th>创建时间</th>
+            <th style="width:120px">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><input type="checkbox"></td>
+            <td>JS-20260815-001</td>
+            <td>HD-8821</td>
+            <td>中外运国际</td>
+            <td><span class="tag tag-air">空运</span></td>
+            <td style="text-align:right">12</td>
+            <td style="text-align:right; font-weight:600">860</td>
+            <td>2026-08-15</td>
+            <td><span class="tag tag-status">转运中</span></td>
+            <td>2026-08-21 17:12:30</td>
+            <td><span class="link">详情</span><span class="link danger">删除</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox"></td>
+            <td>JS-20260818-003</td>
+            <td>HD-9004</td>
+            <td>马士基物流</td>
+            <td><span class="tag tag-sea">海运</span></td>
+            <td style="text-align:right">40</td>
+            <td style="text-align:right; font-weight:600">2600</td>
+            <td>2026-08-18</td>
+            <td><span class="tag tag-status">到港</span></td>
+            <td>2026-08-21 16:40:02</td>
+            <td><span class="link">详情</span><span class="link danger">删除</span></td>
+          </tr>
+          <tr>
+            <td><input type="checkbox"></td>
+            <td>JS-20260820-002</td>
+            <td>HD-9133</td>
+            <td>顺丰国际</td>
+            <td><span class="tag tag-air">空运</span></td>
+            <td style="text-align:right">6</td>
+            <td style="text-align:right; font-weight:600">320</td>
+            <td>2026-08-20</td>
+            <td><span class="tag tag-status">已入仓</span></td>
+            <td>2026-08-21 15:22:47</td>
+            <td><span class="link">详情</span><span class="link danger">删除</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <span>共 3 条</span>
+      <span class="num active">1</span>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="createMask">
+  <div class="dialog">
+    <div class="dialog-title">新增调拨发货</div>
+    <div class="dialog-body">
+      <div class="form-row">
+        <div class="form-item">
+          <label><span class="req">*</span>货件号</label>
+          <input class="input" id="fTracking" placeholder="货件号（唯一）" value="JS-20260821-001">
+        </div>
+        <div class="form-item">
+          <label>货代号</label>
+          <input class="input" id="fCargoCode" placeholder="货代号" value="HD-9200">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-item">
+          <label><span class="req">*</span>货代</label>
+          <select class="select" id="fForwarder">
+            <option>中外运国际</option>
+            <option>马士基物流</option>
+            <option selected>顺丰国际</option>
+          </select>
+        </div>
+        <div class="form-item">
+          <label><span class="req">*</span>空海运</label>
+          <div class="radio-group">
+            <label class="radio"><input type="radio" name="mode" checked>空运</label>
+            <label class="radio"><input type="radio" name="mode">海运</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-item">
+          <label><span class="req">*</span>箱数</label>
+          <input class="input" id="fCartons" type="number" value="15">
+        </div>
+        <div class="form-item">
+          <label><span class="req">*</span>发货时间</label>
+          <input class="input" id="fShipDate" type="date" value="2026-08-21">
+        </div>
+      </div>
+      <div class="form-item" style="margin-bottom:0">
+        <label><span class="req">*</span>商品明细</label>
+        <div class="items-editor">
+          <div class="item-row">
+            <select class="select"><option>SKU-DLB-001 - 无线蓝牙耳机</option><option>SKU-DLB-002 - 智能手环</option><option>SKU-DLB-003 - 便携充电宝</option></select>
+            <input class="input" type="number" style="width:150px" value="500">
+            <button class="btn small">删除</button>
+          </div>
+          <div class="item-row">
+            <select class="select"><option>SKU-DLB-001 - 无线蓝牙耳机</option><option selected>SKU-DLB-002 - 智能手环</option><option>SKU-DLB-003 - 便携充电宝</option></select>
+            <input class="input" type="number" style="width:150px" value="360">
+            <button class="btn small">删除</button>
+          </div>
+          <button class="btn small">添加明细</button>
+          <div class="total-hint">总数（明细数量合计）：<b>860</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" onclick="closeCreate()">取消</button>
+      <button class="btn primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openCreate() { document.getElementById('createMask').classList.add('show'); }
+  function closeCreate() { document.getElementById('createMask').classList.remove('show'); }
+</script>
+</body>
+</html>

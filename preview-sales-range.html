@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商品管理 - 销量时间范围筛选预览（时间分开显示）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: rgba(20, 24, 40, 0.92);
+    background: linear-gradient(135deg, #7dd3fc 0%, #c4b5fd 38%, #f9a8d4 70%, #fde68a 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  body::before, body::after { content: ''; position: fixed; border-radius: 50%; filter: blur(90px); opacity: .55; pointer-events: none; z-index: 0; }
+  body::before { width: 520px; height: 520px; top: -120px; right: -80px; background: #f472b6; }
+  body::after { width: 640px; height: 640px; bottom: -180px; left: -120px; background: #60a5fa; }
+  .page {
+    position: relative; z-index: 1; max-width: 1280px; margin: 0 auto;
+    background: rgba(255, 255, 255, 0.42);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 28px;
+    box-shadow: 0 20px 60px rgba(40, 60, 120, 0.18), inset 0 1px 0 rgba(255,255,255,.85);
+    overflow: hidden;
+  }
+  .page-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.14); flex-wrap: wrap; gap: 10px; }
+  .page-header h2 { font-size: 18px; font-weight: 700; }
+  .page-header .profit-bar { display: flex; align-items: center; gap: 8px; padding: 0; margin: 0; border: none; background: transparent; }
+  .profit-label { font-size: 13px; color: rgba(20,24,40,.6); white-space: nowrap; }
+  .profit-tip { font-size: 12px; color: rgba(20,24,40,.4); white-space: nowrap; }
+  .rate-input { width: 90px; height: 26px; border: 1px solid rgba(20,24,40,.16); border-radius: 6px; padding: 0 6px; font-size: 13px; outline: none; color: rgba(20,24,40,.9); background: rgba(255,255,255,.7); }
+  .btn { display: inline-block; padding: 8px 16px; border: 1px solid rgba(255,255,255,.5); border-radius: 12px; background: rgba(255,255,255,.55); color: rgba(20,24,40,.8); font-size: 14px; cursor: pointer; margin-left: 8px; transition: all .2s; box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
+  .btn:hover { color: #3b82f6; border-color: rgba(59,130,246,.4); background: rgba(236,245,255,.8); }
+  .btn-primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #66a1ff; border-color: #66a1ff; color: #fff; }
+  .filters { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.14); flex-wrap: wrap; }
+  .filters .search-input { width: 260px; height: 32px; border: 1px solid rgba(20,24,40,.16); border-radius: 8px; background: rgba(255,255,255,.55); padding: 0 12px; font-size: 14px; outline: none; color: rgba(20,24,40,.9); }
+  .filters .search-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+  .select { position: relative; display: inline-block; height: 32px; border: 1px solid rgba(20,24,40,.16); border-radius: 8px; background: rgba(255,255,255,.55); font-size: 14px; cursor: pointer; min-width: 150px; color: rgba(20,24,40,.9); }
+  .select-inner { display: flex; align-items: center; justify-content: space-between; height: 100%; padding: 0 12px; }
+  .select-inner .arrow { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid rgba(20,24,40,.5); margin-left: 8px; transition: transform .2s; }
+  .select.open .select-inner .arrow { transform: rotate(180deg); border-top-color: #3b82f6; }
+  .dropdown-panel {
+    position: absolute; top: 36px; left: 0; z-index: 100; width: 180px; padding: 6px;
+    background: rgba(255,255,255,.72);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(40,60,120,.18);
+    display: none;
+  }
+  .select.open .dropdown-panel { display: block; }
+  .opt { padding: 8px 10px; font-size: 14px; color: rgba(20,24,40,.7); border-radius: 8px; cursor: pointer; }
+  .opt:hover { background: rgba(255,255,255,.65); }
+  .opt.active { color: #3b82f6; font-weight: 600; background: rgba(59,130,246,.12); }
+  /* 独立日期范围选择器（时间分开显示，与下拉并排） */
+  .date-picker-inline { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 1px solid rgba(20,24,40,.16); border-radius: 8px; background: rgba(255,255,255,.55); }
+  .date-picker-inline input { width: 68px; height: 24px; border: 1px solid rgba(20,24,40,.16); border-radius: 6px; padding: 0 6px; font-size: 13px; outline: none; color: rgba(20,24,40,.9); background: rgba(255,255,255,.7); }
+  .date-picker-inline input:focus { border-color: #3b82f6; }
+  .date-picker-inline .sep { color: rgba(20,24,40,.5); font-size: 12px; user-select: none; }
+  .table-wrap { overflow: auto; max-height: 560px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 1px solid rgba(20,24,40,.12); padding: 8px 10px; text-align: left; white-space: nowrap; }
+  th { background: rgba(255,255,255,.35); color: rgba(20,24,40,.45); font-weight: 500; position: sticky; top: 0; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  td.num, th.num { text-align: right; }
+  .thumb { width: 40px; height: 40px; background: rgba(255,255,255,.5); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: rgba(20,24,40,.4); font-size: 12px; }
+  .sales-active { color: #3b82f6; font-weight: 600; }
+  .tag { display: inline-block; padding: 0 8px; height: 24px; line-height: 24px; border-radius: 999px; font-size: 12px; }
+  .tag-green { background: rgba(240,249,235,.9); color: #67c23a; border: 1px solid #e1f3d8; }
+  .tag-red { background: rgba(254,240,240,.9); color: #f56c6c; border: 1px solid #fde2e2; }
+  .demo-badge { position: absolute; right: 0; bottom: 0; background: #f56c6c; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px 0 0 0; z-index: 200; }
+  .note { padding: 10px 20px; font-size: 12px; color: rgba(20,24,40,.5); border-top: 1px dashed rgba(20,24,40,.14); }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="demo-badge">离线演示 · 模拟数据</div>
+    <div class="page-header">
+      <h2>商品管理</h2>
+      <div class="profit-bar">
+        <span class="profit-label">汇率（RMB/比索）</span>
+        <input type="number" id="rateInput" class="rate-input" value="0.3800" step="0.01" />
+        <span class="profit-tip">利润列实时重算（只读联动）</span>
+      </div>
+      <div>
+        <span class="btn">下载模板</span>
+        <span class="btn">导出</span>
+        <span class="btn">批量导入</span>
+        <span class="btn btn-primary">新增商品</span>
+      </div>
+    </div>
+
+    <div class="filters">
+      <input class="search-input" placeholder="搜索 SKU / 名称 / 产品编号 / 链接ID / 条形码" />
+      <div class="select" id="statusSelect" onclick="toggleStatus()">
+        <div class="select-inner">状态<span class="arrow"></span></div>
+        <div class="dropdown-panel" id="statusPanel">
+          <div class="opt active">启用</div>
+          <div class="opt">停用</div>
+        </div>
+      </div>
+      <div class="select" id="salesSelect" onclick="toggleSales(event)">
+        <div class="select-inner" id="salesTrigger">销量：全部时间<span class="arrow"></span></div>
+        <div class="dropdown-panel" id="salesPanel" onclick="event.stopPropagation()">
+          <div class="opt active" data-key="all" onclick="chooseRange('all')">全部时间</div>
+          <div class="opt" data-key="today" onclick="chooseRange('today')">今日</div>
+          <div class="opt" data-key="7d" onclick="chooseRange('7d')">近7天</div>
+          <div class="opt" data-key="15d" onclick="chooseRange('15d')">近15天</div>
+          <div class="opt" data-key="30d" onclick="chooseRange('30d')">近30天</div>
+          <div class="opt" data-key="custom" onclick="chooseRange('custom')">自定义</div>
+        </div>
+      </div>
+      <!-- 独立日期范围选择器：与下拉并排显示 -->
+      <div class="date-picker-inline">
+        <input type="date" id="dateFrom" />
+        <span class="sep">至</span>
+        <input type="date" id="dateTo" />
+      </div>
+      <span class="btn btn-primary">查询</span>
+    </div>
+
+    <div class="table-wrap">
+      <table id="goodsTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="note">说明：本页为纯前端离线演示（已按系统液态玻璃主题风格渲染），数据为模拟值；下拉选择预设范围会同步填入日期框，也可直接在日期框修改起止日期（自动视为自定义），「销量」列标题与数值会随所选区间变化。</div>
+  </div>
+
+<script>
+// ===== 模拟数据 =====
+var MOCK = [
+  { code:'P-1001', name:'女士印花连衣裙', sku:'DR-2026-A01', barcode:'6901000011', status:'启用', total:1286, today:18, d7:126, d15:268, d30:489, img:'裙' },
+  { code:'P-1002', name:'男士休闲短袖T恤', sku:'TS-2026-B12', barcode:'6901000012', status:'启用', total:3562, today:47, d7:352, d15:720, d30:1320, img:'T' },
+  { code:'P-1003', name:'儿童防晒帽', sku:'HT-2026-C03', barcode:'6901000013', status:'停用', total:486, today:0, d7:12, d15:35, d30:66, img:'帽' },
+  { code:'P-1004', name:'户外运动水杯 800ml', sku:'BK-2026-D07', barcode:'6901000014', status:'启用', total:932, today:9, d7:88, d15:176, d30:342, img:'杯' },
+  { code:'P-1005', name:'简约帆布托特包', sku:'BG-2026-E02', barcode:'6901000015', status:'启用', total:2211, today:31, d7:240, d15:512, d30:880, img:'包' },
+  { code:'P-1006', name:'不锈钢保温饭盒', sku:'BX-2026-F09', barcode:'6901000016', status:'启用', total:705, today:6, d7:54, d15:118, d30:240, img:'盒' },
+];
+
+var RANGE_KEYS = { all:'全部时间', today:'今日', '7d':'近7天', '15d':'近15天', '30d':'近30天', custom:'自定义' };
+var currentKey = 'all';
+var currentFrom = '';
+var currentTo = '';
+var dateFromEl = document.getElementById('dateFrom');
+var dateToEl = document.getElementById('dateTo');
+var tableHeadEl = document.getElementById('tableHead');
+var tableBodyEl = document.getElementById('tableBody');
+
+function renderHead() {
+  var label = '销量';
+  var detail = rangeDetail();
+  if (detail) label = '销量(' + detail + ')';
+  var html = '<tr>' +
+    '<th style="width:40px"><input type="checkbox"></th>' +
+    '<th>上新时间</th><th>产品编号</th><th>图片</th><th>名称</th><th>SKU</th><th>条形码</th>' +
+    '<th>分类</th><th class="num">国内库存</th><th class="num">国外库存</th><th class="num">在途数量</th>' +
+    '<th class="num" style="color:' + (currentKey!=='all' ? '#3b82f6' : 'inherit') + '">' + label + '</th>' +
+    '<th>状态</th><th>操作</th></tr>';
+  tableHeadEl.innerHTML = html;
+}
+
+function rangeDetail() {
+  if (currentFrom && currentTo) return currentFrom + ' 至 ' + currentTo;
+  return '';
+}
+
+function fmtDate(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+
+function salesValue(row) {
+  if (currentKey === 'all') return row.total;
+  if (currentKey === 'today') return row.today;
+  if (currentKey === '7d') return row.d7;
+  if (currentKey === '15d') return row.d15;
+  if (currentKey === '30d') return row.d30;
+  var days = 30;
+  if (currentFrom && currentTo) {
+    var f = new Date(currentFrom), t = new Date(currentTo);
+    days = Math.round((t - f) / 86400000) + 1;
+  }
+  if (days <= 1) return row.today;
+  if (days <= 7) return row.d7;
+  if (days <= 15) return row.d15;
+  return row.d30;
+}
+
+function renderBody() {
+  var html = '';
+  MOCK.forEach(function(row) {
+    var sv = salesValue(row);
+    html += '<tr>' +
+      '<td><input type="checkbox"></td>' +
+      '<td>2026-0' + (row.total % 8 + 1) + '</td>' +
+      '<td>' + row.code + '</td>' +
+      '<td><div class="thumb">' + row.img + '</div></td>' +
+      '<td>' + row.name + '</td>' +
+      '<td>' + row.sku + '</td>' +
+      '<td>' + row.barcode + '</td>' +
+      '<td>服装配饰</td>' +
+      '<td class="num">' + (120 + row.total % 300) + '</td>' +
+      '<td class="num">' + (60 + row.total % 150) + '</td>' +
+      '<td class="num">' + (row.total % 40) + '</td>' +
+      '<td class="num ' + (currentKey!=='all' ? 'sales-active' : '') + '">' + sv + '</td>' +
+      '<td><span class="tag ' + (row.status==='启用' ? 'tag-green' : 'tag-red') + '">' + row.status + '</span></td>' +
+      '<td><span style="color:#3b82f6;cursor:pointer">编辑</span> <span style="color:#f56c6c;cursor:pointer">删除</span></td>' +
+      '</tr>';
+  });
+  tableBodyEl.innerHTML = html;
+}
+
+function refresh() {
+  var opts = document.querySelectorAll('#salesPanel .opt');
+  opts.forEach(function(o) { o.classList.remove('active'); });
+  var active = document.querySelector('#salesPanel .opt[data-key="' + currentKey + '"]');
+  if (active) active.classList.add('active');
+  document.getElementById('salesTrigger').innerHTML = '销量：' + (currentFrom && currentTo ? currentFrom + ' ~ ' + currentTo : RANGE_KEYS[currentKey]) + '<span class="arrow"></span>';
+  dateFromEl.value = currentFrom || '';
+  dateToEl.value = currentTo || '';
+  renderHead();
+  renderBody();
+}
+
+function toggleSales(e) {
+  if (e && e.target.closest('#salesPanel')) return;
+  document.getElementById('salesSelect').classList.toggle('open');
+}
+function toggleStatus() {
+  document.getElementById('statusSelect').classList.toggle('open');
+}
+function chooseRange(key) {
+  currentKey = key;
+  if (key === 'all') { currentFrom = ''; currentTo = ''; }
+  else {
+    var now = new Date();
+    currentTo = fmtDate(now);
+    var days = { today:0, '7d':6, '15d':14, '30d':29 }[key];
+    var d = new Date(now); d.setDate(d.getDate() - days);
+    currentFrom = fmtDate(d);
+  }
+  document.getElementById('salesSelect').classList.remove('open');
+  refresh();
+}
+dateFromEl.addEventListener('change', onDateChange);
+dateToEl.addEventListener('change', onDateChange);
+function onDateChange() {
+  var f = dateFromEl.value;
+  var t = dateToEl.value;
+  if (!f || !t) {
+    currentKey = 'all'; currentFrom = ''; currentTo = '';
+    refresh();
+    return;
+  }
+  if (f > t) { alert('开始日期不能晚于结束日期'); dateFromEl.value = currentFrom || ''; dateToEl.value = currentTo || ''; return; }
+  currentKey = 'custom'; currentFrom = f; currentTo = t;
+  refresh();
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#salesSelect')) document.getElementById('salesSelect').classList.remove('open');
+  if (!e.target.closest('#statusSelect')) document.getElementById('statusSelect').classList.remove('open');
+});
+refresh();
+</script>
+</body>
+</html>

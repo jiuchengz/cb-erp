@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>销售统计 v2 预览（结合蓝鲸BI逻辑）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #303133; padding: 24px; }
+  .container { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 12px; border-left: 4px solid #409eff; padding-left: 10px; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .page-header h2 { border-left: none; padding-left: 0; margin-bottom: 0; font-size: 18px; }
+  .btn { display: inline-block; background: #409eff; color: #fff; border-radius: 4px; padding: 7px 16px; font-size: 13px; margin-left: 8px; border: none; cursor: pointer; }
+  .btn-plain { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+  .btn-warn { background: #e6a23c; color: #fff; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .quick-group { display: flex; gap: 6px; }
+  .quick { background: #fff; border: 1px solid #dcdfe6; border-radius: 4px; padding: 6px 14px; font-size: 13px; cursor: pointer; color: #606266; }
+  .quick.active { background: #409eff; color: #fff; border-color: #409eff; }
+  .input-demo { border: 1px solid #dcdfe6; border-radius: 4px; padding: 6px 12px; font-size: 13px; background: #fff; }
+  .range-box { border: 1px solid #409eff; border-radius: 4px; padding: 6px 12px; font-size: 13px; background: #fff; color: #303133; display: inline-flex; align-items: center; gap: 6px; }
+  .range-box input { border: none; outline: none; font-size: 13px; color: #303133; width: 96px; background: transparent; }
+  /* 指标卡 */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpi { background: #fff; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .kpi .label { font-size: 13px; color: #909399; margin-bottom: 8px; }
+  .kpi .value { font-size: 26px; font-weight: 700; color: #303133; }
+  .kpi .value small { font-size: 13px; font-weight: 400; color: #909399; margin-left: 4px; }
+  .kpi .trend { font-size: 12px; margin-top: 6px; }
+  .up { color: #67c23a; }
+  .down { color: #f56c6c; }
+  .flat { color: #909399; }
+  /* 表格 */
+  .summary-demo { background: #f4f4f5; color: #909399; border-radius: 4px; padding: 8px 14px; font-size: 13px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; font-weight: 600; cursor: pointer; white-space: nowrap; user-select: none; }
+  th:hover { color: #409eff; }
+  th .arrow { color: #409eff; font-size: 11px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .img-cell { width: 46px; height: 46px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .badge { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+  .badge-green { background: #f0f9eb; color: #67c23a; }
+  .badge-red { background: #fef0f0; color: #f56c6c; }
+  .badge-gray { background: #f4f4f5; color: #909399; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin-right: 6px; }
+  .note { font-size: 12px; color: #909399; margin-top: 10px; line-height: 1.7; }
+  .sort-hint { font-size: 12px; color: #909399; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>销售统计 v2 · 交互式预览（结合蓝鲸BI逻辑）</h1>
+  <div class="sub">cb-erp · 2026-08-21 · 模拟数据演示 · 点击快捷周期 / 日期 / 表头排序可交互</div>
+
+  <div class="card">
+    <div class="page-header">
+      <h2>销售统计</h2>
+      <div>
+        <button class="btn btn-plain btn-sm">下载模板</button>
+        <button class="btn btn-plain btn-sm">导出</button>
+        <button class="btn btn-warn btn-sm">批量导入</button>
+      </div>
+    </div>
+
+    <!-- 快捷周期 + 日期范围 -->
+    <div class="filters">
+      <div class="quick-group" id="quickGroup">
+        <button class="quick active" data-days="0">今天</button>
+        <button class="quick" data-days="7">近7天</button>
+        <button class="quick" data-days="30">近30天</button>
+        <button class="quick" data-days="60">近60天</button>
+      </div>
+      <div class="range-box">
+        <input type="date" id="startDate">
+        <span>至</span>
+        <input type="date" id="endDate">
+      </div>
+      <input class="input-demo" placeholder="链接ID / 产品名" id="keywordInput" style="width:190px">
+      <button class="btn btn-sm" onclick="applyCustom()">查询</button>
+    </div>
+
+    <!-- 指标卡 -->
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <!-- 汇总 + 表格 -->
+    <div class="summary-demo" id="summaryBar"></div>
+    <table>
+      <thead>
+        <tr id="tableHead">
+          <th data-key="link_id">链接ID <span class="arrow"></span></th>
+          <th>图片</th>
+          <th data-key="name">产品名称 <span class="arrow"></span></th>
+          <th data-key="platform">平台/站点 <span class="arrow"></span></th>
+          <th data-key="quantity" class="num">出单数量 <span class="arrow"></span></th>
+          <th data-key="change" class="num">环比变化 <span class="arrow"></span></th>
+          <th data-key="avg_price" class="num">平均售价(MXN) <span class="arrow"></span></th>
+          <th data-key="stock" class="num">可用库存 <span class="arrow"></span></th>
+          <th data-key="days" class="num">出单天数 <span class="arrow"></span></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="sort-hint">点击表头可按该列排序（升序/降序切换）。</div>
+    <p class="note">时间范围选择后：出单数量=范围内总销量合计；环比变化=与上一等长周期对比；平均售价=销量加权；可用库存=截止所选结束日期的最新库存；出单天数=范围内实际出单天数。</p>
+  </div>
+
+  <div class="card">
+    <h2>对照蓝鲸BI的调整点</h2>
+    <table>
+      <tr><th>调整项</th><th>说明</th></tr>
+      <tr><td><span class="tag">新增</span>指标卡</td><td>出单链接数 / 总出单数量 / 总销售额(MXN) / 有销量天数，对齐蓝鲸大盘指标卡</td></tr>
+      <tr><td><span class="tag">新增</span>快捷周期</td><td>今天 / 近7天 / 近30天 / 近60天，对齐蓝鲸 7/30/60 周期逻辑</td></tr>
+      <tr><td><span class="tag">新增</span>环比变化</td><td>与上一等长周期对比，红涨绿跌（蓝鲸"销量变化率"）</td></tr>
+      <tr><td><span class="tag">新增</span>表头排序</td><td>点击列头升/降序，看最好卖、库存最多</td></tr>
+      <tr><td><span class="tag">新增</span>商品图片</td><td>产品名前列图片，视觉直观（蓝鲸畅销榜样式）</td></tr>
+      <tr><td><span class="tag">保留</span>按链接聚合</td><td>一个链接一行，不出现重复；出单天数辅助判断活跃度</td></tr>
+      <tr><td><span class="tag">保留</span>默认当天</td><td>默认查看当天数据，可切换任意日期范围</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+// ===== 模拟数据（近75天，每天一个链接一条记录） =====
+var TODAY = new Date(2026, 7, 21); // 2026-08-21
+function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function diffDays(a, b) { return Math.round((a - b) / 86400000); }
+
+// 伪随机（固定种子，每次刷新数据一致）
+var seed = 42;
+function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+// 商品定义：link_id, name, platform, emoji, color, price, baseQty(日均销量基数), stockStart, stockStep(每次上传波动)
+var PRODUCTS = [
+  { link_id:'2553999543', name:'无线蓝牙耳机 Pro', platform:'Mexico', emoji:'🎧', color:'#ecf5ff', price:248.51, baseQty:8, stockStart:40,  stockStep:5 },
+  { link_id:'2554001122', name:'Type-C 快充数据线 2m', platform:'Mexico', emoji:'🔌', color:'#f0f9eb', price:89.00, baseQty:6, stockStart:15, stockStep:2 },
+  { link_id:'2553999001', name:'运动手环 5 代', platform:'Mexico', emoji:'⌚', color:'#fdf6ec', price:320.00, baseQty:4, stockStart:42, stockStep:4 },
+  { link_id:'2554011188', name:'手机支架 车载款', platform:'Chile', emoji:'📱', color:'#fef0f0', price:120.50, baseQty:5, stockStart:28, stockStep:3 },
+  { link_id:'2553987766', name:'LED 补光灯 环形', platform:'Chile', emoji:'💡', color:'#f4f4f5', price:210.80, baseQty:3, stockStart:19, stockStep:2 },
+  { link_id:'2554023355', name:'蓝牙音箱 迷你款', platform:'Mexico', emoji:'🔊', color:'#ecf5ff', price:180.20, baseQty:2, stockStart:33, stockStep:3 },
+  { link_id:'2553976644', name:'手机壳 防摔款', platform:'Mexico', emoji:'📦', color:'#f0f9eb', price:45.90, baseQty:7, stockStart:88, stockStep:6 },
+  { link_id:'2554008899', name:'快充充电头 65W', platform:'Chile', emoji:'⚡', color:'#fdf6ec', price:160.00, baseQty:4, stockStart:25, stockStep:2 },
+];
+
+// 生成每日数据：qty（当天销量，部分天为0）、stock（每天的最新库存，上传日更新，无上传保持不变）、price
+var DAILY = [];
+var DAYS = 75;
+for (var i = DAYS - 1; i >= 0; i--) {
+  var date = addDays(TODAY, -i);
+  var dstr = fmt(date);
+  PRODUCTS.forEach(function(p) {
+    var isUploadDay = (rnd() < 0.5); // 约一半的天数会上传该商品
+    var qty = isUploadDay ? Math.max(1, Math.round(p.baseQty * (0.35 + rnd() * 0.9))) : 0;
+    // 库存：上传日更新为当天库存，非上传日沿用前一天（即保持不变）
+    var stock = p.stockStart + Math.round((rnd() - 0.5) * p.stockStep * 4);
+    if (stock < 1) stock = 1;
+    DAILY.push({ date: dstr, link_id: p.link_id, qty: qty, price: p.price + (rnd()-0.5)*8, stock: stock });
+  });
+}
+
+// ===== 工具 =====
+function inRange(dateStr, start, end) { return dateStr >= start && dateStr <= end; }
+
+// 聚合：给定 [start,end]，返回每链接聚合行 + 上一周期对比
+function aggregate(start, end) {
+  var days = diffDays(new Date(end), new Date(start)) + 1;
+  var prevStart = fmt(addDays(new Date(start), -days));
+  var prevEnd = fmt(addDays(new Date(start), -1));
+  var rows = [];
+  PRODUCTS.forEach(function(p) {
+    var curQty = 0, curAmt = 0, curDays = 0, curStock = null, curDate = '', curPlatform = '', curName = '';
+    DAILY.forEach(function(r) {
+      if (r.link_id !== p.link_id) return;
+      if (inRange(r.date, start, end)) {
+        curQty += r.qty;
+        curAmt += r.qty * r.price;
+        if (r.qty > 0) curDays++;
+        if (!curDate || r.date > curDate) { curDate = r.date; curStock = r.stock; }
+        curPlatform = p.platform; curName = p.name;
+      }
+    });
+    // 上一周期
+    var prevQty = 0;
+    DAILY.forEach(function(r) {
+      if (r.link_id === p.link_id && inRange(r.date, prevStart, prevEnd)) prevQty += r.qty;
+    });
+    var change = prevQty > 0 ? (curQty - prevQty) / prevQty * 100 : (curQty > 0 ? 100 : 0);
+    rows.push({
+      link_id: p.link_id, name: curName || p.name, platform: curPlatform, emoji: p.emoji, color: p.color,
+      quantity: curQty, avg_price: curQty > 0 ? Math.round(curAmt / curQty * 100) / 100 : 0,
+      stock: curStock, days: curDays, change: Math.round(change * 10) / 10,
+    });
+  });
+  return rows;
+}
+
+// ===== 渲染 =====
+var sortKey = null, sortDir = 1, keyword = '';
+
+function render() {
+  var start = document.getElementById('startDate').value;
+  var end = document.getElementById('endDate').value;
+  var rows = aggregate(start, end).filter(function(r) {
+    if (!keyword) return true;
+    return r.link_id.indexOf(keyword) >= 0 || r.name.indexOf(keyword) >= 0;
+  });
+  // 排序
+  if (sortKey) {
+    rows.sort(function(a, b) {
+      var va = a[sortKey], vb = b[sortKey];
+      if (typeof va === 'string') return va.localeCompare(vb) * sortDir;
+      return (va - vb) * sortDir;
+    });
+  }
+  // 指标卡
+  var totalQty = rows.reduce(function(s, r) { return s + r.quantity; }, 0);
+  var totalAmt = rows.reduce(function(s, r) { return s + r.quantity * r.avg_price; }, 0);
+  var totalDays = rows.reduce(function(s, r) { return s + r.days; }, 0);
+  var kpiRow = document.getElementById('kpiRow');
+  kpiRow.innerHTML = [
+    kpi('出单链接数', rows.length, '个'),
+    kpi('总出单数量', totalQty, '件'),
+    kpi('总销售额(MXN)', totalAmt.toFixed(0), ''),
+    kpi('有销量天数', totalDays, '天'),
+  ].join('');
+  // 汇总
+  document.getElementById('summaryBar').textContent = '当前范围：' + start + ' ~ ' + end + '，共 ' + rows.length + ' 个链接出单，总出单数量 ' + totalQty + '，总销售额 ' + totalAmt.toFixed(2) + ' MXN';
+  // 表格
+  var tbody = document.getElementById('tableBody');
+  tbody.innerHTML = rows.map(function(r) {
+    var cls = r.change > 0 ? 'badge-green' : (r.change < 0 ? 'badge-red' : 'badge-gray');
+    var arrow = r.change > 0 ? '▲' : (r.change < 0 ? '▼' : '—');
+    var chgText = r.change > 0 ? '+' + r.change + '%' : (r.change < 0 ? r.change + '%' : '0%');
+    return '<tr>' +
+      '<td>' + r.link_id + '</td>' +
+      '<td><div class="img-cell" style="background:' + r.color + '">' + r.emoji + '</div></td>' +
+      '<td>' + r.name + '</td>' +
+      '<td>' + r.platform + '</td>' +
+      '<td class="num">' + r.quantity + '</td>' +
+      '<td class="num"><span class="badge ' + cls + '">' + arrow + ' ' + chgText + '</span></td>' +
+      '<td class="num">' + r.avg_price.toFixed(2) + '</td>' +
+      '<td class="num">' + (r.stock != null ? r.stock : '-') + '</td>' +
+      '<td class="num">' + r.days + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function kpi(label, value, unit) {
+  return '<div class="kpi"><div class="label">' + label + '</div><div class="value">' + value + '<small>' + unit + '</small></div></div>';
+}
+
+// 快捷周期
+document.getElementById('quickGroup').addEventListener('click', function(e) {
+  var btn = e.target.closest('.quick');
+  if (!btn) return;
+  document.querySelectorAll('.quick').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var days = parseInt(btn.dataset.days, 10);
+  var end = TODAY;
+  var start = days === 0 ? TODAY : addDays(TODAY, -(days - 1));
+  document.getElementById('startDate').value = fmt(start);
+  document.getElementById('endDate').value = fmt(end);
+  render();
+});
+
+// 自定义日期 + 查询
+function applyCustom() {
+  document.querySelectorAll('.quick').forEach(function(b) { b.classList.remove('active'); });
+  render();
+}
+document.getElementById('keywordInput').addEventListener('input', function(e) { keyword = e.target.value.trim(); render(); });
+
+// 表头排序
+document.getElementById('tableHead').addEventListener('click', function(e) {
+  var th = e.target.closest('th[data-key]');
+  if (!th) return;
+  var key = th.dataset.key;
+  if (sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
+  document.querySelectorAll('#tableHead th .arrow').forEach(function(a) { a.textContent = ''; });
+  th.querySelector('.arrow').textContent = sortDir > 0 ? '↑' : '↓';
+  render();
+});
+
+// 初始化：默认今天
+(function init() {
+  document.getElementById('startDate').value = fmt(TODAY);
+  document.getElementById('endDate').value = fmt(TODAY);
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>负数销量导入 - 改动预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; background: #f5f7fa; color: #303133; padding: 24px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 6px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; border: 1px solid #ebeef5; padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin-bottom: 12px; color: #409eff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 10px 12px; text-align: left; }
+  th { background: #fafafa; font-weight: 600; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 12px; }
+  .tag-old { background: #fef0f0; color: #f56c6c; }
+  .tag-new { background: #f0f9eb; color: #67c23a; }
+  .code { background: #f5f7fa; border-radius: 4px; padding: 10px 12px; font-family: Consolas, monospace; font-size: 12px; line-height: 1.7; margin: 8px 0; white-space: pre-wrap; word-break: break-all; }
+  .note { color: #909399; font-size: 12px; margin-top: 8px; }
+  .bar { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 14px 20px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #67c23a; }
+  ul { padding-left: 18px; font-size: 13px; line-height: 1.9; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>销售统计 - 负数销量导入改动预览</h1>
+  <div class="sub">涉及文件：src/pages/Sales.vue（前端导入校验）、server/_handlers/daily-sales.ts（后端 schema）</div>
+
+  <div class="card">
+    <h2>改动说明</h2>
+    <table>
+      <tr><th>项目</th><th>改动前</th><th>改动后</th></tr>
+      <tr>
+        <td>负数销量（如 -1，退款/退货）</td>
+        <td><span class="tag tag-old">整行拦截</span> 不导入、不扣减、不计入统计</td>
+        <td><span class="tag tag-new">允许导入</span> 作为扣减项参与合计</td>
+      </tr>
+      <tr>
+        <td>销量为 0</td>
+        <td>拦截（"必须大于 0"）</td>
+        <td>拦截（提示"不能为 0"，0 无统计意义）</td>
+      </tr>
+      <tr>
+        <td>总出单数量 / 总销售额</td>
+        <td>只累计正数</td>
+        <td>正负相抵：扣减项减少总量与销售额</td>
+      </tr>
+      <tr>
+        <td>环比计算</td>
+        <td>仅按正数汇总</td>
+        <td>按净数量汇总，退款多的周期环比会走低</td>
+      </tr>
+    </table>
+    <div class="note">注：upsert 仍按 (sale_date, platform, link_id) 覆盖更新；同一天同一链接重复导入会整体覆盖，不会叠加扣减。</div>
+  </div>
+
+  <div class="card">
+    <h2>前端校验逻辑（Sales.vue）</h2>
+    <div class="code">// 改动前
+if (qty &lt;= 0) {
+  errLines.push(`第${lineNo}行：实际销量必须大于 0`)
+  continue
+}
+
+// 改动后
+if (qty === 0) {
+  errLines.push(`第${lineNo}行：实际销量不能为 0`)
+  continue
+}
+// 允许负销量：代表退款/退货，导入时扣减</div>
+  </div>
+
+  <div class="card">
+    <h2>后端 schema（daily-sales.ts）</h2>
+    <div class="code">// 改动前
+quantity: z.coerce.number().positive()
+
+// 改动后
+quantity: z.coerce.number().refine((v) =&gt; v !== 0, { message: 'quantity must not be 0' })</div>
+  </div>
+
+  <div class="card">
+    <h2>导入表现示例</h2>
+    <ul>
+      <li>上传 84 条正数 + 4 条负数：84 条正常导入，4 条负数作为扣减项入库</li>
+      <li>页面"总出单数量"显示净数量（正数合计 + 负数合计）</li>
+      <li>某链接当天 +10 与 -2 两条记录：该链接出单数量显示 8</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>构建验证</h2>
+    <ul>
+      <li>npm run build:api 通过，api/index.mjs 已重新生成</li>
+      <li>npm run build 通过（vite build 成功，dist 已产出）</li>
+    </ul>
+  </div>
+
+  <div class="bar"><span class="dot"></span>确认无误后回复「可以，上线吧」，我再 commit + push。</div>
+</div>
+</body>
+</html>

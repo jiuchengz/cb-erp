@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cb-erp 批量上传改造预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #303133; padding: 24px; }
+  .container { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 12px; border-left: 4px solid #409eff; padding-left: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; font-weight: 600; white-space: nowrap; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin: 2px 4px 2px 0; }
+  .tag-green { background: #f0f9eb; color: #67c23a; }
+  .tag-orange { background: #fdf6ec; color: #e6a23c; }
+  .note { font-size: 12px; color: #909399; margin-top: 8px; line-height: 1.7; }
+  .sql-block { background: #282c34; color: #abb2bf; border-radius: 6px; padding: 14px 16px; font-family: Consolas, monospace; font-size: 12.5px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+  .ok { color: #67c23a; font-weight: 600; }
+  .warn { color: #e6a23c; font-weight: 600; }
+  .arrow { color: #409eff; font-weight: 700; padding: 0 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>销售批量上传改造 · 离线预览</h1>
+  <div class="sub">cb-erp · 2026-08-21 · 仅供确认，未上线</div>
+
+  <div class="card">
+    <h2>1. 上传模板（下载模板已改为历史分析表头）</h2>
+    <p>下载模板文件名为「历史分析-商品销售明细模板.xlsx」，表头与您发来的表格一致，共 6 列：</p>
+    <table>
+      <tr><th>日期</th><th>站点</th><th>商品ID</th><th>实际销量</th><th>平均售价(MXN)</th><th>可用库存</th></tr>
+      <tr><td>2026-08-04</td><td>Mexico</td><td>MLM2553999543</td><td>8</td><td>248.51</td><td>27</td></tr>
+    </table>
+    <p class="note">上传时自动识别表头（支持中文列名），无需手动指定列。</p>
+  </div>
+
+  <div class="card">
+    <h2>2. 字段映射关系</h2>
+    <table>
+      <tr><th>表格列</th><th></th><th>系统字段</th><th>处理说明</th></tr>
+      <tr><td>日期</td><td class="arrow">→</td><td>销售日期 sale_date</td><td>取前 10 位（如 2026-08-04~2026-08-04 → 2026-08-04）</td></tr>
+      <tr><td>站点</td><td class="arrow">→</td><td>平台 platform</td><td>如 Mexico</td></tr>
+      <tr><td>商品ID</td><td class="arrow">→</td><td>链接ID link_id</td><td><span class="tag">MLM2553999543 → 2553999543</span>匹配商品</td></tr>
+      <tr><td>实际销量</td><td class="arrow">→</td><td>数量 quantity</td><td>写入销售明细</td></tr>
+      <tr><td>平均售价(MXN)</td><td class="arrow">→</td><td>单价 unit_price</td><td>写入销售明细</td></tr>
+      <tr><td>可用库存</td><td class="arrow">→</td><td>海外库存 overseas_stock</td><td><span class="tag tag-green">新增字段</span>写入商品表</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>3. 导入行为</h2>
+    <table>
+      <tr><th>项目</th><th>说明</th></tr>
+      <tr><td>匹配方式</td><td>按商品ID（去掉 MLM 前缀）匹配商品 <b>链接ID</b>；匹配到的正常上传并显示对应产品名称</td></tr>
+      <tr><td>未匹配处理</td><td>未匹配到的行<b>也正常上传</b>，商品ID 去前缀后存入链接ID，产品名称显示「<span class="tag tag-orange">未匹配</span>」，不影响其他行</td></tr>
+      <tr><td>建单方式</td><td>每行生成一张销售单（一单一品），订单号自动生成 <span class="tag">HIS-IMP-序号</span></td></tr>
+      <tr><td>海外库存</td><td>每行导入成功后，将「可用库存」写入该商品的新增字段「海外库存」（仅匹配成功时写入）</td></tr>
+      <tr><td>结果提示</td><td>提示「成功导入 N 条，失败 M 条」及前几条失败原因</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>4. 商品列表新增「海外库存」列</h2>
+    <table>
+      <tr><th>原列</th><th>改后</th><th>数据来源</th></tr>
+      <tr><td>国外库存</td><td>海外库存（新）</td><td>商品表 overseas_stock 字段，由批量上传写入</td></tr>
+      <tr><td>—</td><td>海外仓库存（新增展示列）</td><td>海外仓 inventory 聚合值（原“国外库存”数据）</td></tr>
+    </table>
+    <p class="note">原「国外库存」列数据不丢失，改为「海外仓库存」列继续展示；导出 Excel 同步包含两列。</p>
+  </div>
+
+  <div class="card">
+    <h2>5. 数据库迁移 SQL（需您在 Supabase 手动执行）</h2>
+    <div class="sql-block">-- sales_orders 新增：销售日期、平台
+alter table public.sales_orders
+  add column if not exists sale_date date,
+  add column if not exists platform text;
+
+-- products 新增：海外库存
+alter table public.products
+  add column if not exists overseas_stock numeric(18,2) not null default 0;</div>
+    <p class="note">迁移 SQL 已存至 <span class="tag">supabase/migrations/029_sales_platform_overseas_stock.sql</span>，请在 Supabase SQL Editor 手动执行后再测试导入。</p>
+  </div>
+
+  <div class="card">
+    <h2>6. 改动文件清单</h2>
+    <table>
+      <tr><th>文件</th><th>改动</th></tr>
+      <tr><td>server/_handlers/sales.ts</td><td>创建销售单支持 platform / sale_date 字段</td></tr>
+      <tr><td>server/_handlers/products.ts</td><td>海外库存读取商品表字段；海外仓聚合值输出为 warehouse_overseas_stock</td></tr>
+      <tr><td>server/_handlers/products/[id].ts</td><td>商品更新支持 overseas_stock 字段</td></tr>
+      <tr><td>src/pages/Sales.vue</td><td>下载模板改为 6 列；导入改为按链接ID匹配逐行建单并写海外库存；销售日期列优先显示 sale_date</td></tr>
+      <tr><td>src/pages/Products.vue</td><td>新增「海外库存」「海外仓库存」列及导出</td></tr>
+      <tr><td>api/index.mjs</td><td>已重新构建</td></tr>
+    </table>
+  </div>
+</div>
+</body>
+</html>

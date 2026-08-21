@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>经营分析 - 趋势图修正预览</title>
+<style>
+  :root {
+    --ink: #303133; --ink-2: #606266; --ink-3: #909399;
+    --glass-bg: #ffffff; --border: #dcdfe6; --accent: #409eff;
+    --bg-muted: #f0f2f5; --shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #f5f7fa; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink); padding: 24px; }
+  .page { max-width: 1000px; margin: 0 auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+  .page-header h1 { font-size: 20px; color: var(--ink); }
+  .page-tip { font-size: 13px; color: var(--ink-3); }
+  .card { background: var(--glass-bg); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .card h2 { font-size: 15px; margin: 0 0 14px; border-left: 4px solid var(--accent); padding-left: 10px; display: flex; justify-content: space-between; align-items: center; color: var(--ink); }
+  .card h2 .more { font-size: 12px; color: var(--ink-3); font-weight: 400; border-left: none; }
+  .trend-wrap { height: 160px; position: relative; }
+  .trend-wrap svg { width: 100%; height: 100%; display: block; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin-top: 8px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .note { margin-top: 12px; font-size: 12px; color: var(--ink-3); background: #fdf6ec; border-radius: 8px; padding: 8px 12px; }
+  .diff { color: #67c23a; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>经营分析</h1>
+      <div class="page-tip">基于业务数据的多维度分析看板（趋势图修正预览）</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>销售额 / 销量 / 售后趋势 <span class="more">每日 近30天</span></h2>
+    <div class="trend-wrap">
+      <svg id="chart" viewBox="0 0 720 150" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:#409eff"></i>销售额(MXN)</span>
+      <span><i style="background:#67c23a"></i>销售数量</span>
+      <span><i style="background:#e6a23c"></i>售后工单</span>
+    </div>
+    <div class="note">
+      本次修正：① 图例由「销售额(MXN/100)」改为「销售额(MXN)」，与真实数据口径一致；② 卡片标题由「销售 / 发货 / 售后趋势」改为「销售额 / 销量 / 售后趋势」，与实际绘制的三条线对应。
+    </div>
+  </div>
+</div>
+
+<script>
+  const W = 720, H = 150;
+  // 模拟近30天趋势数据（仅预览展示用，与真实页面无关）
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const base = Math.sin(i / 5) * 0.5 + 1;
+    days.push({
+      date: '08-' + String(31 - i).padStart(2, '0'),
+      amount: Math.round(9000 + base * 9000 + (i % 3) * 1500),
+      sale: Math.round(40 + base * 45 + (i % 4) * 6),
+      after: Math.round(1 + base * 3 + (i % 3))
+    });
+  }
+  function linePoints(key) {
+    const scale = key === 'amount' ? 1 : 1; // 归一化绘制，形状与真实页面一致
+    const max = Math.max(1, ...days.map(x => Number(x[key]) || 0));
+    const step = days.length > 1 ? W / (days.length - 1) : W;
+    return days.map((x, i) => {
+      const px = i * step;
+      const py = H - 6 - ((Number(x[key]) || 0) / max) * (H - 24);
+      return px.toFixed(1) + ',' + py.toFixed(1);
+    }).join(' ');
+  }
+  const svg = document.getElementById('chart');
+  const yLines = [];
+  for (let i = 0; i <= 4; i++) yLines.push((H / 5) * i + 8);
+  yLines.forEach(yv => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', 0); line.setAttribute('y1', yv); line.setAttribute('x2', W); line.setAttribute('y2', yv);
+    line.setAttribute('stroke', '#ebeef5'); line.setAttribute('stroke-width', 1);
+    svg.appendChild(line);
+  });
+  const series = [['amount', '#409eff'], ['sale', '#67c23a'], ['after', '#e6a23c']];
+  series.forEach(([key, color]) => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    p.setAttribute('points', linePoints(key));
+    p.setAttribute('fill', 'none'); p.setAttribute('stroke', color); p.setAttribute('stroke-width', 2);
+    svg.appendChild(p);
+  });
+</script>
+</body>
+</html>

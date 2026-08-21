@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>同类问题排查修复 - 全量加载预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  body { background: #f5f7fa; padding: 24px; }
+  .page { background: #fff; border-radius: 8px; padding: 20px; max-width: 960px; margin: 0 auto; }
+  .page h2 { font-size: 18px; color: #303133; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #ebeef5; padding: 10px 12px; font-size: 13px; text-align: left; }
+  th { background: #f5f7fa; color: #909399; font-weight: 600; }
+  .fixed { color: #67c23a; font-weight: 600; }
+  .already { color: #909399; }
+  .note { margin-top: 16px; padding: 12px 16px; background: #f4f4f5; border-radius: 4px; color: #909399; font-size: 13px; line-height: 1.9; }
+  .note b { color: #606266; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h2>同类问题排查结果（列表数据只取前 200 条 → 全部循环拉取）</h2>
+  <table>
+    <thead>
+      <tr><th>页面</th><th>加载内容</th><th>原状</th><th>处理</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>售后管理</td><td>产品列表（按链ID匹配回填）</td>
+        <td>只取前200条 → 超200条的产品查不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>售后管理</td><td>销售单下拉（关联订单）</td>
+        <td>只取前200条 → 超200条的销售单选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>库存管理</td><td>产品下拉（库存调整/调拨选产品）</td>
+        <td>只取前200条 → 超200条的产品选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>补货管理</td><td>产品下拉（采购新增选产品）</td>
+        <td>只取前200条 → 超200条的产品选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>销售管理</td><td>产品下拉（新增销售选产品）</td>
+        <td>只取前200条 → 超200条的产品选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>调拨管理</td><td>产品下拉（新增调拨选产品）</td>
+        <td>只取前200条 → 超200条的产品选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>发货管理</td><td>货代下拉</td>
+        <td>只取前200条 → 超200条的货代选不到</td>
+        <td class="fixed">已修复：循环翻页拉取全部</td>
+      </tr>
+      <tr>
+        <td>库存/采购/产品/补货/销售/调拨</td><td>Excel 导入匹配产品</td>
+        <td>已是循环翻页</td>
+        <td class="already">无需处理</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>修复方式</b>：所有下拉类数据源由「单次请求前 200 条」改为「每页 200 条循环请求直到取完」，保证任意数据都能被选中/匹配到。<br>
+    <b>影响</b>：仅前端改动，无后端接口变更；数据量大时加载时间略有增加，属可接受范围。<br>
+    <b>已构建验证</b>：npm run build 通过，dist 已生成。
+  </div>
+</div>
+</body>
+</html>

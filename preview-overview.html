@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>概况 预览（结合蓝鲸BI逻辑）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #303133; display: flex; min-height: 100vh; }
+  /* 侧边栏模拟 */
+  .sidebar { width: 220px; background: #1f2d3d; color: #cfd8e3; padding: 18px 0; flex-shrink: 0; }
+  .logo { padding: 6px 20px 18px; font-size: 16px; font-weight: 700; color: #fff; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 12px; }
+  .menu-item { padding: 11px 20px; font-size: 14px; cursor: pointer; transition: background .15s; }
+  .menu-item:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .menu-item.active { background: #409eff; color: #fff; }
+  .main { flex: 1; padding: 24px; min-width: 0; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .page-header h1 { font-size: 20px; }
+  .page-tip { font-size: 13px; color: #909399; }
+  .btn { display: inline-block; background: #409eff; color: #fff; border-radius: 4px; padding: 7px 16px; font-size: 13px; border: none; cursor: pointer; }
+  .btn-plain { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .quick-group { display: flex; gap: 6px; }
+  .quick { background: #fff; border: 1px solid #dcdfe6; border-radius: 4px; padding: 6px 14px; font-size: 13px; cursor: pointer; color: #606266; }
+  .quick.active { background: #409eff; color: #fff; border-color: #409eff; }
+  .range-box { border: 1px solid #409eff; border-radius: 4px; padding: 6px 12px; font-size: 13px; background: #fff; color: #303133; display: inline-flex; align-items: center; gap: 6px; }
+  .range-box input { border: none; outline: none; font-size: 13px; color: #303133; width: 96px; background: transparent; }
+  /* 指标卡 */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  .kpi { background: #fff; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .kpi .label { font-size: 13px; color: #909399; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .kpi .label .ico { font-size: 18px; }
+  .kpi .value { font-size: 26px; font-weight: 700; color: #303133; font-variant-numeric: tabular-nums; }
+  .kpi .value small { font-size: 13px; font-weight: 400; color: #909399; margin-left: 4px; }
+  .kpi .trend { font-size: 12px; margin-top: 6px; }
+  .up { color: #f56c6c; }
+  .down { color: #67c23a; }
+  .flat { color: #909399; }
+  /* 趋势图 */
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 14px; border-left: 4px solid #409eff; padding-left: 10px; }
+  .trend-wrap { display: flex; align-items: flex-end; gap: 3px; height: 130px; padding: 6px 2px 0; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .bar { width: 100%; max-width: 26px; background: #409eff; border-radius: 3px 3px 0 0; transition: height .3s; }
+  .bar.sale { background: #67c23a; }
+  .bar-label { font-size: 10px; color: #909399; white-space: nowrap; transform: scale(.9); }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: #606266; margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 10px; text-align: left; }
+  th { background: #fafafa; font-weight: 600; cursor: pointer; white-space: nowrap; user-select: none; }
+  th:hover { color: #409eff; }
+  th .arrow { color: #409eff; font-size: 11px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .img-cell { width: 46px; height: 46px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .badge { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+  .badge-green { background: #f0f9eb; color: #67c23a; }
+  .badge-red { background: #fef0f0; color: #f56c6c; }
+  .badge-orange { background: #fdf6ec; color: #e6a23c; }
+  .badge-gray { background: #f4f4f5; color: #909399; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin-right: 6px; }
+  .sort-hint { font-size: 12px; color: #909399; margin-top: 8px; }
+  .note { font-size: 12px; color: #909399; margin-top: 10px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo">cb-erp</div>
+  <div class="menu-item active">概况</div>
+  <div class="menu-item">商品管理</div>
+  <div class="menu-item">库存管理</div>
+  <div class="menu-item">发货管理</div>
+  <div class="menu-item">调拨发货</div>
+  <div class="menu-item">销售统计</div>
+  <div class="menu-item">售后工单</div>
+</div>
+
+<div class="main">
+  <div class="container">
+    <div class="page-header">
+      <div>
+        <h1>概况</h1>
+        <div class="page-tip">经营数据总览</div>
+      </div>
+      <button class="btn btn-plain btn-sm" onclick="refreshTip()">刷新</button>
+    </div>
+
+    <!-- 快捷周期（对齐蓝鲸 7/30/60 逻辑） -->
+    <div class="filters">
+      <div class="quick-group" id="quickGroup">
+        <button class="quick" data-days="0">今天</button>
+        <button class="quick active" data-days="7">近7天</button>
+        <button class="quick" data-days="30">近30天</button>
+        <button class="quick" data-days="60">近60天</button>
+      </div>
+      <div class="range-box">
+        <input type="date" id="startDate">
+        <span>至</span>
+        <input type="date" id="endDate">
+      </div>
+      <button class="btn btn-sm" onclick="applyCustom()">查询</button>
+    </div>
+
+    <!-- 指标卡 -->
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <!-- 近30天发货/销售趋势 -->
+    <div class="card">
+      <h2>发货 / 销售趋势</h2>
+      <div class="trend-wrap" id="trendWrap"></div>
+      <div class="legend"><span><i style="background:#409eff"></i>发货量</span><span><i style="background:#67c23a"></i>销售订单</span></div>
+    </div>
+
+    <!-- 最近发货动态 -->
+    <div class="card">
+      <h2>最近发货动态</h2>
+      <table>
+        <thead>
+          <tr id="tableHead">
+            <th data-key="tracking_no">运单号 <span class="arrow"></span></th>
+            <th>商品</th>
+            <th data-key="forwarder">货代 <span class="arrow"></span></th>
+            <th data-key="mode">空海运 <span class="arrow"></span></th>
+            <th data-key="qty" class="num">发货数量 <span class="arrow"></span></th>
+            <th data-key="status">货物状态 <span class="arrow"></span></th>
+            <th data-key="time" class="num">时间 <span class="arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <div class="sort-hint">点击表头可按该列排序（升序/降序切换）。</div>
+    </div>
+
+    <p class="note">本页为结合蓝鲸BI逻辑的交互预览：指标卡含环比变化（与上一等长周期对比，红涨绿跌）；快捷周期作用于发货/销售/售后统计；表格支持列头排序并新增商品图片列。预览使用模拟数据，真实数据需后端补充周期统计与环比接口。</p>
+  </div>
+</div>
+
+<script>
+  // ---------- 固定种子伪随机 ----------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+  }
+  const rnd = mulberry32(20260821);
+  const TODAY = new Date();
+  function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+  // 模拟近90天：每日发货量 / 销售订单数
+  const daily = [];
+  for (let i = 90; i >= 1; i--) {
+    const d = addDays(TODAY, -i);
+    const ship = Math.round(rnd() * 12) + (i % 7 === 0 ? 6 : 0);
+    const sale = Math.round(ship * (0.8 + rnd() * 0.7));
+    daily.push({ date: d, ship, sale });
+  }
+  const allShipments = [
+    { tracking_no: 'CB20260821012', product: '📦 蓝牙耳机 Pro', forwarder: '云途物流', mode: '空运', qty: 320, status: '已入仓', time: addDays(TODAY, 0), color: '#67c23a', bg: '#f0f9eb' },
+    { tracking_no: 'CB20260820088', product: '🔌 快充充电器 65W', forwarder: '燕文物流', mode: '海运', qty: 1500, status: '运输中', time: addDays(TODAY, -1), color: '#e6a23c', bg: '#fdf6ec' },
+    { tracking_no: 'CB20260819055', product: '🎧 降噪耳机', forwarder: '云途物流', mode: '空运', qty: 210, status: '已入仓', time: addDays(TODAY, -2), color: '#67c23a', bg: '#f0f9eb' },
+    { tracking_no: 'CB20260818033', product: '⌚ 智能手表 S2', forwarder: '递四方', mode: '海运', qty: 860, status: '待处理', time: addDays(TODAY, -3), color: '#909399', bg: '#f4f4f5' },
+    { tracking_no: 'CB20260817021', product: '🖱️ 无线鼠标', forwarder: '燕文物流', mode: '空运', qty: 420, status: '运输中', time: addDays(TODAY, -4), color: '#e6a23c', bg: '#fdf6ec' },
+    { tracking_no: 'CB20260816019', product: '💡 LED台灯', forwarder: '递四方', mode: '海运', qty: 680, status: '已入仓', time: addDays(TODAY, -5), color: '#67c23a', bg: '#f0f9eb' },
+    { tracking_no: 'CB20260815008', product: '🔋 移动电源 20000mAh', forwarder: '云途物流', mode: '空运', qty: 540, status: '运输中', time: addDays(TODAY, -6), color: '#e6a23c', bg: '#fdf6ec' },
+    { tracking_no: 'CB20260814002', product: '🎮 游戏手柄', forwarder: '燕文物流', mode: '空运', qty: 190, status: '已入仓', time: addDays(TODAY, -7), color: '#67c23a', bg: '#f0f9eb' },
+    { tracking_no: 'CB20260813001', product: '📷 行车记录仪', forwarder: '递四方', mode: '海运', qty: 350, status: '已入仓', time: addDays(TODAY, -8), color: '#67c23a', bg: '#f0f9eb' },
+  ];
+
+  let days = 7, sortKey = null, sortAsc = true;
+
+  function sumRange(daysN) {
+    const end = addDays(TODAY, -1);
+    const start = addDays(TODAY, -daysN);
+    let ship = 0, sale = 0;
+    daily.forEach(d => { if (d.date >= start && d.date <= end) { ship += d.ship; sale += d.sale; } });
+    // 上一等长周期（环比基准）
+    let shipPrev = 0, salePrev = 0;
+    const startP = addDays(start, -daysN), endP = addDays(start, -1);
+    daily.forEach(d => { if (d.date >= startP && d.date <= endP) { shipPrev += d.ship; salePrev += d.sale; } });
+    return { ship, sale, shipPrev, salePrev };
+  }
+
+  function trendPct(cur, prev) {
+    if (!prev) return { text: '—', cls: 'flat' };
+    const p = (cur - prev) / prev * 100;
+    const t = (p > 0 ? '+' : '') + p.toFixed(1) + '%';
+    return { text: t + ' 环比', cls: p > 0 ? 'up' : p < 0 ? 'down' : 'flat' };
+  }
+
+  function renderKpi() {
+    const r = sumRange(days);
+    const base = {
+      products: 268, domestic: 18642, overseas: 0, transit: 3240,
+      shipments: r.ship, sales: r.sale, afterSales: Math.round(r.sale * 0.06),
+    };
+    const prev = {
+      products: 262, domestic: 18100, overseas: 0, transit: 2980,
+      shipments: r.shipPrev, sales: r.salePrev, afterSales: Math.round(r.salePrev * 0.06),
+    };
+    const cards = [
+      { label: '商品总数', ico: '📦', value: base.products, unit: '个', prev: prev.products },
+      { label: '国内库存', ico: '🏬', value: base.domestic, unit: '件', prev: prev.domestic },
+      { label: '海外库存', ico: '🌍', value: base.overseas, unit: '件', prev: prev.overseas },
+      { label: '在途库存', ico: '🚚', value: base.transit, unit: '件', prev: prev.transit },
+      { label: '发货记录', ico: '✈️', value: base.shipments, unit: '单', prev: prev.shipments },
+      { label: '销售订单', ico: '🛒', value: base.sales, unit: '单', prev: prev.sales },
+      { label: '售后工单', ico: '🔧', value: base.afterSales, unit: '单', prev: prev.afterSales },
+    ];
+    // 商品/库存类指标不受周期影响，只显示环比
+    cards.forEach((c, i) => {
+      if (i < 4) { c.unit = ''; }
+    });
+    const row = document.getElementById('kpiRow');
+    row.innerHTML = cards.map(c => {
+      const t = trendPct(c.value, c.prev);
+      return '<div class="kpi"><div class="label"><span>' + c.label + '</span><span class="ico">' + c.ico + '</span></div>' +
+        '<div class="value">' + c.value.toLocaleString() + (c.unit ? '<small>' + c.unit + '</small>' : '') + '</div>' +
+        '<div class="trend ' + t.cls + '">' + t.text + '</div></div>';
+    }).join('');
+  }
+
+  function renderTrend() {
+    const end = addDays(TODAY, -1);
+    const start = addDays(TODAY, -29);
+    const rows = daily.filter(d => d.date >= start && d.date <= end);
+    const max = Math.max(...rows.map(d => Math.max(d.ship, d.sale)), 1);
+    const wrap = document.getElementById('trendWrap');
+    wrap.innerHTML = rows.map(d => {
+      const h1 = Math.round(d.ship / max * 100), h2 = Math.round(d.sale / max * 100);
+      return '<div class="bar-col"><div class="bar" style="height:' + Math.max(h1, 2) + 'px"></div>' +
+        '<div class="bar sale" style="height:' + Math.max(h2, 2) + 'px"></div>' +
+        '<div class="bar-label">' + (d.date.getMonth() + 1) + '/' + d.date.getDate() + '</div></div>';
+    }).join('');
+  }
+
+  function fmtTime(d) { return d.toLocaleString('zh-CN', { hour12: false }); }
+
+  function renderTable() {
+    const rows = allShipments.slice();
+    if (sortKey) {
+      rows.sort((a, b) => {
+        let va = a[sortKey], vb = b[sortKey];
+        if (typeof va === 'string') va = va.localeCompare(vb, 'zh');
+        else va = va > vb ? 1 : va < vb ? -1 : 0;
+        return sortAsc ? va : -va;
+      });
+    }
+    document.querySelectorAll('#tableHead th').forEach(th => {
+      const arrow = th.querySelector('.arrow');
+      if (arrow) arrow.textContent = th.dataset.key === sortKey ? (sortAsc ? ' ↑' : ' ↓') : '';
+    });
+    document.getElementById('tableBody').innerHTML = rows.map(s =>
+      '<tr><td>' + s.tracking_no + '</td>' +
+      '<td><div style="display:flex;align-items:center;gap:8px"><div class="img-cell" style="background:#f0f9eb">' + s.product.split(' ')[0] + '</div><span>' + s.product.split(' ').slice(1).join(' ') + '</span></div></td>' +
+      '<td>' + s.forwarder + '</td><td>' + s.mode + '</td>' +
+      '<td class="num">' + s.qty + '</td>' +
+      '<td><span class="badge" style="color:' + s.color + ';background:' + s.bg + '">' + s.status + '</span></td>' +
+      '<td class="num">' + fmtTime(s.time) + '</td></tr>'
+    ).join('');
+  }
+
+  document.getElementById('quickGroup').addEventListener('click', e => {
+    const btn = e.target.closest('.quick'); if (!btn) return;
+    document.querySelectorAll('.quick').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    days = Number(btn.dataset.days) || 7;
+    renderKpi();
+  });
+
+  function applyCustom() {
+    const s = document.getElementById('startDate').value, e = document.getElementById('endDate').value;
+    if (s && e) {
+      document.querySelectorAll('.quick').forEach(b => b.classList.remove('active'));
+      days = Math.max(1, Math.round((new Date(e) - new Date(s)) / 86400000));
+      renderKpi();
+    }
+  }
+  document.querySelectorAll('.quick').forEach((b, i) => { if (i === 1) b.classList.add('active'); });
+
+  document.getElementById('tableHead').addEventListener('click', e => {
+    const th = e.target.closest('th'); if (!th || !th.dataset.key) return;
+    if (sortKey === th.dataset.key) sortAsc = !sortAsc; else { sortKey = th.dataset.key; sortAsc = true; }
+    renderTable();
+  });
+
+  function refreshTip() { alert('预览模式：真实数据将在接入后端统计接口后生效'); }
+
+  renderKpi();
+  renderTrend();
+  renderTable();
+</script>
+</body>
+</html>
