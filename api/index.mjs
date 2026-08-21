@@ -26806,6 +26806,8 @@ async function handler16(req, res) {
       if (status) query = query.eq("status", status);
       const cargoStatus = typeof req.query.cargo_status === "string" ? req.query.cargo_status.trim() : "";
       if (cargoStatus) query = query.eq("cargo_status", cargoStatus);
+      const cargoStatusNot = typeof req.query.cargo_status_not === "string" ? req.query.cargo_status_not.trim() : "";
+      if (cargoStatusNot) query = query.neq("cargo_status", cargoStatusNot);
       const trackingNo = typeof req.query.tracking_no === "string" ? req.query.tracking_no.trim() : "";
       if (trackingNo) query = query.ilike("tracking_no", `%${trackingNo}%`);
       const shippingMode = typeof req.query.shipping_mode === "string" ? req.query.shipping_mode.trim() : "";
