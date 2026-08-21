@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全局配色联动预览</title>
+<style>
+  :root {
+    --bg-c1: #7dd3fc; --bg-c2: #c7d2fe; --bg-c3: #f0abfc; --bg-c4: #a5b4fc;
+    --glow-c1: #60a5fa; --glow-c2: #a78bfa; --bg-angle: 135deg;
+    --ink: #0f172a; --ink-2: #475569; --ink-3: #94a3b8;
+    --panel: rgba(255,255,255,.62); --panel-2: rgba(255,255,255,.45);
+    --line: rgba(15,23,42,.08); --glass-highlight: rgba(255,255,255,.55);
+  }
+  html.dark {
+    --ink: #e2e8f0; --ink-2: #94a3b8; --ink-3: #64748b;
+    --panel: rgba(30,41,59,.62); --panel-2: rgba(15,23,42,.5);
+    --line: rgba(255,255,255,.09); --glass-highlight: rgba(255,255,255,.06);
+    --bg-c1: #0f172a; --bg-c2: #1e293b; --bg-c3: #1f2937; --bg-c4: #111827;
+    --glow-c1: #38bdf8; --glow-c2: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background: linear-gradient(var(--bg-angle), var(--bg-c1) 0%, var(--bg-c2) 30%, var(--bg-c3) 65%, var(--bg-c4) 100%);
+    background-attachment: fixed;
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    transition: background 0.4s ease, color 0.3s ease;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+  .glass {
+    background: var(--panel);
+    backdrop-filter: blur(18px);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 22px 24px;
+    box-shadow: inset 0 1px 0 var(--glass-highlight), 0 12px 32px rgba(0,0,0,.10);
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: var(--ink-2); font-size: 13px; margin-bottom: 18px; }
+  .scheme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .scheme-item { cursor: pointer; text-align: center; padding: 10px; border-radius: 14px; border: 2px solid transparent; transition: border-color .2s; }
+  .scheme-item.active { border-color: var(--ink); }
+  .scheme-preview { height: 64px; border-radius: 12px; margin-bottom: 8px; }
+  .scheme-name { font-size: 13px; color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+  .row .label { font-size: 13px; color: var(--ink-2); width: 90px; }
+  input[type=color] { width: 40px; height: 32px; border: none; border-radius: 8px; background: transparent; cursor: pointer; }
+  select { padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); }
+  button {
+    padding: 8px 16px; border-radius: 10px; border: none; cursor: pointer;
+    background: #3b82f6; color: #fff; font-size: 13px;
+  }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; box-shadow: inset 0 1px 0 var(--glass-highlight); }
+  .card h3 { font-size: 15px; margin-bottom: 10px; }
+  .card p { font-size: 13px; color: var(--ink-2); line-height: 1.8; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; margin: 0 6px 6px 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); }
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+  .dark-toggle { position: fixed; top: 18px; right: 18px; z-index: 9; }
+  .custom-panel { margin-bottom: 16px; }
+  .tip { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <button class="ghost dark-toggle" onclick="toggleDark()">手动切换明暗</button>
+  <div class="glass">
+    <h1>全局配色联动预览</h1>
+    <div class="sub">选择背景方案后，文字、卡片、控件将随背景明暗自动联动，全局生效</div>
+
+    <div class="scheme-grid" id="schemeGrid"></div>
+
+    <div class="custom-panel glass" style="margin-top:12px">
+      <div class="row"><span class="label">背景渐变色</span>
+        <input type="color" id="c1" value="#7dd3fc"><input type="color" id="c2" value="#c7d2fe">
+        <input type="color" id="c3" value="#f0abfc"><input type="color" id="c4" value="#a5b4fc">
+      </div>
+      <div class="row"><span class="label">光斑颜色</span>
+        <input type="color" id="g1" value="#60a5fa"><input type="color" id="g2" value="#a78bfa">
+      </div>
+      <div class="row"><span class="label">渐变方向</span>
+        <select id="angle">
+          <option value="135deg">↘ 135°</option>
+          <option value="0deg">→ 0°</option>
+          <option value="90deg">↓ 90°</option>
+          <option value="45deg">↗ 45°</option>
+          <option value="180deg">← 180°</option>
+        </select>
+        <button onclick="applyCustom()">应用自定义配色</button>
+        <button class="ghost" onclick="randomCustom()">随机搭配</button>
+      </div>
+      <div class="tip">深色配色自动切换浅色文字体系；手动明暗开关会回退到对应默认背景。</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h3>统计面板示例</h3>
+      <span class="badge">订单数 1,286</span><span class="badge">销售额 ¥528,400</span><span class="badge">转化率 3.6%</span>
+      <p>这是一段正文示例。选择「高级科幻」深色背景时，本卡片与文字会自动变为深色面板 + 浅色文字，不会再出现黑底黑字看不清的情况。</p>
+    </div>
+    <div class="card">
+      <h3>侧边栏 / 表格示例</h3>
+      <p>表格行、输入框、按钮、下拉等全部组件随全局变量统一适配明暗，背景配色属于全局联动而非仅页面背景。</p>
+      <div class="btn-row">
+        <button>主要按钮</button>
+        <button class="ghost">次要按钮</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const schemes = [
+  { id: 'aurora', label: '极光', colors: ['#7dd3fc','#c7d2fe','#f0abfc','#a5b4fc'], glow: ['#60a5fa','#a78bfa'] },
+  { id: 'mint', label: '薄荷', colors: ['#99f6e4','#bae6fd','#d1fae5','#c7d2fe'], glow: ['#34d399','#38bdf8'] },
+  { id: 'sunset', label: '落日', colors: ['#fed7aa','#fda4af','#fecdd3','#fde68a'], glow: ['#f97316','#ec4899'] },
+  { id: 'ocean', label: '深海', colors: ['#7dd3fc','#93c5fd','#a5b4fc','#99f6e4'], glow: ['#0ea5e9','#8b5cf6'] },
+  { id: 'mono', label: '黑白', colors: ['#f8fafc','#e2e8f0','#cbd5e1','#94a3b8'], glow: ['#94a3b8','#64748b'] },
+  { id: 'sci-fi', label: '高级科幻', colors: ['#050b1f','#101d3d','#0a1233','#1a0f38'], glow: ['#00e5ff','#9d4edd'] },
+];
+let active = 'aurora';
+let customColors = ['#7dd3fc','#c7d2fe','#f0abfc','#a5b4fc'];
+let customGlow = ['#60a5fa','#a78bfa'];
+let customAngle = 135;
+
+function lin(v){ return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); }
+function lum(hex){
+  let h=hex.trim().replace(/^#/,'');
+  if(h.length===3) h=h.split('').map(c=>c+c).join('');
+  if(h.length!==6) return 0.5;
+  return 0.2126*lin(parseInt(h.slice(0,2),16)/255)+0.7152*lin(parseInt(h.slice(2,4),16)/255)+0.0722*lin(parseInt(h.slice(4,6),16)/255);
+}
+function colorsDark(arr){ const v=arr.filter(Boolean); if(!v.length) return false; return v.reduce((s,c)=>s+lum(c),0)/v.length < 0.34; }
+
+function applyBg(colors, glow, angle){
+  const r=document.documentElement.style;
+  r.setProperty('--bg-c1',colors[0]); r.setProperty('--bg-c2',colors[1]??colors[0]);
+  r.setProperty('--bg-c3',colors[2]??colors[0]); r.setProperty('--bg-c4',colors[3]??colors[0]);
+  r.setProperty('--glow-c1',glow[0]); r.setProperty('--glow-c2',glow[1]);
+  r.setProperty('--bg-angle',(angle??135)+'deg');
+  syncDark(colors);
+}
+function syncDark(colors){
+  const dark=colorsDark(colors);
+  document.documentElement.classList.toggle('dark',dark);
+}
+function renderGrid(){
+  const g=document.getElementById('schemeGrid');
+  g.innerHTML=schemes.map(s=>`
+    <div class="scheme-item ${active===s.id?'active':''}" onclick="pick('${s.id}')">
+      <div class="scheme-preview" style="background:linear-gradient(135deg,${s.colors.join(',')})"></div>
+      <div class="scheme-name">${s.label}</div>
+    </div>`).join('');
+}
+function pick(id){
+  active=id; const s=schemes.find(x=>x.id===id);
+  applyBg(s.colors,s.glow,135); renderGrid();
+}
+function applyCustom(){
+  active='custom';
+  customColors=[c1.value,c2.value,c3.value,c4.value];
+  customGlow=[g1.value,g2.value];
+  customAngle=parseInt(angle.value);
+  applyBg(customColors,customGlow,customAngle); renderGrid();
+}
+function randomCustom(){
+  const rand=()=>'#'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
+  c1.value=rand(); c2.value=rand(); c3.value=rand(); c4.value=rand();
+  g1.value=rand(); g2.value=rand();
+  applyCustom();
+}
+function toggleDark(){
+  const html=document.documentElement;
+  const dark=!html.classList.contains('dark');
+  html.classList.toggle('dark',dark);
+  const r=html.style;
+  ['--bg-c1','--bg-c2','--bg-c3','--bg-c4','--glow-c1','--glow-c2','--bg-angle'].forEach(k=>r.removeProperty(k));
+  active='aurora'; renderGrid();
+}
+renderGrid();
+</script>
+</body>
+</html>

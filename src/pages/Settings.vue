@@ -374,6 +374,43 @@ interface AppearanceScheme {
   colors: string[]
   glow: string[]
   preview: string
+  dark?: boolean
+}
+
+// 计算颜色相对亮度（0~1），用于判断背景是否偏暗
+function colorLuminance(hex: string): number {
+  try {
+    let h = hex.trim().replace(/^#/, '')
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+    if (h.length !== 6) return 0.5
+    const r = parseInt(h.slice(0, 2), 16) / 255
+    const g = parseInt(h.slice(2, 4), 16) / 255
+    const b = parseInt(h.slice(4, 6), 16) / 255
+    const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  } catch {
+    return 0.5
+  }
+}
+
+function colorsAreDark(colors: string[]): boolean {
+  const valid = colors.filter(Boolean)
+  if (!valid.length) return false
+  const avg = valid.reduce((sum, c) => sum + colorLuminance(c), 0) / valid.length
+  return avg < 0.34
+}
+
+// 根据背景亮度自动联动暗色模式：深色背景 → 浅色文字体系
+function syncDarkByColors(colors: string[]) {
+  const dark = colorsAreDark(colors)
+  document.documentElement.classList.toggle('dark', dark)
+  darkMode.value = dark
+  try {
+    if (dark) localStorage.setItem(DARK_KEY, '1')
+    else localStorage.removeItem(DARK_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 const schemes: AppearanceScheme[] = [
@@ -418,6 +455,7 @@ const schemes: AppearanceScheme[] = [
     colors: ['#050b1f', '#101d3d', '#0a1233', '#1a0f38'],
     glow: ['#00e5ff', '#9d4edd'],
     preview: 'linear-gradient(135deg,#050b1f,#101d3d,#0a1233,#1a0f38)',
+    dark: true,
   },
 ]
 
@@ -476,6 +514,7 @@ function applyCustom() {
   root.setProperty('--glow-c1', customGlow.value[0])
   root.setProperty('--glow-c2', customGlow.value[1])
   root.setProperty('--bg-angle', customAngle.value + 'deg')
+  syncDarkByColors(customColors.value)
   try {
     localStorage.setItem(CUSTOM_KEY, JSON.stringify({ colors: customColors.value, glow: customGlow.value, angle: customAngle.value }))
   } catch {
@@ -510,6 +549,7 @@ function applyScheme(s: AppearanceScheme) {
   root.setProperty('--glow-c1', s.glow[0])
   root.setProperty('--glow-c2', s.glow[1])
   root.setProperty('--bg-angle', '135deg')
+  syncDarkByColors(s.colors)
   saveAppearance()
 }
 
@@ -524,14 +564,43 @@ function applyAccent(c: string | null) {
 function applyDarkMode(v: string | number | boolean) {
   const on = Boolean(v)
   darkMode.value = on
-  document.documentElement.classList.toggle('dark', on)
-  try {
-    if (on) localStorage.setItem(DARK_KEY, '1')
-    else localStorage.removeItem(DARK_KEY)
-  } catch {
-    /* ignore */
+  const html = document.documentElement
+  const root = html.style
+  if (on) {
+    html.classList.add('dark')
+    // 手动开启深色模式：清除背景内联变量，回退到 html.dark 默认深色背景
+    root.removeProperty('--bg-c1')
+    root.removeProperty('--bg-c2')
+    root.removeProperty('--bg-c3')
+    root.removeProperty('--bg-c4')
+    root.removeProperty('--glow-c1')
+    root.removeProperty('--glow-c2')
+    root.removeProperty('--bg-angle')
+    try {
+      localStorage.setItem(DARK_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  } else {
+    html.classList.remove('dark')
+    // 手动关闭深色模式：若当前方案是深色系，切回浅色默认方案，避免黑底黑字
+    if (colorsAreDark(getCurrentSchemeColors())) {
+      applyScheme(schemes[0])
+      return
+    }
+    try {
+      localStorage.removeItem(DARK_KEY)
+    } catch {
+      /* ignore */
+    }
   }
   saveAppearance()
+}
+
+function getCurrentSchemeColors(): string[] {
+  if (activeScheme.value === 'custom') return customColors.value
+  const s = schemes.find((x) => x.id === activeScheme.value)
+  return s ? s.colors : schemes[0].colors
 }
 
 function applyCorner(v: number | number[]) {
@@ -639,6 +708,7 @@ function loadAppearance() {
         root.setProperty('--glow-c1', customGlow.value[0])
         root.setProperty('--glow-c2', customGlow.value[1])
         root.setProperty('--bg-angle', customAngle.value + 'deg')
+        syncDarkByColors(customColors.value)
       } else {
         const s = schemes.find((x) => x.id === saved.scheme)
         if (s) {
@@ -651,6 +721,7 @@ function loadAppearance() {
           root.setProperty('--glow-c1', s.glow[0])
           root.setProperty('--glow-c2', s.glow[1])
           root.setProperty('--bg-angle', '135deg')
+          syncDarkByColors(s.colors)
         }
       }
     }
@@ -676,7 +747,20 @@ function loadAppearance() {
   }
   try {
     darkMode.value = localStorage.getItem(DARK_KEY) === '1'
-    document.documentElement.classList.toggle('dark', darkMode.value)
+    if (darkMode.value) {
+      // 手动深色偏好优先：加 dark 并回退到默认深色背景，避免浅背景+浅文字
+      document.documentElement.classList.add('dark')
+      const root = document.documentElement.style
+      root.removeProperty('--bg-c1')
+      root.removeProperty('--bg-c2')
+      root.removeProperty('--bg-c3')
+      root.removeProperty('--bg-c4')
+      root.removeProperty('--glow-c1')
+      root.removeProperty('--glow-c2')
+      root.removeProperty('--bg-angle')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
   } catch {
     /* ignore */
   }

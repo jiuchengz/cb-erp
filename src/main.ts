@@ -8,6 +8,29 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 
+// 计算颜色相对亮度（0~1），用于判断背景是否偏暗
+function colorLuminance(hex: string): number {
+  try {
+    let h = hex.trim().replace(/^#/, '')
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+    if (h.length !== 6) return 0.5
+    const r = parseInt(h.slice(0, 2), 16) / 255
+    const g = parseInt(h.slice(2, 4), 16) / 255
+    const b = parseInt(h.slice(4, 6), 16) / 255
+    const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  } catch {
+    return 0.5
+  }
+}
+
+function colorsAreDark(colors: string[]): boolean {
+  const valid = colors.filter(Boolean)
+  if (!valid.length) return false
+  const avg = valid.reduce((sum, c) => sum + colorLuminance(c), 0) / valid.length
+  return avg < 0.34
+}
+
 // 启动时恢复暗色模式偏好（localStorage cb_dark_mode）
 function applySavedDarkMode() {
   try {
@@ -52,6 +75,15 @@ function applySavedAppearance() {
     }
     if (saved.glowEnabled === false) {
       document.documentElement.classList.add('no-glow')
+    }
+    // 深色背景配色启动即联动暗色模式（文字/面板/控件随背景变浅）
+    if (colorsAreDark(saved.colors ?? [])) {
+      document.documentElement.classList.add('dark')
+      try {
+        localStorage.setItem('cb_dark_mode', '1')
+      } catch {
+        /* ignore */
+      }
     }
   } catch {
     /* ignore */

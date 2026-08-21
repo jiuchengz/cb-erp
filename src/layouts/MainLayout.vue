@@ -174,7 +174,18 @@ const isDark = ref(false)
 const darkIcon = computed(() => (isDark.value ? Sunny : Moon))
 function applyDark(v: boolean) {
   isDark.value = v
-  document.documentElement.classList.toggle('dark', v)
+  const html = document.documentElement
+  html.classList.toggle('dark', v)
+  // 手动切换明暗时清空背景内联变量，回退到各模式的默认背景（浅色默认 / html.dark 深色默认），
+  // 避免浅背景+浅文字或深背景+深文字导致不可读
+  const root = html.style
+  root.removeProperty('--bg-c1')
+  root.removeProperty('--bg-c2')
+  root.removeProperty('--bg-c3')
+  root.removeProperty('--bg-c4')
+  root.removeProperty('--glow-c1')
+  root.removeProperty('--glow-c2')
+  root.removeProperty('--bg-angle')
   try {
     localStorage.setItem('cb_dark_mode', v ? '1' : '0')
   } catch {
@@ -293,6 +304,8 @@ html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 
 .sidebar nav .solo-link .mico, .sidebar nav .group-title .mico, .sidebar nav .group-items a .mico { display: inline-flex; align-items: center; justify-content: center; width: 20px; font-size: 16px; flex-shrink: 0; }
 .sidebar nav .solo-link:hover, .sidebar nav .group-title:hover, .sidebar nav .group-items a:hover { background: rgba(255,255,255,.35); color: var(--ink); transform: translateX(2px); }
 .sidebar nav .solo-link.router-link-active, .sidebar nav .group-items a.router-link-active { background: rgba(255,255,255,.72); color: var(--ink); border-color: transparent; box-shadow: 0 8px 24px rgba(70,90,160,.12), inset 0 1px 0 #fff; font-weight: 600; }
+html.dark .sidebar nav .solo-link:hover, html.dark .sidebar nav .group-title:hover, html.dark .sidebar nav .group-items a:hover { background: rgba(255,255,255,.10); color: var(--ink); }
+html.dark .sidebar nav .solo-link.router-link-active, html.dark .sidebar nav .group-items a.router-link-active { background: rgba(255,255,255,.16); color: var(--ink); box-shadow: 0 8px 24px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.08); }
 .sidebar nav .group-title .gname { flex: 1; }
 .sidebar nav .group-title .garrow { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-3); transition: transform .25s ease; flex-shrink: 0; }
 .sidebar nav .menu-group.open .group-title .garrow { transform: rotate(180deg); }
@@ -311,14 +324,20 @@ html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 
 .header-right { display: flex; align-items: center; gap: 12px; }
 .hamburger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 17px; flex-shrink: 0; margin-right: 8px; }
 .hamburger:hover { background: rgba(255,255,255,.85); color: var(--accent); }
+html.dark .hamburger { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: var(--ink-2); }
+html.dark .hamburger:hover { background: rgba(255,255,255,.14); color: var(--accent); }
 
 /* 顶栏按钮 */
 .topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
 .topbar-btn:hover { background: rgba(255,255,255,.85); color: var(--accent); transform: translateY(-1px); }
+html.dark .topbar-btn { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: var(--ink-2); }
+html.dark .topbar-btn:hover { background: rgba(255,255,255,.14); color: var(--accent); }
 .log-badge { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; line-height: 16px; text-align: center; font-size: 11px; color: #fff; background: #e5484d; border-radius: 8px; }
 
 .user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 7px 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
 .user-trigger:hover { background: rgba(255,255,255,.85); }
+html.dark .user-trigger { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); }
+html.dark .user-trigger:hover { background: rgba(255,255,255,.14); }
 .user { font-size: 14px; color: var(--ink); }
 .arrow { font-size: 12px; color: var(--ink-3); }
 .content { flex: 1; overflow: auto; padding: 2px 2px 2px 0; }
