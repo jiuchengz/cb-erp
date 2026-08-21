@@ -26784,7 +26784,10 @@ var createSchema6 = external_exports.object({
   warehouse_status: external_exports.string().max(100).nullable().optional(),
   actual_warehouse_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
   abnormal_penalty: external_exports.string().max(500).nullable().optional(),
-  appointment_time: external_exports.string().max(32).nullable().optional()
+  appointment_time: external_exports.string().max(32).nullable().optional(),
+  // 调拨发货管理字段
+  cargo_code: external_exports.string().max(100).nullable().optional(),
+  source: external_exports.enum(["manual", "transfer"]).optional()
 });
 async function handler16(req, res) {
   try {
@@ -26794,11 +26797,19 @@ async function handler16(req, res) {
       requirePermission(ctx, "shipment.read");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query = supabase.from("shipments").select("*, forwarders(name)", { count: "exact" });
+      const source = typeof req.query.source === "string" ? req.query.source.trim() : "";
+      let select = "*, forwarders(name)";
+      if (source) select += ", shipment_items(quantity)";
+      let query = supabase.from("shipments").select(select, { count: "exact" });
+      if (source) query = query.eq("source", source);
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
       if (status) query = query.eq("status", status);
       const cargoStatus = typeof req.query.cargo_status === "string" ? req.query.cargo_status.trim() : "";
       if (cargoStatus) query = query.eq("cargo_status", cargoStatus);
+      const trackingNo = typeof req.query.tracking_no === "string" ? req.query.tracking_no.trim() : "";
+      if (trackingNo) query = query.ilike("tracking_no", `%${trackingNo}%`);
+      const shippingMode = typeof req.query.shipping_mode === "string" ? req.query.shipping_mode.trim() : "";
+      if (shippingMode) query = query.eq("shipping_mode", shippingMode);
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -26831,6 +26842,8 @@ async function handler16(req, res) {
         actual_warehouse_qty: body.actual_warehouse_qty ?? null,
         abnormal_penalty: body.abnormal_penalty ?? null,
         appointment_time: body.appointment_time ?? null,
+        cargo_code: body.cargo_code ?? null,
+        source: body.source ?? "manual",
         created_by: ctx.userId
       }).select().single();
       if (error) {
@@ -28064,7 +28077,10 @@ var updateSchema9 = external_exports.object({
   volume_diff: external_exports.string().max(50).nullable().optional(),
   billable_amount: external_exports.union([external_exports.null(), external_exports.coerce.number()]).optional(),
   pull_declare_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
-  estimated_arrival: external_exports.string().max(32).nullable().optional()
+  estimated_arrival: external_exports.string().max(32).nullable().optional(),
+  // 调拨发货管理字段
+  cargo_code: external_exports.string().max(100).nullable().optional(),
+  items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive() })).min(1).max(200).optional()
 });
 async function handler36(req, res) {
   try {
@@ -28122,11 +28138,24 @@ async function handler36(req, res) {
       if (body.billable_amount !== void 0) update.billable_amount = body.billable_amount;
       if (body.pull_declare_qty !== void 0) update.pull_declare_qty = body.pull_declare_qty;
       if (body.estimated_arrival !== void 0) update.estimated_arrival = body.estimated_arrival;
+      if (body.cargo_code !== void 0) update.cargo_code = body.cargo_code;
       const { data, error } = await supabase.from("shipments").update(update).eq("id", id).select().single();
       if (error) {
         if (error.code === "23503") throw Errors.conflict("\u5173\u8054\u7684\u8D27\u4EE3\u4E0D\u5B58\u5728");
         if (error.code === "PGRST116") throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
         throw error;
+      }
+      if (body.items && body.items.length > 0) {
+        const { error: delErr } = await supabase.from("shipment_items").delete().eq("shipment_id", id);
+        if (delErr) throw delErr;
+        const { error: insErr } = await supabase.from("shipment_items").insert(
+          body.items.map((it) => ({
+            shipment_id: id,
+            product_id: it.product_id,
+            quantity: it.quantity
+          }))
+        );
+        if (insErr) throw insErr;
       }
       await writeAudit(ctx, req, "update", "shipment", id, before, data);
       return res.status(200).json({ data });

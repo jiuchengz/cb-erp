@@ -140,7 +140,7 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/procurement', label: '采购', icon: ShoppingCart },
-      { path: '/transfers', label: '调拨', icon: Switch }
+      { path: '/transfers', label: '调拨发货', icon: Switch }
     ]
   },
   {

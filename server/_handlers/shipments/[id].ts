@@ -39,6 +39,9 @@ const updateSchema = z.object({
   billable_amount: z.union([z.null(), z.coerce.number()]).optional(),
   pull_declare_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
   estimated_arrival: z.string().max(32).nullable().optional(),
+  // 调拨发货管理字段
+  cargo_code: z.string().max(100).nullable().optional(),
+  items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive() })).min(1).max(200).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -102,12 +105,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.billable_amount !== undefined) update.billable_amount = body.billable_amount;
       if (body.pull_declare_qty !== undefined) update.pull_declare_qty = body.pull_declare_qty;
       if (body.estimated_arrival !== undefined) update.estimated_arrival = body.estimated_arrival;
+      if (body.cargo_code !== undefined) update.cargo_code = body.cargo_code;
 
       const { data, error } = await supabase.from('shipments').update(update).eq('id', id).select().single();
       if (error) {
         if (error.code === '23503') throw Errors.conflict('关联的货代不存在');
         if (error.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw error;
+      }
+
+      // 明细整体替换：先删旧明细，再插入新明细
+      if (body.items && body.items.length > 0) {
+        const { error: delErr } = await supabase.from('shipment_items').delete().eq('shipment_id', id);
+        if (delErr) throw delErr;
+        const { error: insErr } = await supabase
+          .from('shipment_items')
+          .insert(
+            body.items.map((it) => ({
+              shipment_id: id,
+              product_id: it.product_id,
+              quantity: it.quantity,
+            }))
+          );
+        if (insErr) throw insErr;
       }
 
       await writeAudit(ctx, req, 'update', 'shipment', id, before, data);

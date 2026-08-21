@@ -38,6 +38,9 @@ const createSchema = z.object({
   actual_warehouse_qty: z.union([z.null(), z.coerce.number().nonnegative()]).optional(),
   abnormal_penalty: z.string().max(500).nullable().optional(),
   appointment_time: z.string().max(32).nullable().optional(),
+  // 调拨发货管理字段
+  cargo_code: z.string().max(100).nullable().optional(),
+  source: z.enum(['manual', 'transfer']).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -49,11 +52,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'shipment.read');
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query: any = supabase.from('shipments').select('*, forwarders(name)', { count: 'exact' });
+      const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
+      let select = '*, forwarders(name)';
+      if (source) select += ', shipment_items(quantity)';
+      let query: any = supabase.from('shipments').select(select, { count: 'exact' });
+      if (source) query = query.eq('source', source);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       const cargoStatus = typeof req.query.cargo_status === 'string' ? req.query.cargo_status.trim() : '';
       if (cargoStatus) query = query.eq('cargo_status', cargoStatus);
+      const trackingNo = typeof req.query.tracking_no === 'string' ? req.query.tracking_no.trim() : '';
+      if (trackingNo) query = query.ilike('tracking_no', `%${trackingNo}%`);
+      const shippingMode = typeof req.query.shipping_mode === 'string' ? req.query.shipping_mode.trim() : '';
+      if (shippingMode) query = query.eq('shipping_mode', shippingMode);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -90,6 +101,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           actual_warehouse_qty: body.actual_warehouse_qty ?? null,
           abnormal_penalty: body.abnormal_penalty ?? null,
           appointment_time: body.appointment_time ?? null,
+          cargo_code: body.cargo_code ?? null,
+          source: body.source ?? 'manual',
           created_by: ctx.userId,
         })
         .select()
