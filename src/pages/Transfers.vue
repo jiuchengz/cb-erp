@@ -398,9 +398,14 @@ async function save() {
   }
   saving.value = true
   try {
+    const itemCount = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     await api.post('/shipments', {
       tracking_no: form.tracking_no.trim(),
       cargo_code: form.cargo_code.trim() || null,
+      // 同步写发货管理展示字段，保证发货管理列表可读
+      shipment_no: form.tracking_no.trim(),
+      product_code: form.cargo_code.trim() || null,
+      shipping_qty: itemCount,
       forwarder_id: form.forwarder_id,
       shipping_mode: form.shipping_mode,
       shipping_cartons: form.shipping_cartons ?? 0,
@@ -499,9 +504,14 @@ async function saveEdit() {
   }
   saving.value = true
   try {
+    const itemCount = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     await api.patch(`/shipments/${editingId.value}`, {
       tracking_no: editForm.tracking_no.trim(),
       cargo_code: editForm.cargo_code.trim() || null,
+      // 同步写发货管理展示字段
+      shipment_no: editForm.tracking_no.trim(),
+      product_code: editForm.cargo_code.trim() || null,
+      shipping_qty: itemCount,
       forwarder_id: editForm.forwarder_id,
       shipping_mode: editForm.shipping_mode,
       shipping_cartons: editForm.shipping_cartons ?? 0,
@@ -532,12 +542,12 @@ async function printWorkOrder(id: string) {
         const p = prod(it.product_id)
         const img = p?.image_text
         const imgHtml = img
-          ? `<img src="${img}" style="width:60px;height:60px;object-fit:contain;border:1px solid #ccc;border-radius:3px;background:#fff" onerror="this.style.display='none'" />`
+          ? `<img src="${img}" style="width:var(--img-size,60px);height:var(--img-size,60px);object-fit:contain;border:none;background:#fff" onerror="this.style.display='none'" />`
           : `<span style="color:#aaa">-</span>`
         return `
         <tr>
           <td>${i + 1}</td>
-          <td>${p?.code || pid}</td>
+          <td>${p?.code || it.product_id}</td>
           <td>${imgHtml}</td>
           <td>${p?.name || '-'}</td>
           <td>${p?.sku || '-'}</td>
@@ -554,8 +564,19 @@ async function printWorkOrder(id: string) {
 <title>发货工单 - ${d.tracking_no}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: "Microsoft YaHei", "SimSun", sans-serif; color: #000; padding: 24px; }
+  :root { --img-size: 60px; --zoom: 1; }
+  body { font-family: "Microsoft YaHei", "SimSun", sans-serif; color: #000; padding: 24px; zoom: var(--zoom); }
   h1 { text-align: center; font-size: 26px; letter-spacing: 12px; margin-bottom: 24px; font-weight: 700; }
+  .print-toolbar { position: fixed; top: 8px; right: 12px; z-index: 999; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .print-toolbar .btn { border: 1px solid #409EFF; background: #fff; color: #409EFF; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .print-toolbar .btn:hover { background: #ecf5ff; }
+  .print-toolbar .btn.print-btn { background: #409EFF; color: #fff; }
+  .print-toolbar .btn.print-btn:hover { background: #66b1ff; }
+  .print-panel { background: #fff; border: 1px solid #dcdfe6; border-radius: 6px; padding: 10px 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 12px; color: #333; display: none; width: 210px; }
+  .print-panel .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .print-panel .row:last-child { margin-bottom: 0; }
+  .print-panel input[type=range] { width: 110px; }
+  .print-panel .val { width: 46px; text-align: right; color: #409EFF; }
   .meta { border: 1.5px solid #000; margin-bottom: 16px; }
   .meta table { width: 100%; border-collapse: collapse; }
   .meta td { border: 1px solid #000; padding: 8px 12px; font-size: 14px; }
@@ -570,10 +591,20 @@ async function printWorkOrder(id: string) {
   @media print {
     @page { size: A4 portrait; margin: 15mm; }
     body { padding: 0; }
+    .print-toolbar, .print-panel { display: none !important; }
   }
 </style>
 </head>
 <body>
+  <div class="print-toolbar">
+    <button class="btn print-btn" onclick="window.print()">打印</button>
+    <button class="btn" onclick="togglePanel()">调整</button>
+    <div class="print-panel" id="panel">
+      <div class="row"><span>图片大小</span><input type="range" id="imgSize" min="30" max="120" value="60" oninput="applyAdjust()" /><span class="val" id="imgVal">60px</span></div>
+      <div class="row"><span>缩放比例</span><input type="range" id="zoomScale" min="70" max="150" value="100" oninput="applyAdjust()" /><span class="val" id="zoomVal">100%</span></div>
+      <div class="row"><button class="btn" onclick="resetAdjust()" style="width:100%">恢复默认</button></div>
+    </div>
+  </div>
   <h1>发货工单</h1>
   <div class="meta">
     <table>
@@ -617,6 +648,25 @@ async function printWorkOrder(id: string) {
     </table>
   </div>
   <div class="print-time">制单时间：${now}</div>
+<script>
+  function togglePanel() {
+    var p = document.getElementById('panel');
+    p.style.display = p.style.display === 'block' ? 'none' : 'block';
+  }
+  function applyAdjust() {
+    var img = document.getElementById('imgSize').value;
+    var zoom = document.getElementById('zoomScale').value;
+    document.getElementById('imgVal').textContent = img + 'px';
+    document.getElementById('zoomVal').textContent = zoom + '%';
+    document.documentElement.style.setProperty('--img-size', img + 'px');
+    document.documentElement.style.setProperty('--zoom', zoom / 100);
+  }
+  function resetAdjust() {
+    document.getElementById('imgSize').value = 60;
+    document.getElementById('zoomScale').value = 100;
+    applyAdjust();
+  }
+<\/script>
 </body>
 </html>`
     const w = window.open('', '_blank', 'width=900,height=900')

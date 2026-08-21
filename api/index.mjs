@@ -28080,6 +28080,7 @@ var updateSchema9 = external_exports.object({
   estimated_arrival: external_exports.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: external_exports.string().max(100).nullable().optional(),
+  tracking_no: external_exports.string().max(100).nullable().optional(),
   items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive() })).min(1).max(200).optional()
 });
 async function handler36(req, res) {
@@ -28114,6 +28115,7 @@ async function handler36(req, res) {
         }
         update.status = body.status;
       }
+      if (body.tracking_no !== void 0) update.tracking_no = body.tracking_no;
       if (body.forwarder_id !== void 0) update.forwarder_id = body.forwarder_id;
       if (body.cargo_status !== void 0) update.cargo_status = body.cargo_status;
       if (body.warehouse_status !== void 0) update.warehouse_status = body.warehouse_status;

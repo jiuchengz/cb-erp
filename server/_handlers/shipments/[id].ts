@@ -41,6 +41,7 @@ const updateSchema = z.object({
   estimated_arrival: z.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: z.string().max(100).nullable().optional(),
+  tracking_no: z.string().max(100).nullable().optional(),
   items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive() })).min(1).max(200).optional(),
 });
 
@@ -79,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         update.status = body.status;
       }
+      if (body.tracking_no !== undefined) update.tracking_no = body.tracking_no;
       if (body.forwarder_id !== undefined) update.forwarder_id = body.forwarder_id;
       if (body.cargo_status !== undefined) update.cargo_status = body.cargo_status;
       if (body.warehouse_status !== undefined) update.warehouse_status = body.warehouse_status;

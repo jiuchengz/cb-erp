@@ -64,12 +64,12 @@
       </el-table-column>
       <el-table-column label="货件号" min-width="150">
         <template #default="{ row }">
-          <span>{{ row.shipment_no || '-' }}</span>
+          <span>{{ row.shipment_no || row.tracking_no || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="货代号" min-width="120">
         <template #default="{ row }">
-          <span>{{ row.product_code || '-' }}</span>
+          <span>{{ row.product_code || row.cargo_code || '-' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="计费重量/体积" min-width="135">
@@ -862,8 +862,8 @@ function exportRows() {
     { key: 'warehouse_no', label: '仓号', value: (r: any) => r.warehouse_no || '' },
     { key: 'shipping_cartons', label: '发货箱数', value: (r: any) => r.shipping_cartons ?? '' },
     { key: 'shipping_qty', label: '发货数量', value: (r: any) => r.shipping_qty ?? '' },
-    { key: 'shipment_no', label: '货件号', value: (r: any) => r.shipment_no || '' },
-    { key: 'product_code', label: '货代号', value: (r: any) => r.product_code || '' },
+    { key: 'shipment_no', label: '货件号', value: (r: any) => r.shipment_no || r.tracking_no || '' },
+    { key: 'product_code', label: '货代号', value: (r: any) => r.product_code || r.cargo_code || '' },
     { key: 'billable_weight_vol', label: '计费重量/体积', value: (r: any) => r.billable_weight_vol || '' },
     { key: 'volume_diff', label: '体积差', value: (r: any) => r.volume_diff || '' },
     { key: 'billable_amount', label: '计费金额', value: (r: any) => r.billable_amount ?? '' },
