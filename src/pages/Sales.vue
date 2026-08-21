@@ -62,12 +62,14 @@
       当前范围共出单 {{ summary.rows }} 条，销售 {{ summary.sellQty }} / 退款 {{ summary.refundQty }}，实际销量 {{ summary.quantity }}
     </el-alert>
 
+    <div class="table-wrap">
     <el-table
       v-loading="loading"
       :data="pagedRows"
       border
       stripe
       @sort-change="onSortChange"
+      height="100%"
     >
       <el-table-column label="图片" width="70" align="center">
         <template #default="{ row }">
@@ -105,6 +107,7 @@
       </el-table-column>
       <el-table-column prop="days" label="出单天数" width="100" align="right" sortable="custom" />
     </el-table>
+    </div>
 
     <el-pagination
       background
@@ -610,6 +613,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.table-wrap :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
 .page-header {
   display: flex;
   justify-content: space-between;

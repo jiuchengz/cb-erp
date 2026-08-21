@@ -19,7 +19,8 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+    <div class="table-wrap">
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="order_no" label="售后单号" min-width="160" />
       <el-table-column label="类型" width="100">
@@ -66,6 +67,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       background
@@ -793,6 +795,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.table-wrap :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
 .page-header {
   display: flex;
   justify-content: space-between;

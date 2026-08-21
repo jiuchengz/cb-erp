@@ -28,7 +28,8 @@
           <el-button type="primary" @click="load">查询</el-button>
         </div>
 
-        <el-table v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName">
+        <div class="table-wrap">
+        <el-table v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName" height="100%">
           <el-table-column label="SKU" min-width="140">
             <template #default="{ row }">{{ row.products?.sku }}</template>
           </el-table-column>
@@ -49,6 +50,7 @@
             <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
           </el-table-column>
         </el-table>
+        </div>
 
         <el-pagination
           background
@@ -576,6 +578,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.table-wrap :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
 .page-header {
   display: flex;
   justify-content: space-between;

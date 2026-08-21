@@ -23,7 +23,8 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange">
+    <div class="table-wrap">
+    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="email" label="邮箱" min-width="200" />
       <el-table-column prop="name" label="姓名" min-width="140" />
@@ -47,6 +48,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       background
@@ -284,6 +286,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.table-wrap :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
 .page-header {
   display: flex;
   justify-content: space-between;
