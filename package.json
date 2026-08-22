@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:api": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=api/index.mjs --log-level=warning",
+    "build:api": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=api/index.mjs --banner:js=\"import { createRequire as __createRequire } from 'module'; const require = __createRequire(import.meta.url);\" --log-level=warning",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit"
   },
