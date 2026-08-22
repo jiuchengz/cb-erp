@@ -121,8 +121,17 @@
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable placeholder="产品编码 / SKU" style="flex: 1">
-                <el-option v-for="p in products" :key="p.id" :label="`${productCode(p)} - ${p.name}`" :value="p.id" />
+              <el-select v-model="it.product_id" filterable :filter-method="filterProduct" placeholder="输入编码 / 中文名称搜索" style="flex: 1">
+                <template #prefix>
+                  <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
+                </template>
+                <el-option v-for="p in products" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
+                  <div class="opt-line">
+                    <span class="opt-code">{{ productCode(p) }}</span>
+                    <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
+                    <span class="opt-name">{{ p.name }}</span>
+                  </div>
+                </el-option>
               </el-select>
               <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 150px" />
               <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
@@ -151,8 +160,17 @@
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
       <el-table v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column label="产品编码" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ productInfo(row.product_id) }}</template>
+        <el-table-column label="产品编码" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column label="图片" width="80" align="center">
+          <template #default="{ row }">
+            <img v-if="isImageUrl(imgOf(row.product_id))" :src="imgOf(row.product_id)" class="detail-thumb" />
+            <span v-else class="muted-thumb">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="中文名称" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
         </el-table-column>
         <el-table-column label="数量" width="100" align="right">
           <template #default="{ row }">{{ row.quantity }}</template>
@@ -211,8 +229,17 @@
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in editForm.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable placeholder="产品编码 / SKU" style="flex: 1">
-                <el-option v-for="p in products" :key="p.id" :label="`${productCode(p)} - ${p.name}`" :value="p.id" />
+              <el-select v-model="it.product_id" filterable :filter-method="filterProduct" placeholder="输入编码 / 中文名称搜索" style="flex: 1">
+                <template #prefix>
+                  <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
+                </template>
+                <el-option v-for="p in products" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
+                  <div class="opt-line">
+                    <span class="opt-code">{{ productCode(p) }}</span>
+                    <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
+                    <span class="opt-name">{{ p.name }}</span>
+                  </div>
+                </el-option>
               </el-select>
               <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 150px" />
               <el-button link type="danger" @click="removeEditItem(idx)">删除</el-button>
@@ -287,9 +314,34 @@ const products = ref<any[]>([])
 function productCode(p: any) {
   return p.code || p.sku || p.id
 }
+// 商品下拉自定义过滤：支持输入部分编码 / SKU / 条形码 / 中文名称进行模糊搜索
+function filterProduct(query: string, option: any) {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return true
+  const p = products.value.find((x) => x.id === option.value)
+  if (!p) return false
+  const haystack = [p.code, p.sku, p.barcode, p.name].filter(Boolean).join(' ').toLowerCase()
+  return haystack.includes(q)
+}
 function productInfo(pid: string) {
   const p = products.value.find((x) => x.id === pid)
   return p ? `${productCode(p)} - ${p.name}` : pid
+}
+function productCodeOf(pid: string) {
+  const p = products.value.find((x) => x.id === pid)
+  return p ? productCode(p) : pid
+}
+function productNameOf(pid: string) {
+  const p = products.value.find((x) => x.id === pid)
+  return p ? p.name : '-'
+}
+function imgOf(pid: string) {
+  const p = products.value.find((x) => x.id === pid)
+  return p?.image_text || ''
+}
+function isImageUrl(v: unknown): boolean {
+  if (typeof v !== 'string' || !v) return false
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:image/')
 }
 
 const cargoStatuses = ref<any[]>([])
@@ -718,20 +770,71 @@ async function batchRemove() {
 
 const exporting = ref(false)
 function exportRows() {
+  // 仅导出勾选的行，未勾选不导出；数据与打印工单一致（明细展开）
+  if (!selected.value.length) {
+    ElMessage.warning('请先勾选要导出的行')
+    return
+  }
+  const targets = selected.value
+  const out: any[] = []
+  const prod = (pid: string) => products.value.find((x) => x.id === pid)
+  for (const r of targets) {
+    const items = r.shipment_items || []
+    if (!items.length) {
+      out.push({
+        货件号: r.tracking_no,
+        货代号: r.cargo_code,
+        货代: forwarderName(r.forwarder_id),
+        运输方式: r.shipping_mode,
+        箱数: r.shipping_cartons,
+        发货时间: r.ship_date,
+        货物状态: r.cargo_status,
+        产品编码: '',
+        图片: '',
+        产品中文名称: '',
+        SKU: '',
+        条形码: '',
+        数量: '',
+      })
+      continue
+    }
+    for (const it of items) {
+      const p = prod(it.product_id)
+      out.push({
+        货件号: r.tracking_no,
+        货代号: r.cargo_code,
+        货代: forwarderName(r.forwarder_id),
+        运输方式: r.shipping_mode,
+        箱数: r.shipping_cartons,
+        发货时间: r.ship_date,
+        货物状态: r.cargo_status,
+        产品编码: p ? productCode(p) : it.product_id,
+        图片: p?.image_text || '',
+        产品中文名称: p?.name || '',
+        SKU: p?.sku || '',
+        条形码: p?.barcode || '',
+        数量: it.quantity,
+      })
+    }
+  }
   const columns = [
-    { key: 'tracking_no', label: '货件号' },
-    { key: 'cargo_code', label: '货代号' },
-    { key: 'forwarder_id', label: '货代', value: (r: any) => forwarderName(r.forwarder_id) },
-    { key: 'shipping_mode', label: '空海运' },
-    { key: 'shipping_cartons', label: '箱数' },
-    { key: 'total_qty', label: '总数', value: (r: any) => totalQty(r) },
-    { key: 'ship_date', label: '发货时间' },
-    { key: 'cargo_status', label: '货物状态' },
-    { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
+    { key: '货件号', label: '货件号' },
+    { key: '货代号', label: '货代号' },
+    { key: '货代', label: '货代' },
+    { key: '运输方式', label: '运输方式' },
+    { key: '箱数', label: '箱数' },
+    { key: '发货时间', label: '发货时间' },
+    { key: '货物状态', label: '货物状态' },
+    { key: '产品编码', label: '产品编码' },
+    { key: '图片', label: '图片' },
+    { key: '产品中文名称', label: '产品中文名称' },
+    { key: 'SKU', label: 'SKU' },
+    { key: '条形码', label: '条形码' },
+    { key: '数量', label: '数量' },
   ]
   exporting.value = true
   try {
-    exportTable(rows.value, columns, `调拨发货_${todayStr()}.xlsx`)
+    exportTable(out, columns, `调拨发货_${todayStr()}.xlsx`)
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {
@@ -789,5 +892,52 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 13px;
   color: #606266;
+}
+.sel-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+.opt-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.opt-code {
+  min-width: 90px;
+  font-size: 12px;
+  color: #606266;
+  font-family: Consolas, monospace;
+  flex-shrink: 0;
+}
+.opt-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.opt-name {
+  font-size: 13px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: inline-block;
+}
+.muted-thumb {
+  color: #c0c4cc;
+  font-size: 12px;
 }
 </style>
