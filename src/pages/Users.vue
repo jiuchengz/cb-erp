@@ -96,7 +96,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { exportTable, todayStr } from '../utils/export'
+import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.hasPermission('user.manage'))
@@ -227,7 +227,7 @@ function onSelectionChange(rows: any[]) {
 }
 
 const exporting = ref(false)
-function exportRows() {
+async function exportRows() {
   const columns = [
     { key: 'email', label: '邮箱' },
     { key: 'name', label: '姓名' },
@@ -241,7 +241,7 @@ function exportRows() {
   ]
   exporting.value = true
   try {
-    exportTable(rows.value, columns, `用户列表_${todayStr()}.xlsx`)
+    await exportViaServer(`用户列表_${todayStr()}.xlsx`, buildExportPayload({ rows: rows.value, columns }))
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {

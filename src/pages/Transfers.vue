@@ -3,7 +3,15 @@
     <div class="page-header">
       <h2>调拨发货管理</h2>
       <div>
-        <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-dropdown v-if="canWrite" trigger="click" @command="onExportCmd">
+          <el-button :loading="exporting">导出<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="images">导出（带图片）</el-dropdown-item>
+              <el-dropdown-item command="links">导出（仅链接）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
@@ -262,7 +270,8 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { exportTable, todayStr } from '../utils/export'
+import { ArrowDown } from '@element-plus/icons-vue'
+import { exportViaServer, todayStr } from '../utils/export'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('shipment.write'))
@@ -769,72 +778,69 @@ async function batchRemove() {
 }
 
 const exporting = ref(false)
-function exportRows() {
-  // 仅导出勾选的行，未勾选不导出；数据与打印工单一致（明细展开）
+function onExportCmd(cmd: string) {
+  exportRows(cmd === 'images')
+}
+async function exportRows(withImages = false) {
+  // 仅导出勾选的行，未勾选不导出；布局与打印工单一致：货件信息区 + 明细表 + 合计行
   if (!selected.value.length) {
     ElMessage.warning('请先勾选要导出的行')
     return
   }
   const targets = selected.value
-  const out: any[] = []
   const prod = (pid: string) => products.value.find((x) => x.id === pid)
-  for (const r of targets) {
-    const items = r.shipment_items || []
-    if (!items.length) {
-      out.push({
-        货件号: r.tracking_no,
-        货代号: r.cargo_code,
-        货代: forwarderName(r.forwarder_id),
-        运输方式: r.shipping_mode,
-        箱数: r.shipping_cartons,
-        发货时间: r.ship_date,
-        货物状态: r.cargo_status,
-        产品编码: '',
-        图片: '',
-        产品中文名称: '',
-        SKU: '',
-        条形码: '',
-        数量: '',
-      })
-      continue
-    }
-    for (const it of items) {
-      const p = prod(it.product_id)
-      out.push({
-        货件号: r.tracking_no,
-        货代号: r.cargo_code,
-        货代: forwarderName(r.forwarder_id),
-        运输方式: r.shipping_mode,
-        箱数: r.shipping_cartons,
-        发货时间: r.ship_date,
-        货物状态: r.cargo_status,
-        产品编码: p ? productCode(p) : it.product_id,
-        图片: p?.image_text || '',
-        产品中文名称: p?.name || '',
-        SKU: p?.sku || '',
-        条形码: p?.barcode || '',
-        数量: it.quantity,
-      })
-    }
+  const aoa: any[][] = []
+  const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = []
+  const imageCells: { r: number; c: number; url: string }[] = []
+  let r = 0
+  const push = (row: any[]) => {
+    aoa.push(row)
+    r++
   }
-  const columns = [
-    { key: '货件号', label: '货件号' },
-    { key: '货代号', label: '货代号' },
-    { key: '货代', label: '货代' },
-    { key: '运输方式', label: '运输方式' },
-    { key: '箱数', label: '箱数' },
-    { key: '发货时间', label: '发货时间' },
-    { key: '货物状态', label: '货物状态' },
-    { key: '产品编码', label: '产品编码' },
-    { key: '图片', label: '图片' },
-    { key: '产品中文名称', label: '产品中文名称' },
-    { key: 'SKU', label: 'SKU' },
-    { key: '条形码', label: '条形码' },
-    { key: '数量', label: '数量' },
-  ]
+  const meta = (label1: string, v1: unknown, label2: string, v2: unknown) => {
+    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', ''])
+    r++
+  }
+  targets.forEach((ship, idx) => {
+    if (idx > 0) {
+      push([])
+    }
+    meta('货件号', ship.tracking_no, '货代号', ship.cargo_code)
+    meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
+    meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
+    const statusRow = r
+    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', ''])
+    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 5 } })
+    r++
+    push([])
+    aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '数量'])
+    r++
+    const items = ship.shipment_items || []
+    items.forEach((it: any, i: number) => {
+      const p = prod(it.product_id)
+      const img = p?.image_text || ''
+      if (withImages && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'))) {
+        imageCells.push({ r, c: 2, url: img })
+        aoa.push([i + 1, p ? productCode(p) : it.product_id, '', p?.name || '', p?.sku || '', p?.barcode || '', it.quantity])
+      } else {
+        aoa.push([i + 1, p ? productCode(p) : it.product_id, img, p?.name || '', p?.sku || '', p?.barcode || '', it.quantity])
+      }
+      r++
+    })
+    const total = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
+    const sumRow = r
+    aoa.push(['合计数量（总数）', '', '', '', '', '', total])
+    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 5 } })
+    r++
+  })
   exporting.value = true
   try {
-    exportTable(out, columns, `调拨发货_${todayStr()}.xlsx`)
+    await exportViaServer(
+      `调拨发货_${todayStr()}.xlsx`,
+      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 8 }], imageCells },
+      withImages,
+      '调拨发货'
+    )
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {

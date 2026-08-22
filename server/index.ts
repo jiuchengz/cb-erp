@@ -2,6 +2,7 @@
 import authMe from './_handlers/auth';
 import authPassword from './_handlers/auth/password';
 import authLogin from './_handlers/auth/login';
+import exportXlsx from './_handlers/export-xlsx';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
 import dbUsage from './_handlers/db-usage';
@@ -89,6 +90,7 @@ const routes: Route[] = [
   { pattern: /^\/transfers$/, handler: transfers },
   { pattern: /^\/users\/([^/]+)$/, handler: usersId, params: ['id'] },
   { pattern: /^\/users$/, handler: users },
+  { pattern: /^\/export\/xlsx$/, handler: exportXlsx },
   { pattern: /^\/warehouses\/([^/]+)$/, handler: warehousesId, params: ['id'] },
   { pattern: /^\/warehouses$/, handler: warehouses },
 ];

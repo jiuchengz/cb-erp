@@ -9,7 +9,15 @@
       </div>
       <div>
         <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
-        <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
+        <el-dropdown v-if="canWrite" trigger="click" @command="onExportCmd">
+          <el-button :loading="exporting">导出<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="images">导出（带图片）</el-dropdown-item>
+              <el-dropdown-item command="links">导出（仅链接）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button v-if="canDelete" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
@@ -258,7 +266,7 @@ import { useRoute } from 'vue-router'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
-import { exportTable, todayStr } from '../utils/export'
+import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, extractFloatingImages, compressImageDataUrl } from '../utils/import'
 import { addLog } from '../utils/log'
 
@@ -578,7 +586,11 @@ function onSelectionChange(rows: Product[]) {
 }
 
 const exporting = ref(false)
-function exportRows() {
+function onExportCmd(cmd: string) {
+  exportRows(cmd === 'images')
+}
+
+async function exportRows(withImages = false) {
   const columns = [
     { key: 'sku', label: 'SKU' },
     { key: 'code', label: '产品编号' },
@@ -605,7 +617,7 @@ function exportRows() {
     },
     {
       key: 'image_text',
-      label: '图片链接',
+      label: '图片',
       value: (r: Product) => (isImageUrl(r.image_text) ? r.image_text : ''),
     },
     {
@@ -616,7 +628,13 @@ function exportRows() {
   ]
   exporting.value = true
   try {
-    exportTable(rows.value, columns, `商品列表_${todayStr()}.xlsx`)
+    const payload = buildExportPayload({
+      rows: rows.value,
+      columns,
+      withImages,
+      imageKeys: ['image_text'],
+    })
+    await exportViaServer(`商品列表_${todayStr()}.xlsx`, payload, withImages)
     addLog('info', '导出商品', `共 ${rows.value.length} 条`)
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')

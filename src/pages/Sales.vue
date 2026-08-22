@@ -127,7 +127,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { exportTable, todayStr } from '../utils/export'
+import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
 const auth = useAuthStore()
@@ -576,7 +576,7 @@ async function onImportFile(e: Event) {
 }
 
 const exporting = ref(false)
-function exportRows() {
+async function exportRows() {
   const columns = [
     { key: 'link_id', label: '链接ID', value: (r: any) => r.link_id || '' },
     { key: 'product_name', label: '产品名称', value: (r: any) => r.product_name || '' },
@@ -599,7 +599,7 @@ function exportRows() {
   ]
   exporting.value = true
   try {
-    exportTable(aggRows.value, columns, `销售统计_${todayStr()}.xlsx`)
+    await exportViaServer(`销售统计_${todayStr()}.xlsx`, buildExportPayload({ rows: aggRows.value, columns }))
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {

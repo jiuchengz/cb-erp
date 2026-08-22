@@ -298,7 +298,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
-import { exportTable, todayStr } from '../utils/export'
+import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('after_sales.write'))
@@ -739,7 +739,7 @@ async function saveResult(row: any) {
 }
 
 const exporting = ref(false)
-function exportRows() {
+async function exportRows() {
   const columns = [
     { key: 'order_no', label: '售后单号' },
     { key: 'type', label: '类型', value: (r: any) => typeLabel(r.type) },
@@ -752,7 +752,7 @@ function exportRows() {
   ]
   exporting.value = true
   try {
-    exportTable(rows.value, columns, `售后列表_${todayStr()}.xlsx`)
+    await exportViaServer(`售后列表_${todayStr()}.xlsx`, buildExportPayload({ rows: rows.value, columns }))
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {
