@@ -22,6 +22,7 @@ import warehouses from './_handlers/warehouses';
 import dailySales from './_handlers/daily-sales';
 import analysis from './_handlers/analysis';
 import dashboard from './_handlers/dashboard';
+import systemSettings from './_handlers/system-settings';
 import forwarders from './_handlers/forwarders';
 import forwardersId from './_handlers/forwarders/[id]';
 import cargoStatuses from './_handlers/cargo-statuses';
@@ -66,6 +67,7 @@ const routes: Route[] = [
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },
   { pattern: /^\/after-sales$/, handler: afterSales },
   { pattern: /^\/audit-logs$/, handler: auditLogs },
+  { pattern: /^\/system-settings$/, handler: systemSettings },
   { pattern: /^\/db-usage$/, handler: dbUsage },
   { pattern: /^\/inventory\/adjust$/, handler: inventoryAdjust },
   { pattern: /^\/inventory\/transactions$/, handler: inventoryTransactions },

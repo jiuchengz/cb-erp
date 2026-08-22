@@ -1,7 +1,59 @@
 <template>
   <div class="page">
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane label="界面外观" name="appearance">
+            <el-tab-pane label="系统设置" name="system">
+        <div class="page-header">
+          <h2>系统设置</h2>
+          <el-button v-if="canManage" type="primary" :loading="sysSaving" @click="saveSystemSettings">保存设置</el-button>
+        </div>
+        <div class="appearance-card">
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">默认时区</div>
+              <div class="appearance-desc">全系统时间、日期、统计均按此默认时区显示；当前默认：墨西哥城 (UTC-6)</div>
+            </div>
+            <div class="appearance-control">
+              <el-select v-model="sysForm.default_timezone" filterable placeholder="选择默认时区" style="width: 280px">
+                <el-option v-for="tz in timezoneOptions" :key="tz.tz" :label="tz.label + '（' + tz.country + '）'" :value="tz.tz">
+                  <span>{{ tz.label }}</span>&nbsp;
+                  <span style="color: #999">{{ tz.country }}</span>
+                </el-option>
+              </el-select>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">默认币种</div>
+              <div class="appearance-desc">全系统金额显示与新增单据的默认币种；当前默认：MXN（墨西哥比索）</div>
+            </div>
+            <div class="appearance-control">
+              <el-select v-model="sysForm.default_currency" filterable placeholder="选择默认币种" style="width: 280px">
+                <el-option v-for="cur in currencyOptions" :key="cur.code" :label="cur.code + '（' + cur.name + '）'" :value="cur.code">
+                  <span>{{ cur.code }}</span>&nbsp;
+                  <span style="color: #999">{{ cur.name }}</span>
+                </el-option>
+              </el-select>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">回收站（软删除）</div>
+              <div class="appearance-desc">开启后，商品、单据等删除操作将先进入回收站，可恢复，降低误删风险</div>
+            </div>
+            <div class="appearance-control">
+              <el-switch v-model="sysForm.soft_delete_enabled" active-text="开启" inactive-text="关闭" />
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
+<el-tab-pane label="界面外观" name="appearance">
         <div class="page-header">
           <h2>界面外观</h2>
         </div>
@@ -333,12 +385,13 @@ function formatDate(v: string) {
   return new Date(v).toLocaleString('zh-CN', { hour12: false })
 }
 
-const activeTab = ref('roles')
+const activeTab = ref('system')
 function onTabChange(name: string | number) {
   if (name === 'permissions') loadPermissions()
   if (name === 'warehouses') loadWarehouses()
   if (name === 'usage') loadDbUsage()
   if (name === 'audit') loadAudit()
+  if (name === 'system') loadSystemSettings()
 }
 
 /* ---------- 数据库用量 ---------- */
@@ -763,6 +816,56 @@ function loadAppearance() {
     }
   } catch {
     /* ignore */
+  }
+}
+
+/* ---------- 系统设置（默认时区 / 默认币种 / 回收站） ---------- */
+const timezoneOptions = ref<any[]>([])
+const currencyOptions = ref<any[]>([])
+const sysForm = reactive({
+  default_timezone: 'America/Mexico_City',
+  default_currency: 'MXN',
+  soft_delete_enabled: false,
+})
+const sysSaving = ref(false)
+
+async function loadSystemSettings() {
+  try {
+    const { data } = await api.get('/system-settings')
+    const d = data?.data || {}
+    timezoneOptions.value = d.timezones || []
+    currencyOptions.value = d.currencies || []
+    const settings = d.settings || {}
+    const tz = settings.default_timezone
+    const cur = settings.default_currency
+    if (tz?.tz) sysForm.default_timezone = tz.tz
+    if (cur?.code) sysForm.default_currency = cur.code
+    if (settings.soft_delete_enabled) sysForm.soft_delete_enabled = !!settings.soft_delete_enabled?.enabled
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '系统设置加载失败')
+  }
+}
+
+async function saveSystemSettings() {
+  if (!canManage.value) return
+  sysSaving.value = true
+  try {
+    const { data } = await api.put('/system-settings', {
+      default_timezone: sysForm.default_timezone,
+      default_currency: sysForm.default_currency,
+      soft_delete_enabled: sysForm.soft_delete_enabled,
+    })
+    const d = data?.data || {}
+    const settings = d.settings || {}
+    const tz = settings.default_timezone
+    const cur = settings.default_currency
+    if (tz?.tz) sysForm.default_timezone = tz.tz
+    if (cur?.code) sysForm.default_currency = cur.code
+    ElMessage.success('系统设置已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '系统设置保存失败')
+  } finally {
+    sysSaving.value = false
   }
 }
 
