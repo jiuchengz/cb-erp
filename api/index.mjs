@@ -103198,7 +103198,9 @@ async function handler24(req, res) {
           })
         );
       }
-      await Promise.all(writes);
+      const results = await Promise.all(writes);
+      const writeErr = results.find((r) => r && r.error);
+      if (writeErr) throw new Error("\u4FDD\u5B58\u7CFB\u7EDF\u8BBE\u7F6E\u5931\u8D25: " + writeErr.error.message);
       await writeAudit(ctx, req, "update", "system_settings", null, null, { ...body });
       const { data, error } = await supabase.from("system_settings").select("*");
       if (error) throw error;

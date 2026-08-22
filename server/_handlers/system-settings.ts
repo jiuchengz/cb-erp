@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       const body = parse(schema, req.body || {});
       const userId = ctx.userId || null;
-      const writes: Promise<unknown>[] = [];
+      const writes: Promise<{ error: { message: string } | null }>[] = [];
       if (body.default_timezone !== undefined) {
         const tz = TIMEZONES.find((t) => t.tz === body.default_timezone);
         if (!tz) throw new Error('Unsupported timezone: ' + body.default_timezone);
@@ -114,7 +114,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
         );
       }
-      await Promise.all(writes);
+      const results = await Promise.all(writes);
+      const writeErr = results.find((r) => r && r.error);
+      if (writeErr) throw new Error('保存系统设置失败: ' + writeErr.error.message);
       await writeAudit(ctx, req, 'update', 'system_settings', null, null, { ...body });
       const { data, error } = await supabase.from('system_settings').select('*');
       if (error) throw error;
