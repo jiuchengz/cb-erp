@@ -40,7 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select(
           '*, sales_order_items(product_id, sku, product_name, quantity, unit_price, discount, subtotal, products(id, sku, code, name, link_id, image_text, purchase_cost))',
           { count: 'exact' }
-        );
+        )
+        .is('deleted_at', null);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       const orderNo = typeof req.query.order_no === 'string' ? req.query.order_no.trim() : '';
       const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
@@ -51,6 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('products')
           .select('id')
           .or(`link_id.ilike.%${keyword}%,name.ilike.%${keyword}%`)
+          .is('deleted_at', null)
           .limit(500);
         const productIds = (matchedProducts || []).map((p: any) => p.id);
         let orderIds: string[] = [];
@@ -80,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
 
       const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
-      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name').in('id', prodIds);
+      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name').in('id', prodIds).is('deleted_at', null);
       if (prodErr) throw prodErr;
       const skuMap: Record<string, { sku: string; name: string }> = {};
       (prods || []).forEach((p: any) => { skuMap[p.id] = { sku: p.sku, name: p.name }; });

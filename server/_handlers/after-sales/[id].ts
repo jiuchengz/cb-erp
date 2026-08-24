@@ -50,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('after_sales')
         .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
       if (error) {
         if (error.code === 'PGRST116') throw Errors.notFound('售后单不存在');
@@ -64,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('after_sales')
         .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
@@ -151,7 +153,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
         throw getErr;
       }
-      const { error } = await supabase.from('after_sales').delete().eq('id', id);
+      // 软删除：置 deleted_at，数据进入回收站
+      const { error } = await supabase.from('after_sales').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       await writeAudit(ctx, req, 'delete', 'after_sale', id, before, null);
       return res.status(200).json({ ok: true });

@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getAdminClient();
 
     const countAll = async (table: string) => {
-      const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
+      const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true }).is('deleted_at', null);
       if (error) throw error;
       return count ?? 0;
     };
@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         supabase
           .from('shipments')
           .select('id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)')
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(5),
       ]);

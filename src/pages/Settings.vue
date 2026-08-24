@@ -375,14 +375,14 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
+import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const canManage = computed(() => auth.hasPermission('system.manage'))
 
 function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return sysFormatDateTime(v)
 }
 
 const activeTab = ref('system')

@@ -161,11 +161,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ---------- 2. shipments：发货量 / 发货趋势 / 在途 / 发货量TOP ----------
     const shipSelect = 'ship_date, shipping_qty, cargo_status, source, shipment_no, product_code, shipment_items(product_id, quantity), forwarders(name)';
     const [curShipments, prevShipments, inTransitRows, domShipItems] = await Promise.all([
-      supabase.from('shipments').select('ship_date, shipping_qty').gte('ship_date', start).lte('ship_date', end),
-      supabase.from('shipments').select('ship_date, shipping_qty').gte('ship_date', prevStart).lte('ship_date', prevEnd),
+      supabase.from('shipments').select('ship_date, shipping_qty').is('deleted_at', null).gte('ship_date', start).lte('ship_date', end),
+      supabase.from('shipments').select('ship_date, shipping_qty').is('deleted_at', null).gte('ship_date', prevStart).lte('ship_date', prevEnd),
       supabase
         .from('shipments')
         .select(shipSelect)
+        .is('deleted_at', null)
         .eq('source', 'transfer')
         .neq('cargo_status', '已入仓')
         .order('created_at', { ascending: false })
@@ -173,6 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       supabase
         .from('shipment_items')
         .select('product_id, quantity, shipments!inner(ship_date)')
+        .is('shipments.deleted_at', null)
         .gte('shipments.ship_date', start)
         .lte('shipments.ship_date', end),
     ]);
@@ -216,7 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- 3. products + 国内库存 ----------
     const [productsRows, domInvRows] = await Promise.all([
-      supabase.from('products').select('id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text'),
+      supabase.from('products').select('id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text').is('deleted_at', null),
       supabase
         .from('inventory')
         .select('product_id, quantity, created_at, warehouses!inner(wh_type)')
@@ -322,9 +324,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const prevAfterFrom = prevStart + 'T00:00:00';
     const prevAfterTo = prevEnd + 'T23:59:59';
     const [afterRows, afterTrendRows, prevAfterRows] = await Promise.all([
-      supabase.from('after_sales').select('created_at, reason').gte('created_at', afterFrom).lte('created_at', afterTo),
-      supabase.from('after_sales').select('created_at').gte('created_at', afterFrom).lte('created_at', afterTo),
-      supabase.from('after_sales').select('created_at').gte('created_at', prevAfterFrom).lte('created_at', prevAfterTo),
+      supabase.from('after_sales').select('created_at, reason').is('deleted_at', null).gte('created_at', afterFrom).lte('created_at', afterTo),
+      supabase.from('after_sales').select('created_at').is('deleted_at', null).gte('created_at', afterFrom).lte('created_at', afterTo),
+      supabase.from('after_sales').select('created_at').is('deleted_at', null).gte('created_at', prevAfterFrom).lte('created_at', prevAfterTo),
     ]);
     if (afterRows.error) throw afterRows.error;
     if (afterTrendRows.error) throw afterTrendRows.error;

@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'shipment.read');
-      const { data, error } = await supabase.from('shipments').select('*, forwarders(name), shipment_items(*)').eq('id', id).single();
+      const { data, error } = await supabase.from('shipments').select('*, forwarders(name), shipment_items(*)').eq('id', id).is('deleted_at', null).single();
       if (error) {
         if (error.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw error;
@@ -66,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'shipment.write');
       const body = parse(updateSchema, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest('无更新字段');
-      const { data: before, error: getErr } = await supabase.from('shipments').select('*, forwarders(name), shipment_items(*)').eq('id', id).single();
+      const { data: before, error: getErr } = await supabase.from('shipments').select('*, forwarders(name), shipment_items(*)').eq('id', id).is('deleted_at', null).single();
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw getErr;
@@ -143,7 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw getErr;
       }
-      const { error } = await supabase.from('shipments').delete().eq('id', id);
+      // 软删除：置 deleted_at，数据进入回收站
+      const { error } = await supabase.from('shipments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       await writeAudit(ctx, req, 'delete', 'shipment', id, before, null);
       return res.status(200).json({ ok: true });

@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('shipments')
       .select('*, shipment_items(*)')
       .eq('id', id)
+      .is('deleted_at', null)
       .single();
     if (shipErr || !shipment) {
       throw Errors.notFound('发货单不存在');
@@ -41,7 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: products, error: prodErr } = await supabase
       .from('products')
       .select('id, link_id, overseas_stock')
-      .in('id', productIds);
+      .in('id', productIds)
+      .is('deleted_at', null);
     if (prodErr) throw prodErr;
 
     // 2. 汇总本货件涉及的有 link_id 产品

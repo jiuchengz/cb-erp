@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
       let select = '*, forwarders(name)';
       if (source) select += ', shipment_items(quantity)';
-      let query: any = supabase.from('shipments').select(select, { count: 'exact' });
+      let query: any = supabase.from('shipments').select(select, { count: 'exact' }).is('deleted_at', null);
       if (source) query = query.eq('source', source);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);

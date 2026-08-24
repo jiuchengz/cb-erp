@@ -32,7 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       let query: any = supabase
         .from('replenishment_orders')
-        .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))', { count: 'exact' });
+        .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))', { count: 'exact' })
+        .is('deleted_at', null);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status === 'PROCESSING') {
         // 采购中：兼容存量 DRAFT/SUBMITTED/APPROVED/PROCESSING 各状态
@@ -57,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('purchase_orders')
           .select('receive_date, purchase_order_items(product_id, quantity)')
           .in('status', ['ARRIVED', 'RECEIVED'])
+          .is('deleted_at', null)
           .not('receive_date', 'is', null);
         if (purchaseErr) throw purchaseErr;
         for (const po of purchaseRows || []) {

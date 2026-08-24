@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const salesTo = typeof req.query.sales_to === 'string' && req.query.sales_to.trim() ? req.query.sales_to.trim() : '';
 
       const supabase = getAdminClient();
-      let query: any = supabase.from('products').select('*', { count: 'exact' });
+      let query: any = supabase.from('products').select('*', { count: 'exact' }).is('deleted_at', null);
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
@@ -168,6 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('products')
           .select('id')
           .eq('code', body.code)
+          .is('deleted_at', null)
           .limit(1);
         if (dup && dup.length) throw Errors.conflict(`产品编码已存在：${body.code}`);
       }

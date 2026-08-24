@@ -27,12 +27,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: before, error: selErr } = await supabase
       .from('products')
       .select('id, sku, name')
-      .in('id', ids);
+      .in('id', ids)
+      .is('deleted_at', null);
     if (selErr) throw selErr;
     const found = before || [];
     const foundIds = found.map((p: any) => p.id);
     if (foundIds.length) {
-      const { error: delErr } = await supabase.from('products').delete().in('id', foundIds);
+      // 软删除：置 deleted_at，数据进入回收站
+      const { error: delErr } = await supabase.from('products').update({ deleted_at: new Date().toISOString() }).in('id', foundIds);
       if (delErr) throw delErr;
     }
     // 汇总审计（一次写入，避免逐条写导致慢）

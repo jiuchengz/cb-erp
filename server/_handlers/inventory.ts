@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('*, products!inner(id, sku, name), warehouses!inner(id, name)', { count: 'exact' });
 
     if (sku) {
-      const { data: prods } = await supabase.from('products').select('id').eq('sku', sku);
+      const { data: prods } = await supabase.from('products').select('id').eq('sku', sku).is('deleted_at', null);
       const ids = (prods || []).map((p: any) => p.id);
       if (ids.length) query = query.in('product_id', ids);
       else return res.status(200).json({ data: [], total: 0, page: q.page, pageSize: q.pageSize });

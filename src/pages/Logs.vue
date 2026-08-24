@@ -71,6 +71,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
+import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { clearLogs, getLogs, type OpLogEntry } from '../utils/log'
 
 const logTab = ref<'local' | 'server'>('local')
@@ -126,8 +127,7 @@ async function loadServerLogs() {
 }
 
 function formatServerTime(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return sysFormatDateTime(v)
 }
 function serverActionTag(action: string) {
   if (action?.toLowerCase().includes('create') || action?.toLowerCase().includes('insert')) return 'success'

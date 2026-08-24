@@ -43,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       let query: any = supabase
         .from('purchase_orders')
-        .select('*, purchase_order_items(*, products(sku, code, name, image_text))', { count: 'exact' });
+        .select('*, purchase_order_items(*, products(sku, code, name, image_text))', { count: 'exact' })
+        .is('deleted_at', null);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -62,6 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('products')
         .select('id, sku, code, name')
         .eq('code', body.product_code.trim())
+        .is('deleted_at', null)
         .limit(1)
         .maybeSingle();
       if (prodErr) throw prodErr;

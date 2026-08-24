@@ -88,7 +88,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
+import { setSystemSettings } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -151,7 +152,8 @@ const menuGroups = reactive([
     children: [
       { path: '/users', label: '用户', icon: User },
       { path: '/logs', label: '日志', icon: Notebook },
-      { path: '/settings', label: '设置', icon: Setting }
+      { path: '/settings', label: '设置', icon: Setting },
+      { path: '/recycle-bin', label: '回收站', icon: Delete }
     ]
   }
 ])
@@ -208,10 +210,24 @@ onMounted(() => {
   isDark.value = document.documentElement.classList.contains('dark')
   refreshLocalLogs()
   idleWatcher.start()
+  loadSystemSettings()
 })
 onBeforeUnmount(() => {
   idleWatcher.stop()
 })
+
+/* ---------- 加载系统设置：设置全局时区/币种缓存 ---------- */
+async function loadSystemSettings() {
+  try {
+    const { data } = await api.get('/system-settings')
+    const s = data?.data || data || {}
+    if (s.default_timezone?.tz && s.default_currency?.code && s.default_currency?.symbol) {
+      setSystemSettings(s.default_timezone.tz, s.default_currency.code, s.default_currency.symbol)
+    }
+  } catch {
+    // 系统设置加载失败时保持默认（America/Mexico_City / MXN），不影响页面渲染
+  }
+}
 
 /* ---------- 日志入口 ---------- */
 const localLogs = ref<OpLogEntry[]>(getLogs())

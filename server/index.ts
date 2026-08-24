@@ -22,6 +22,7 @@ import warehouses from './_handlers/warehouses';
 import dailySales from './_handlers/daily-sales';
 import analysis from './_handlers/analysis';
 import dashboard from './_handlers/dashboard';
+import recycleBin from './_handlers/recycle-bin';
 import systemSettings from './_handlers/system-settings';
 import forwarders from './_handlers/forwarders';
 import forwardersId from './_handlers/forwarders/[id]';
@@ -56,6 +57,9 @@ const routes: Route[] = [
   { pattern: /^\/auth\/password$/, handler: authPassword },
   { pattern: /^\/auth\/me$/, handler: authMe },
   { pattern: /^\/dashboard\/stats$/, handler: dashboard },
+  { pattern: /^\/recycle-bin\/restore$/, handler: recycleBin },
+  { pattern: /^\/recycle-bin\/purge$/, handler: recycleBin },
+  { pattern: /^\/recycle-bin$/, handler: recycleBin },
   { pattern: /^\/analysis$/, handler: analysis },
   { pattern: /^\/daily-sales$/, handler: dailySales },
   { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: cargoStatusesId, params: ['id'] },

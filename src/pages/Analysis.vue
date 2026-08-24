@@ -40,8 +40,8 @@
     <!-- 指标卡 -->
     <div class="kpi-row">
       <div class="kpi">
-        <div class="label">销售额（MXN）<span class="ico">💰</span></div>
-        <div class="value">{{ fmtKpi(d.summary.sale_amount) }} <small>MXN</small></div>
+        <div class="label">销售额（{{ getCurrencyCode() }}）<span class="ico">💰</span></div>
+        <div class="value">{{ fmtKpi(d.summary.sale_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend" :class="trendCls(d.summary.sale_amount, d.summary.prev_sale_amount)">
           {{ trendText(d.summary.sale_amount, d.summary.prev_sale_amount) }}
         </div>
@@ -68,8 +68,8 @@
         </div>
       </div>
       <div class="kpi">
-        <div class="label">退款金额（MXN）<span class="ico">↩️</span></div>
-        <div class="value">{{ fmtKpi(d.summary.refund_amount) }} <small>MXN</small></div>
+        <div class="label">退款金额（{{ getCurrencyCode() }}）<span class="ico">↩️</span></div>
+        <div class="value">{{ fmtKpi(d.summary.refund_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend flat">销售 - 退款 = 实际销量</div>
       </div>
       <div class="kpi">
@@ -107,7 +107,7 @@
         </svg>
       </div>
       <div class="legend">
-        <span><i style="background:#409eff"></i>销售额(MXN)</span>
+        <span><i style="background:#409eff"></i>销售额({{ getCurrencyCode() }})</span>
         <span><i style="background:#67c23a"></i>销售数量</span>
         <span><i style="background:#e6a23c"></i>售后工单</span>
       </div>
@@ -148,22 +148,22 @@
           <div class="capital-item">
             <div class="cap-label">销售额</div>
             <div class="cap-val" style="color:#409eff">{{ fmtKpi(d.capital.sale_amount) }}</div>
-            <div class="cap-unit">MXN</div>
+            <div class="cap-unit">{{ getCurrencyCode() }}</div>
           </div>
           <div class="capital-item">
             <div class="cap-label">退款金额</div>
             <div class="cap-val" style="color:#e6a23c">{{ fmtKpi(d.capital.refund_amount) }}</div>
-            <div class="cap-unit">MXN</div>
+            <div class="cap-unit">{{ getCurrencyCode() }}</div>
           </div>
           <div class="capital-item">
             <div class="cap-label">净销售额</div>
             <div class="cap-val" style="color:#67c23a">{{ fmtKpi(d.capital.net_amount) }}</div>
-            <div class="cap-unit">MXN</div>
+            <div class="cap-unit">{{ getCurrencyCode() }}</div>
           </div>
           <div class="capital-item">
             <div class="cap-label">国内库存货值</div>
             <div class="cap-val" style="color:#606266">{{ fmtKpi(d.capital.stock_value) }}</div>
-            <div class="cap-unit">MXN</div>
+            <div class="cap-unit">{{ getCurrencyCode() }}</div>
           </div>
         </div>
         <div class="cap-note">库存货值 = 国内仓库存 × 产品采购成本（估算）</div>
@@ -319,6 +319,7 @@ import { ElMessage } from 'element-plus'
 import { Document } from '@element-plus/icons-vue'
 import { api } from '@/services/api'
 import { addLog } from '@/utils/log'
+import { formatDateTime, getCurrencyCode } from '@/utils/system'
 
 const W = 720
 const H = 150
@@ -451,7 +452,7 @@ const insights = computed(() => {
   if (s.sale_amount > 0) {
     const pct = pctOf(s.sale_amount, s.prev_sale_amount)
     if (pct != null && Math.abs(pct) >= 3) {
-      list.push(`本期销售额 <b>${s.sale_amount.toLocaleString()} MXN</b>，环比 <span class="arrow ${pct >= 0 ? '' : 'down'}">${pct >= 0 ? '↑' : '↓'}${Math.abs(pct).toFixed(1)}%</span>。`)
+      list.push(`本期销售额 <b>${s.sale_amount.toLocaleString()} ${getCurrencyCode()}</b>，环比 <span class="arrow ${pct >= 0 ? '' : 'down'}">${pct >= 0 ? '↑' : '↓'}${Math.abs(pct).toFixed(1)}%</span>。`)
     }
   }
   if (s.after_count > 0 && s.sale_qty > 0) {
@@ -550,14 +551,14 @@ async function exportReport() {
     const s = d.summary
     const lines = [
       'cb-erp 经营周报（' + period + '）',
-      '生成时间：' + new Date().toLocaleString('zh-CN', { hour12: false }),
+      '生成时间：' + formatDateTime(new Date()),
       '',
       '一、核心指标',
-      '· 销售额：' + s.sale_amount.toLocaleString() + ' MXN（环比 ' + trendText(s.sale_amount, s.prev_sale_amount) + '）',
+      '· 销售额：' + s.sale_amount.toLocaleString() + ' ' + getCurrencyCode() + '（环比 ' + trendText(s.sale_amount, s.prev_sale_amount) + '）',
       '· 销售数量：' + s.sale_qty.toLocaleString() + ' 件（环比 ' + trendText(s.sale_qty, s.prev_sale_qty) + '）',
       '· 发货量：' + s.ship_qty.toLocaleString() + ' 单',
       '· 售后工单：' + s.after_count + ' 单（售后率 ' + (s.sale_qty ? ((s.after_count / s.sale_qty) * 100).toFixed(1) + '%' : '--') + '）',
-      '· 退款金额：' + s.refund_amount.toLocaleString() + ' MXN',
+      '· 退款金额：' + s.refund_amount.toLocaleString() + ' ' + getCurrencyCode(),
       '· 出单链接数：' + s.link_count + ' 个',
       '· 安全库存达标率：' + (d.safety_rate.rate != null ? d.safety_rate.rate + '%（' + d.safety_rate.pass + '/' + d.safety_rate.total + '）' : '--'),
       '',

@@ -99,7 +99,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="平均售价(MXN)" min-width="120" align="right" sortable="custom" prop="avg_price">
+      <el-table-column :label="'平均售价(' + getCurrencyCode() + ')'" min-width="120" align="right" sortable="custom" prop="avg_price">
         <template #default="{ row }">{{ row.avg_price != null ? Number(row.avg_price) : '-' }}</template>
       </el-table-column>
       <el-table-column label="可用库存" min-width="110" align="right" sortable="custom" prop="overseas_stock">
@@ -126,6 +126,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
+import { formatMoney, getCurrencyCode } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
@@ -385,15 +386,15 @@ const kpiCards = computed(() => {
     { label: '出单链接数', value: k.links ?? 0, unit: '个', trend: trendOf(k.links ?? 0, pk.links ?? 0) },
     { label: '销售数量', value: k.sellQty ?? 0, unit: '件', trend: trendOf(k.sellQty ?? 0, pk.sellQty ?? 0) },
     { label: '退款数量', value: k.refundQty ?? 0, unit: '件', trend: trendOf(k.refundQty ?? 0, pk.refundQty ?? 0) },
-    { label: '退款金额', value: fmtMoney(k.refundAmount ?? 0), unit: 'MXN', trend: trendOf(k.refundAmount ?? 0, pk.refundAmount ?? 0) },
+    { label: '退款金额', value: fmtMoney(k.refundAmount ?? 0), unit: '', trend: trendOf(k.refundAmount ?? 0, pk.refundAmount ?? 0) },
     { label: '实际销量', value: k.netQty ?? 0, unit: '件', trend: trendOf(k.netQty ?? 0, pk.netQty ?? 0) },
-    { label: '总销售额', value: fmtMoney(k.netAmount ?? 0), unit: 'MXN', trend: trendOf(k.netAmount ?? 0, pk.netAmount ?? 0) },
+    { label: '总销售额', value: fmtMoney(k.netAmount ?? 0), unit: '', trend: trendOf(k.netAmount ?? 0, pk.netAmount ?? 0) },
     { label: '有销量天数', value: k.days ?? 0, unit: '天', trend: trendOf(k.days ?? 0, pk.days ?? 0) },
   ]
 })
 
 function fmtMoney(v: number) {
-  return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return formatMoney(v, 0)
 }
 
 function trendClass(t: number | null) {
@@ -459,7 +460,7 @@ function downloadTpl() {
       { label: '站点', sample: 'Mexico' },
       { label: '商品ID', sample: 'MLM2553999543' },
       { label: '实际销量', sample: 8 },
-      { label: '平均售价(MXN)', sample: 248.51 },
+      { label: '平均售价(' + getCurrencyCode() + ')', sample: 248.51 },
       { label: '可用库存', sample: 27 },
     ],
     '历史分析-商品销售明细',
@@ -484,7 +485,7 @@ async function onImportFile(e: Event) {
       platform: ['站点', '平台', 'platform'],
       link_id: ['商品ID', '链接ID', 'link_id', 'linkId'],
       quantity: ['实际销量', '销量', 'quantity', 'qty'],
-      unit_price: ['平均售价(MXN)', '平均售价', '单价', 'price', 'unit_price'],
+      unit_price: ['平均售价(' + getCurrencyCode() + ')', '平均售价', '单价', 'price', 'unit_price'],
       overseas_stock: ['可用库存', '海外库存', 'overseas_stock', 'stock'],
     })
     if (col.link_id === undefined || col.quantity === undefined) {
@@ -593,7 +594,7 @@ async function exportRows() {
         return `${r.changeRate >= 0 ? '+' : ''}${r.changeRate.toFixed(1)}%`
       },
     },
-    { key: 'avg_price', label: '平均售价(MXN)', value: (r: any) => (r.avg_price != null ? Number(r.avg_price) : '') },
+    { key: 'avg_price', label: '平均售价(' + getCurrencyCode() + ')', value: (r: any) => (r.avg_price != null ? Number(r.avg_price) : '') },
     { key: 'overseas_stock', label: '可用库存', value: (r: any) => (r.overseas_stock != null ? Number(r.overseas_stock) : '') },
     { key: 'days', label: '出单天数', value: (r: any) => r.days ?? '' },
   ]

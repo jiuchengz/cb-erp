@@ -264,6 +264,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/api'
+import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
@@ -375,8 +376,7 @@ watch(
 )
 
 function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return sysFormatDateTime(v)
 }
 
 function money(v: number) {

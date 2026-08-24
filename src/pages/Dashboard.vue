@@ -34,8 +34,8 @@
 
     <div class="kpi-row" v-loading="loading">
       <div class="kpi">
-        <div class="label">销售额（MXN）<span class="ico">💰</span></div>
-        <div class="value">{{ fmtKpi(d.summary.sale_amount) }} <small>MXN</small></div>
+        <div class="label">销售额（{{ getCurrencyCode() }}）<span class="ico">💰</span></div>
+        <div class="value">{{ fmtKpi(d.summary.sale_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend" :class="trendCls(d.summary.sale_amount, d.summary.prev_sale_amount)">
           {{ trendText(d.summary.sale_amount, d.summary.prev_sale_amount) }}
         </div>
@@ -62,8 +62,8 @@
         </div>
       </div>
       <div class="kpi">
-        <div class="label">退款金额（MXN）<span class="ico">↩️</span></div>
-        <div class="value">{{ fmtKpi(d.summary.refund_amount) }} <small>MXN</small></div>
+        <div class="label">退款金额（{{ getCurrencyCode() }}）<span class="ico">↩️</span></div>
+        <div class="value">{{ fmtKpi(d.summary.refund_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend flat">销售 - 退款 = 实际销量</div>
       </div>
       <div class="kpi">
@@ -168,6 +168,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
+import { formatDateTime, getCurrencyCode } from '@/utils/system'
 
 const W = 720
 const H = 150
@@ -333,8 +334,7 @@ const donutTopName = computed(() => (d.platforms || [])[0]?.name || '')
 const donutTopPct = computed(() => (d.platforms || []).length ? platformPct((d.platforms || [])[0].value) : '0')
 
 function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return formatDateTime(v)
 }
 
 onMounted(() => {

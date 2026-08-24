@@ -56,6 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('replenishment_orders')
         .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
       if (error) {
         if (error.code === 'PGRST116') throw Errors.notFound('补货单不存在');
@@ -70,6 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('replenishment_orders')
         .select('*, replenishment_order_items(*)')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('补货单不存在');
@@ -144,7 +146,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('补货单不存在');
         throw getErr;
       }
-      const { error } = await supabase.from('replenishment_orders').delete().eq('id', id);
+      // 软删除：置 deleted_at，数据进入回收站
+      const { error } = await supabase.from('replenishment_orders').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       await writeAudit(ctx, req, 'delete', 'replenishment_order', id, before, null);
       return res.status(200).json({ ok: true });

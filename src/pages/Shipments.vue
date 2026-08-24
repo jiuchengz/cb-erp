@@ -470,6 +470,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
+import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import * as XLSX from 'xlsx'
@@ -562,8 +563,7 @@ function nextStatuses(s?: string) {
   return (s && SHIPMENT_FLOW[s]) || []
 }
 function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return sysFormatDateTime(v)
 }
 function formatDateOnly(v: string) {
   if (!v) return ''

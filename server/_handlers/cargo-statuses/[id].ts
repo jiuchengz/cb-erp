@@ -46,6 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('shipments')
         .select('id')
         .eq('cargo_status', before.name)
+        .is('deleted_at', null)
         .limit(1);
       if (refErr) throw refErr;
       if (refRows && refRows.length > 0) throw Errors.conflict('该货物状态已被发货单引用，无法删除');

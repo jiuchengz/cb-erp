@@ -269,6 +269,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
+import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { exportViaServer, todayStr } from '../utils/export'
@@ -277,8 +278,7 @@ const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('shipment.write'))
 
 function formatDate(v: string) {
-  if (!v) return ''
-  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+  return sysFormatDateTime(v)
 }
 
 const rows = ref<any[]>([])
@@ -599,7 +599,7 @@ async function printWorkOrder(id: string) {
         </tr>`
       })
       .join('')
-    const now = new Date().toLocaleString('zh-CN', { hour12: false })
+    const now = sysFormatDateTime(new Date())
     const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

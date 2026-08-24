@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('after_sales')
         .select('id')
         .eq('type', before.value)
+        .is('deleted_at', null)
         .limit(1);
       if (refErr) throw refErr;
       if (refRows && refRows.length > 0) throw Errors.conflict('该类型已被售后单引用，无法删除');

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统设置·默认时区/币种 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg,#7dd3fc,#c7d2fe,#f0abfc,#a5b4fc); min-height: 100vh; padding: 32px; color: #0f172a; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .head h1 { font-size: 20px; font-weight: 600; }
+  .head .tag { background: rgba(255,255,255,.7); border: 1px solid rgba(15,23,42,.1); padding: 4px 12px; border-radius: 999px; font-size: 12px; color: #475569; }
+  .card { background: rgba(255,255,255,.62); border: 1px solid rgba(15,23,42,.08); border-radius: 20px; backdrop-filter: blur(16px); padding: 24px; margin-bottom: 16px; box-shadow: 0 8px 30px rgba(15,23,42,.08); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .info-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .info-desc { font-size: 13px; color: #64748b; line-height: 1.5; }
+  .divider { height: 1px; background: rgba(15,23,42,.08); margin: 18px 0; }
+  select { width: 300px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(15,23,42,.15); background: #fff; font-size: 14px; color: #0f172a; outline: none; }
+  .switch { width: 46px; height: 24px; border-radius: 999px; background: #cbd5e1; position: relative; display: inline-block; transition: .2s; }
+  .switch.on { background: #3b82f6; }
+  .switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch.on i { left: 25px; }
+  .switch-label { font-size: 13px; color: #475569; margin-left: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.1); color: #1d4ed8; border: 1px solid rgba(59,130,246,.25); padding: 3px 10px; border-radius: 999px; font-size: 12px; margin: 6px 6px 0 0; }
+  .city-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 8px; margin-top: 12px; }
+  .city-grid .pill { justify-content: center; margin: 0; }
+  .btn { background: #3b82f6; color: #fff; border: none; padding: 8px 20px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+  .timebox { background: rgba(15,23,42,.05); border-radius: 12px; padding: 12px 16px; font-size: 14px; color: #334155; margin-top: 12px; }
+  .timebox b { color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>系统设置 · 默认时区 / 币种 / 回收站</h1>
+    <span class="tag">阶段一 · 预览（静态示意）</span>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="info-title">默认时区</div>
+        <div class="info-desc">全系统时间、日期、统计均按此默认时区显示<br>当前默认：墨西哥城 (UTC-6)</div>
+      </div>
+      <select>
+        <option selected>墨西哥城 (UTC-6) — 墨西哥</option>
+        <option>纽约 (UTC-5) — 美国</option>
+        <option>洛杉矶 (UTC-8) — 美国</option>
+        <option>圣保罗 (UTC-3) — 巴西</option>
+        <option>伦敦 (UTC+0) — 英国</option>
+        <option>巴黎 (UTC+1) — 法国</option>
+        <option>柏林 (UTC+1) — 德国</option>
+        <option>马德里 (UTC+1) — 西班牙</option>
+        <option>北京/上海 (UTC+8) — 中国</option>
+        <option>香港 (UTC+8) — 中国香港</option>
+        <option>东京 (UTC+9) — 日本</option>
+        <option>首尔 (UTC+9) — 韩国</option>
+        <option>新加坡 (UTC+8) — 新加坡</option>
+        <option>迪拜 (UTC+4) — 阿联酋</option>
+        <option>曼谷 (UTC+7) — 泰国</option>
+        <option>悉尼 (UTC+10) — 澳大利亚</option>
+        <option>圣地亚哥 (UTC-4) — 智利</option>
+        <option>波哥大 (UTC-5) — 哥伦比亚</option>
+        <option>利马 (UTC-5) — 秘鲁</option>
+        <option>布宜诺斯艾利斯 (UTC-3) — 阿根廷</option>
+      </select>
+    </div>
+    <div class="timebox">按默认时区显示示例：<b>2026-08-22 10:30:45</b>（墨西哥城时间）</div>
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <div>
+        <div class="info-title">默认币种</div>
+        <div class="info-desc">全系统金额显示与新增单据的默认币种<br>当前默认：MXN（墨西哥比索）</div>
+      </div>
+      <select>
+        <option selected>MXN（墨西哥比索）</option>
+        <option>USD（美元）</option>
+        <option>CNY（人民币）</option>
+        <option>EUR（欧元）</option>
+        <option>GBP（英镑）</option>
+        <option>JPY（日元）</option>
+        <option>BRL（巴西雷亚尔）</option>
+        <option>CAD（加元）</option>
+        <option>AUD（澳元）</option>
+        <option>COP（哥伦比亚比索）</option>
+        <option>CLP（智利比索）</option>
+        <option>ARS（阿根廷比索）</option>
+        <option>PEN（秘鲁索尔）</option>
+      </select>
+    </div>
+    <div style="margin-top:12px">
+      <span class="pill">MX$ 1,299.50</span>
+      <span class="pill">US$ 72.80</span>
+      <span class="pill">¥ 518.00</span>
+      <span class="pill">€ 66.90</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <div>
+        <div class="info-title">回收站（软删除）</div>
+        <div class="info-desc">开启后，商品、单据等删除操作将先进入回收站，可恢复，降低误删风险</div>
+      </div>
+      <div>
+        <span class="switch on"><i></i></span>
+        <span class="switch-label">已开启</span>
+      </div>
+    </div>
+
+    <div style="margin-top:20px; text-align:right">
+      <button class="btn">保存设置</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="info-title">已内置主流国家/城市（20 个时区）</div>
+    <div class="city-grid">
+      <span class="pill">墨西哥·墨西哥城</span>
+      <span class="pill">美国·纽约</span>
+      <span class="pill">美国·洛杉矶</span>
+      <span class="pill">巴西·圣保罗</span>
+      <span class="pill">英国·伦敦</span>
+      <span class="pill">法国·巴黎</span>
+      <span class="pill">德国·柏林</span>
+      <span class="pill">西班牙·马德里</span>
+      <span class="pill">中国·北京/上海</span>
+      <span class="pill">中国香港</span>
+      <span class="pill">日本·东京</span>
+      <span class="pill">韩国·首尔</span>
+      <span class="pill">新加坡</span>
+      <span class="pill">阿联酋·迪拜</span>
+      <span class="pill">泰国·曼谷</span>
+      <span class="pill">澳大利亚·悉尼</span>
+      <span class="pill">智利·圣地亚哥</span>
+      <span class="pill">哥伦比亚·波哥大</span>
+      <span class="pill">秘鲁·利马</span>
+      <span class="pill">阿根廷·布宜诺斯艾利斯</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

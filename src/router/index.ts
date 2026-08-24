@@ -78,6 +78,11 @@ const routes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'settings',
         component: () => import('@/pages/Settings.vue')
+      },
+      {
+        path: 'recycle-bin',
+        name: 'recycle-bin',
+        component: () => import('@/pages/RecycleBin.vue')
       }
     ]
   },
