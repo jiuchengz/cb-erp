@@ -1093,6 +1093,7 @@ const saving = ref(false)
 onMounted(() => {
   loadRoles()
   loadAppearance()
+  loadSystemSettings()
 })
 </script>
 
