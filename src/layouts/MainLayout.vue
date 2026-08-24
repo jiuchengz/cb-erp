@@ -37,6 +37,7 @@
           </button>
         </div>
         <div class="header-right">
+          <span class="topbar-clock" :title="'系统时区：' + tzLabel">{{ nowText }}</span>
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
@@ -89,7 +90,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
-import { setSystemSettings } from '@/utils/system'
+import { setSystemSettings, getSystemTz } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -171,6 +172,33 @@ function closeDrawer() {
   drawerOpen.value = false
 }
 
+/* ---------- 顶栏时钟：按系统时区显示当前时间 ---------- */
+const nowText = ref('')
+const tzLabel = ref(getSystemTz())
+let clockTimer: number | undefined
+function updateClock() {
+  const d = new Date()
+  try {
+    tzLabel.value = getSystemTz()
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzLabel.value,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(d)
+    const map: Record<string, string> = {}
+    parts.forEach((p) => (map[p.type] = p.value))
+    nowText.value = `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`
+  } catch {
+    /* 时区非法时回退默认格式化 */
+    nowText.value = d?.toString?.() || ''
+  }
+}
+
 /* ---------- 暗色模式 ---------- */
 const isDark = ref(false)
 const darkIcon = computed(() => (isDark.value ? Sunny : Moon))
@@ -210,10 +238,13 @@ onMounted(() => {
   isDark.value = document.documentElement.classList.contains('dark')
   refreshLocalLogs()
   idleWatcher.start()
+  updateClock()
+  clockTimer = window.setInterval(updateClock, 1000)
   loadSystemSettings()
 })
 onBeforeUnmount(() => {
   idleWatcher.stop()
+  if (clockTimer) window.clearInterval(clockTimer)
 })
 
 /* ---------- 加载系统设置：设置全局时区/币种缓存 ---------- */
@@ -224,6 +255,7 @@ async function loadSystemSettings() {
     if (s.default_timezone?.tz && s.default_currency?.code && s.default_currency?.symbol) {
       setSystemSettings(s.default_timezone.tz, s.default_currency.code, s.default_currency.symbol)
     }
+    updateClock() // 系统设置加载完成后立即按新时区刷新顶栏时钟
   } catch {
     // 系统设置加载失败时保持默认（America/Mexico_City / MXN），不影响页面渲染
   }
@@ -343,6 +375,10 @@ html.dark .sidebar nav .solo-link.router-link-active, html.dark .sidebar nav .gr
 html.dark .hamburger { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: var(--ink-2); }
 html.dark .hamburger:hover { background: rgba(255,255,255,.14); color: var(--accent); }
 
+/* 顶栏时钟 */
+.topbar-clock { display: inline-flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.45); user-select: none; }
+html.dark .topbar-clock { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: var(--ink-2); }
+
 /* 顶栏按钮 */
 .topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
 .topbar-btn:hover { background: rgba(255,255,255,.85); color: var(--accent); transform: translateY(-1px); }
@@ -391,6 +427,7 @@ html.dark .user-trigger:hover { background: rgba(255,255,255,.14); }
   .main { height: 100%; gap: 10px; }
   .topbar { padding: 10px 12px; min-height: 52px; }
   .hamburger { display: inline-flex; }
+  .topbar-clock { display: none; }
   .user-trigger .user { display: none; }
   .user-trigger { padding: 7px 11px; }
 }
