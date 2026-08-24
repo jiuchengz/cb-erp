@@ -375,7 +375,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
-import { formatDateTime as sysFormatDateTime } from '../utils/system'
+import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENCIES } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -861,6 +861,8 @@ async function saveSystemSettings() {
     const cur = settings.default_currency
     if (tz?.tz) sysForm.default_timezone = tz.tz
     if (cur?.code) sysForm.default_currency = cur.code
+    const currency = DEFAULT_CURRENCIES.find((c) => c.code === (cur?.code || ''))
+    setSystemSettings(tz?.tz || '', cur?.code || '', currency?.symbol || '')
     ElMessage.success('系统设置已保存')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '系统设置保存失败')
