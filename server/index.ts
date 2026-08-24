@@ -20,6 +20,7 @@ import transfers from './_handlers/transfers';
 import users from './_handlers/users';
 import warehouses from './_handlers/warehouses';
 import dailySales from './_handlers/daily-sales';
+import dailySalesSummary from './_handlers/daily-sales/summary';
 import analysis from './_handlers/analysis';
 import dashboard from './_handlers/dashboard';
 import recycleBin from './_handlers/recycle-bin';
@@ -62,6 +63,7 @@ const routes: Route[] = [
   { pattern: /^\/recycle-bin\/purge$/, handler: recycleBin },
   { pattern: /^\/recycle-bin$/, handler: recycleBin },
   { pattern: /^\/analysis$/, handler: analysis },
+  { pattern: /^\/daily-sales\/summary$/, handler: dailySalesSummary },
   { pattern: /^\/daily-sales$/, handler: dailySales },
   { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: cargoStatusesId, params: ['id'] },
   { pattern: /^\/cargo-statuses$/, handler: cargoStatuses },
