@@ -224,7 +224,6 @@ function aggregate(rows: any[]) {
     totalSellQty += sellQty
     totalRefundQty += refundQty
     totalRefundAmount += refundAmount
-    totalNetAmount += sellAmount - refundAmount
     const cur = map.get(key) || {
       link_id: key,
       product_name: r.product_name || '',
@@ -233,6 +232,7 @@ function aggregate(rows: any[]) {
       refund_qty: 0,
       refund_amount: 0,
       sellAmount: 0,
+      unit_price: 0,
       netQty: 0,
       netAmount: 0,
       days: new Set<string>(),
@@ -244,8 +244,10 @@ function aggregate(rows: any[]) {
     cur.refund_qty += refundQty
     cur.refund_amount += refundAmount
     cur.sellAmount += sellAmount
+    if (Number(r.unit_price || 0) > 0) cur.unit_price = Number(r.unit_price)
     cur.netQty = cur.quantity - cur.refund_qty
-    cur.netAmount = cur.sellAmount - cur.refund_amount
+    // 实际销售额只按实际销量 × 单价计算，与退款金额字段解耦
+    cur.netAmount = cur.netQty * cur.unit_price
     cur.days.add(d)
     if (!cur.latest_date || d > cur.latest_date) {
       cur.latest_date = d
@@ -256,7 +258,10 @@ function aggregate(rows: any[]) {
     map.set(key, cur)
   }
   const aggRows: any[] = []
+  let sumNetAmount = 0
   for (const v of map.values()) {
+    v.netAmount = v.netQty * v.unit_price
+    sumNetAmount += v.netAmount
     aggRows.push({
       ...v,
       days: v.days.size,
@@ -264,6 +269,7 @@ function aggregate(rows: any[]) {
     })
   }
   totalNetQty = totalSellQty - totalRefundQty
+  totalNetAmount = sumNetAmount
   return { aggRows, totalSellQty, totalRefundQty, totalRefundAmount, totalNetQty, totalNetAmount, dateSet }
 }
 
@@ -388,7 +394,7 @@ const kpiCards = computed(() => {
     { label: '退款数量', value: k.refundQty ?? 0, unit: '件', trend: trendOf(k.refundQty ?? 0, pk.refundQty ?? 0) },
     { label: '退款金额', value: fmtMoney(k.refundAmount ?? 0), unit: '', trend: trendOf(k.refundAmount ?? 0, pk.refundAmount ?? 0) },
     { label: '实际销量', value: k.netQty ?? 0, unit: '件', trend: trendOf(k.netQty ?? 0, pk.netQty ?? 0) },
-    { label: '总销售额', value: fmtMoney(k.netAmount ?? 0), unit: '', trend: trendOf(k.netAmount ?? 0, pk.netAmount ?? 0) },
+    { label: '实际销售额', value: fmtMoney(k.netAmount ?? 0), unit: '', trend: trendOf(k.netAmount ?? 0, pk.netAmount ?? 0) },
     { label: '有销量天数', value: k.days ?? 0, unit: '天', trend: trendOf(k.days ?? 0, pk.days ?? 0) },
   ]
 })

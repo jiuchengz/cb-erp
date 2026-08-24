@@ -102644,6 +102644,18 @@ async function handler21(req, res) {
     if (req.method === "POST") {
       requirePermission(ctx, "sales.write");
       const body = parse2(importSchema, req.body || {});
+      const linkIds = Array.from(new Set(body.rows.map((r) => r.link_id || "").filter(Boolean)));
+      let linkPriceMap = /* @__PURE__ */ new Map();
+      if (linkIds.length > 0) {
+        try {
+          const { data: prodRows } = await supabase.from("products").select("link_id, unit_price").is("deleted_at", null).in("link_id", linkIds);
+          for (const p of prodRows || []) {
+            const v = Number(p?.unit_price || 0);
+            if (p?.link_id && v > 0 && !linkPriceMap.has(p.link_id)) linkPriceMap.set(p.link_id, v);
+          }
+        } catch {
+        }
+      }
       const keyMap = /* @__PURE__ */ new Map();
       for (const r of body.rows) {
         const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
@@ -102661,11 +102673,13 @@ async function handler21(req, res) {
         const q = Number(r.quantity) || 0;
         if (q > 0) {
           cur.quantity += q;
-          cur.unit_price = Number(r.unit_price || 0);
+          cur.unit_price = Number(r.unit_price || 0) || cur.unit_price;
         } else {
           const rq = -q;
+          const price = Number(r.unit_price || 0) || cur.unit_price || linkPriceMap.get(r.link_id) || 0;
           cur.refund_qty += rq;
-          cur.refund_amount += rq * Number(r.unit_price || 0);
+          cur.refund_amount += rq * price;
+          if (price > 0 && cur.unit_price === 0) cur.unit_price = price;
         }
         keyMap.set(key, cur);
       }

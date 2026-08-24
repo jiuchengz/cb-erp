@@ -72,6 +72,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'sales.write');
       const body = parse(importSchema, req.body || {});
 
+      // 预取涉及链接的产品售价（MXN），用于退款行无单价时兜底
+      const linkIds = Array.from(new Set(body.rows.map((r: any) => r.link_id || '').filter(Boolean)));
+      let linkPriceMap = new Map<string, number>();
+      if (linkIds.length > 0) {
+        try {
+          const { data: prodRows } = await supabase
+            .from('products')
+            .select('link_id, unit_price')
+            .is('deleted_at', null)
+            .in('link_id', linkIds);
+          for (const p of prodRows || []) {
+            const v = Number(p?.unit_price || 0);
+            if (p?.link_id && v > 0 && !linkPriceMap.has(p.link_id)) linkPriceMap.set(p.link_id, v);
+          }
+        } catch {
+          // 产品表查询失败不阻断导入，退款金额保持按导入单价计算
+        }
+      }
+
       // 按 (sale_date, platform, link_id) 聚合：正数=销售数量，负数=退款数量
       const keyMap = new Map<string, any>();
       for (const r of body.rows) {
@@ -90,11 +109,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const q = Number(r.quantity) || 0;
         if (q > 0) {
           cur.quantity += q;
-          cur.unit_price = Number(r.unit_price || 0);
+          cur.unit_price = Number(r.unit_price || 0) || cur.unit_price;
         } else {
           const rq = -q;
+          // 退款单价优先用退款行单价，缺失时复用同链接销售行单价，再缺则用产品售价兜底
+          const price = Number(r.unit_price || 0) || cur.unit_price || linkPriceMap.get(r.link_id) || 0;
           cur.refund_qty += rq;
-          cur.refund_amount += rq * Number(r.unit_price || 0);
+          cur.refund_amount += rq * price;
+          if (price > 0 && cur.unit_price === 0) cur.unit_price = price;
         }
         keyMap.set(key, cur);
       }
