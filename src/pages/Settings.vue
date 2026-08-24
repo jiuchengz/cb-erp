@@ -375,7 +375,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
-import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENCIES } from '../utils/system'
+import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENCIES, fetchExchangeRates } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -863,6 +863,7 @@ async function saveSystemSettings() {
     if (cur?.code) sysForm.default_currency = cur.code
     const currency = DEFAULT_CURRENCIES.find((c) => c.code === (cur?.code || ''))
     setSystemSettings(tz?.tz || '', cur?.code || '', currency?.symbol || '')
+    fetchExchangeRates() // 保存币种后立即拉取实时汇率，保证页面金额按新币种换算
     ElMessage.success('系统设置已保存')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '系统设置保存失败')

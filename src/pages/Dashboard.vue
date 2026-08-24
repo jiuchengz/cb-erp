@@ -35,7 +35,7 @@
     <div class="kpi-row" v-loading="loading">
       <div class="kpi">
         <div class="label">销售额（{{ getCurrencyCode() }}）<span class="ico">💰</span></div>
-        <div class="value">{{ fmtKpi(d.summary.sale_amount) }} <small>{{ getCurrencyCode() }}</small></div>
+        <div class="value">{{ fmtMoneyKpi(d.summary.sale_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend" :class="trendCls(d.summary.sale_amount, d.summary.prev_sale_amount)">
           {{ trendText(d.summary.sale_amount, d.summary.prev_sale_amount) }}
         </div>
@@ -63,7 +63,7 @@
       </div>
       <div class="kpi">
         <div class="label">退款金额（{{ getCurrencyCode() }}）<span class="ico">↩️</span></div>
-        <div class="value">{{ fmtKpi(d.summary.refund_amount) }} <small>{{ getCurrencyCode() }}</small></div>
+        <div class="value">{{ fmtMoneyKpi(d.summary.refund_amount) }} <small>{{ getCurrencyCode() }}</small></div>
         <div class="trend flat">销售 - 退款 = 实际销量</div>
       </div>
       <div class="kpi">
@@ -168,7 +168,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
-import { formatDateTime, getCurrencyCode } from '@/utils/system'
+import { formatDateTime, getCurrencyCode, convertMoney } from '@/utils/system'
 
 const W = 720
 const H = 150
@@ -273,6 +273,10 @@ function fmtKpi(v: number): string {
   if (v == null || isNaN(v)) return '0'
   if (Math.abs(v) >= 10000) return (v / 10000).toFixed(1) + 'w'
   return v.toLocaleString()
+}
+// 金额 KPI：按实时汇率换算到系统默认币种后再格式化
+function fmtMoneyKpi(v: number): string {
+  return fmtKpi(convertMoney(v))
 }
 function trendCls(cur: number, prev: number): string {
   const pct = pctOf(cur, prev)

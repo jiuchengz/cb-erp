@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>顶栏时区时钟 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: linear-gradient(135deg,#7dd3fc,#c7d2fe,#f0abfc,#a5b4fc); min-height: 100vh; padding: 32px; color: #0f172a; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .head h1 { font-size: 20px; font-weight: 600; }
+  .head .tag { background: rgba(255,255,255,.7); border: 1px solid rgba(15,23,42,.1); padding: 4px 12px; border-radius: 999px; font-size: 12px; color: #475569; }
+  .card { background: rgba(255,255,255,.62); border: 1px solid rgba(15,23,42,.08); border-radius: 20px; backdrop-filter: blur(16px); padding: 24px; margin-bottom: 16px; box-shadow: 0 8px 30px rgba(15,23,42,.08); }
+  .card h2 { font-size: 15px; margin-bottom: 12px; }
+  .tip { font-size: 13px; color: #475569; line-height: 1.7; }
+  .tip code { background: rgba(15,23,42,.06); padding: 1px 6px; border-radius: 6px; }
+  /* 模拟主界面框架 */
+  .shell { border-radius: 18px; overflow: hidden; box-shadow: 0 20px 50px rgba(40,60,120,.22); border: 1px solid rgba(255,255,255,.5); background: #f4f7fb; }
+  .shell.dark { background: #101827; border-color: rgba(255,255,255,.1); }
+  .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; background: rgba(255,255,255,.6); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(15,23,42,.06); }
+  .shell.dark .topbar { background: rgba(17,24,39,.72); border-bottom: 1px solid rgba(255,255,255,.08); }
+  .brand-side { display: flex; align-items: center; gap: 10px; }
+  .brand-icon { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(135deg,#38bdf8,#818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; }
+  .brand-name { font-size: 14px; font-weight: 700; color: #0f172a; }
+  .shell.dark .brand-name { color: #f1f5f9; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .clock { display: inline-flex; align-items: center; padding: 7px 14px; font-size: 13px; color: #334155; font-variant-numeric: tabular-nums; white-space: nowrap; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: rgba(255,255,255,.45); }
+  .shell.dark .clock { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: #cbd5e1; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,.35); border-radius: 12px; background: rgba(255,255,255,.55); color: #475569; font-size: 15px; }
+  .shell.dark .btn { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: #cbd5e1; }
+  .user { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: rgba(255,255,255,.55); color: #0f172a; font-size: 14px; }
+  .shell.dark .user { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: #f1f5f9; }
+  .body-row { display: flex; gap: 18px; padding: 18px 22px; }
+  .sidebar-mini { width: 170px; background: rgba(255,255,255,.5); border-radius: 14px; padding: 12px; }
+  .shell.dark .sidebar-mini { background: rgba(255,255,255,.05); }
+  .sitem { height: 30px; border-radius: 9px; margin-bottom: 8px; background: rgba(15,23,42,.07); }
+  .shell.dark .sitem { background: rgba(255,255,255,.08); }
+  .content-mini { flex: 1; background: rgba(255,255,255,.5); border-radius: 14px; padding: 16px; min-height: 220px; }
+  .shell.dark .content-mini { background: rgba(255,255,255,.05); }
+  .content-mini .line { height: 14px; border-radius: 6px; background: rgba(15,23,42,.08); margin-bottom: 10px; }
+  .shell.dark .content-mini .line { background: rgba(255,255,255,.09); }
+  .content-mini .line.w60 { width: 60%; } .content-mini .line.w40 { width: 40%; } .content-mini .line.w80 { width: 80%; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .tab { padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.7); border: 1px solid rgba(15,23,42,.1); font-size: 13px; cursor: pointer; color: #334155; }
+  .tab.active { background: linear-gradient(135deg,#38bdf8,#818cf8); color: #fff; border-color: transparent; }
+  .shell.dark .tab { background: rgba(255,255,255,.1); color: #cbd5e1; border-color: rgba(255,255,255,.15); }
+  .shell.dark .tab.active { background: linear-gradient(135deg,#38bdf8,#818cf8); color: #fff; }
+  .clock-cell { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .clock-cell b { color: #0f172a; }
+  .shell.dark .clock-cell b { color: #f1f5f9; }
+  .clock-cell .z { font-size: 12px; color: #64748b; }
+  .shell.dark .clock-cell .z { color: #94a3b8; }
+  .foot { text-align: center; font-size: 12px; color: #64748b; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>顶栏时区时钟 · 效果预览</h1>
+    <span class="tag">按系统设置时区实时显示</span>
+  </div>
+
+  <div class="card">
+    <h2>模拟主界面顶部栏（红框处新增时钟）</h2>
+    <div class="shell" id="shell">
+      <div class="topbar">
+        <div class="brand-side">
+          <div class="brand-icon">E</div>
+          <div class="brand-name">跨境电商 ERP</div>
+        </div>
+        <div class="header-right">
+          <span class="clock" id="topClock" title="系统时区">--</span>
+          <span class="btn">☾</span>
+          <span class="btn">📄</span>
+          <span class="user">1971864769@qq.com ▾</span>
+        </div>
+      </div>
+      <div class="body-row">
+        <div class="sidebar-mini">
+          <div class="sitem"></div><div class="sitem"></div><div class="sitem"></div><div class="sitem"></div>
+        </div>
+        <div class="content-mini">
+          <div class="line w80"></div><div class="line w60"></div><div class="line w40"></div><div class="line w80"></div><div class="line w60"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tip" style="margin-top:14px">时钟位于顶部栏右侧、用户邮箱左侧，格式 <code>yyyy-MM-dd HH:mm:ss</code>，每秒刷新；鼠标悬停可看到当前系统时区名称。切换系统时区后立即同步变化。</div>
+  </div>
+
+  <div class="card">
+    <h2>切换时区效果（点击模拟设置切换）</h2>
+    <div class="tabs" id="tzTabs"></div>
+    <div class="clock-cell"><b id="previewClock">--</b><span class="z" id="previewTz"></span></div>
+    <div class="tip" style="margin-top:12px">实际系统中在「设置 - 系统」切换时区后，顶栏时钟与全站时间展示会保持一致。</div>
+  </div>
+
+  <div class="foot">cb-erp · 顶栏时区时钟预览</div>
+</div>
+
+<script>
+  const TZ = [
+    { tz: 'America/Mexico_City', label: '墨西哥城 (UTC-6)' },
+    { tz: 'America/New_York', label: '纽约 (UTC-5)' },
+    { tz: 'Asia/Shanghai', label: '北京/上海 (UTC+8)' },
+    { tz: 'Asia/Tokyo', label: '东京 (UTC+9)' },
+    { tz: 'Europe/London', label: '伦敦 (UTC+0)' },
+    { tz: 'Europe/Paris', label: '巴黎 (UTC+1)' }
+  ];
+  let currentTz = TZ[0].tz;
+  const tabsEl = document.getElementById('tzTabs');
+  TZ.forEach(function (t) {
+    const el = document.createElement('span');
+    el.className = 'tab' + (t.tz === currentTz ? ' active' : '');
+    el.textContent = t.label;
+    el.onclick = function () {
+      currentTz = t.tz;
+      document.querySelectorAll('#tzTabs .tab').forEach(function (x) { x.classList.remove('active'); });
+      el.classList.add('active');
+      updateAll();
+    };
+    tabsEl.appendChild(el);
+  });
+  function fmt(tz) {
+    const d = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(d);
+    const map = {};
+    parts.forEach(function (p) { map[p.type] = p.value; });
+    return map.year + '-' + map.month + '-' + map.day + ' ' + map.hour + ':' + map.minute + ':' + map.second;
+  }
+  function updateAll() {
+    document.getElementById('topClock').textContent = fmt(currentTz);
+    document.getElementById('topClock').title = '系统时区：' + currentTz;
+    document.getElementById('previewClock').textContent = fmt(currentTz);
+    const cur = TZ.filter(function (t) { return t.tz === currentTz; })[0];
+    document.getElementById('previewTz').textContent = '系统时区：' + cur.label + '（' + currentTz + '）';
+  }
+  updateAll();
+  setInterval(updateAll, 1000);
+</script>
+</body>
+</html>

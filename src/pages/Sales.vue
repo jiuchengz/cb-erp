@@ -100,7 +100,7 @@
         </template>
       </el-table-column>
       <el-table-column :label="'平均售价(' + getCurrencyCode() + ')'" min-width="120" align="right" sortable="custom" prop="avg_price">
-        <template #default="{ row }">{{ row.avg_price != null ? Number(row.avg_price) : '-' }}</template>
+        <template #default="{ row }">{{ row.avg_price != null ? formatMoney(row.avg_price, 0) : '-' }}</template>
       </el-table-column>
       <el-table-column label="可用库存" min-width="110" align="right" sortable="custom" prop="overseas_stock">
         <template #default="{ row }">{{ row.overseas_stock != null ? Number(row.overseas_stock) : '-' }}</template>
@@ -594,7 +594,7 @@ async function exportRows() {
         return `${r.changeRate >= 0 ? '+' : ''}${r.changeRate.toFixed(1)}%`
       },
     },
-    { key: 'avg_price', label: '平均售价(' + getCurrencyCode() + ')', value: (r: any) => (r.avg_price != null ? Number(r.avg_price) : '') },
+    { key: 'avg_price', label: '平均售价(' + getCurrencyCode() + ')', value: (r: any) => (r.avg_price != null ? formatMoney(r.avg_price, 0) : '') },
     { key: 'overseas_stock', label: '可用库存', value: (r: any) => (r.overseas_stock != null ? Number(r.overseas_stock) : '') },
     { key: 'days', label: '出单天数', value: (r: any) => r.days ?? '' },
   ]

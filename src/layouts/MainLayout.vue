@@ -90,7 +90,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
-import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES } from '@/utils/system'
+import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES, fetchExchangeRates } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -176,6 +176,7 @@ function closeDrawer() {
 const nowText = ref('')
 const tzLabel = ref('')
 let clockTimer: number | undefined
+let rateTimer: number | undefined
 function tzDisplayName(tz: string): string {
   const hit = DEFAULT_TIMEZONES.find((t) => t.tz === tz)
   return hit ? hit.label : tz
@@ -245,11 +246,13 @@ onMounted(() => {
   idleWatcher.start()
   updateClock()
   clockTimer = window.setInterval(updateClock, 1000)
+  rateTimer = window.setInterval(fetchExchangeRates, 4 * 60 * 60 * 1000) // 每4小时静默刷新汇率
   loadSystemSettings()
 })
 onBeforeUnmount(() => {
   idleWatcher.stop()
   if (clockTimer) window.clearInterval(clockTimer)
+  if (rateTimer) window.clearInterval(rateTimer)
 })
 
 /* ---------- 加载系统设置：设置全局时区/币种缓存 ---------- */
@@ -261,6 +264,7 @@ async function loadSystemSettings() {
       setSystemSettings(s.default_timezone.tz, s.default_currency.code, s.default_currency.symbol)
     }
     updateClock() // 系统设置加载完成后立即按新时区刷新顶栏时钟
+    fetchExchangeRates() // 拉取实时汇率缓存，金额展示按汇率换算
   } catch {
     // 系统设置加载失败时保持默认（America/Mexico_City / MXN），不影响页面渲染
   }
