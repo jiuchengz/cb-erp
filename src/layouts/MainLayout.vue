@@ -37,7 +37,7 @@
           </button>
         </div>
         <div class="header-right">
-          <span class="topbar-clock" :title="'系统时区：' + tzLabel">{{ nowText }}</span>
+          <span class="topbar-clock" :title="'系统时区：' + tzLabel">{{ nowText }}<span class="clock-tz">{{ tzLabel }}</span></span>
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
@@ -90,7 +90,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
-import { setSystemSettings, getSystemTz } from '@/utils/system'
+import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
@@ -174,14 +174,18 @@ function closeDrawer() {
 
 /* ---------- 顶栏时钟：按系统时区显示当前时间 ---------- */
 const nowText = ref('')
-const tzLabel = ref(getSystemTz())
+const tzLabel = ref('')
 let clockTimer: number | undefined
+function tzDisplayName(tz: string): string {
+  const hit = DEFAULT_TIMEZONES.find((t) => t.tz === tz)
+  return hit ? hit.label : tz
+}
 function updateClock() {
   const d = new Date()
   try {
-    tzLabel.value = getSystemTz()
+    tzLabel.value = tzDisplayName(getSystemTz())
     const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tzLabel.value,
+      timeZone: getSystemTz(),
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -196,6 +200,7 @@ function updateClock() {
   } catch {
     /* 时区非法时回退默认格式化 */
     nowText.value = d?.toString?.() || ''
+    tzLabel.value = getSystemTz()
   }
 }
 
@@ -378,6 +383,8 @@ html.dark .hamburger:hover { background: rgba(255,255,255,.14); color: var(--acc
 /* 顶栏时钟 */
 .topbar-clock { display: inline-flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.45); user-select: none; }
 html.dark .topbar-clock { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); color: var(--ink-2); }
+.topbar-clock .clock-tz { margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(15,23,42,.14); font-size: 12px; color: var(--ink-3); }
+html.dark .topbar-clock .clock-tz { border-left-color: rgba(255,255,255,.16); }
 
 /* 顶栏按钮 */
 .topbar-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; background: rgba(255,255,255,.55); color: var(--ink-2); cursor: pointer; font-size: 16px; transition: all .2s ease; }
