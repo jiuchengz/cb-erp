@@ -18,6 +18,9 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button v-if="canWrite" :disabled="!selected.length" @click="openBatchEdit">
+          批量编辑{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
         <el-button v-if="canDelete" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
@@ -100,6 +103,13 @@
       </el-table-column>
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
+      <el-table-column label="库存预警" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.out_of_stock" type="danger" effect="dark" size="small">断货</el-tag>
+          <el-tag v-else-if="row.low_stock" type="warning" effect="plain" size="small">低库存</el-tag>
+          <el-tag v-else type="success" effect="plain" size="small">正常</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="在途数量" width="110" align="right">
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
@@ -297,10 +307,61 @@
             <el-option label="停用" value="inactive" />
           </el-select>
         </el-form-item>
+        <el-form-item label="安全库存">
+          <el-input-number v-model="form.safety_stock" :min="0" :precision="0" style="width: 100%" />
+          <div class="form-tip">可售库存低于该值将触发低库存预警，0 表示不预警</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">{{ editing ? '保存修改' : '保存' }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="batchEditVisible" title="批量编辑商品" width="560px" destroy-on-close>
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="将同时对选中的商品应用以下修改，未填写的字段保持不变"
+        style="margin-bottom: 16px"
+      />
+      <el-form label-width="110px">
+        <el-form-item label="修改售价">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-model="batchEdit.priceMode" style="width: 140px">
+              <el-option label="直接设为" value="fixed" />
+              <el-option label="按百分比调整" value="percent" />
+            </el-select>
+            <el-input-number
+              v-model="batchEdit.unitPrice"
+              :min="batchEdit.priceMode === 'percent' ? -99 : 0"
+              :precision="2"
+              :step="batchEdit.priceMode === 'percent' ? 1 : 10"
+              placeholder="售价"
+              style="flex: 1"
+            />
+            <span v-if="batchEdit.priceMode === 'percent'" class="form-tip" style="white-space: nowrap">
+              %（正涨负降）
+            </span>
+          </div>
+        </el-form-item>
+        <el-form-item label="修改分类">
+          <el-input v-model="batchEdit.category" placeholder="留空则不修改分类" clearable />
+        </el-form-item>
+        <el-form-item label="修改状态">
+          <el-select v-model="batchEdit.status" clearable placeholder="留空则不修改状态" style="width: 100%">
+            <el-option label="启用" value="active" />
+            <el-option label="停用" value="inactive" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="安全库存">
+          <el-input-number v-model="batchEdit.safetyStock" :min="0" :precision="0" placeholder="留空则不修改" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchEditing" @click="submitBatchEdit">应用修改</el-button>
       </template>
     </el-dialog>
 
@@ -607,6 +668,7 @@ const emptyForm = () => ({
   currency: 'MXN',
   status: 'active',
   image_text: '',
+  safety_stock: 0,
 })
 const form = reactive(emptyForm())
 
@@ -638,6 +700,7 @@ function openEdit(row: Product) {
     currency: row.currency || 'MXN',
     status: row.status || 'active',
     image_text: row.image_text || '',
+    safety_stock: row.safety_stock ?? 0,
   })
   dialogVisible.value = true
 }
@@ -717,6 +780,62 @@ async function remove(row: Product) {
 const selected = ref<Product[]>([])
 function onSelectionChange(rows: Product[]) {
   selected.value = rows
+}
+
+const batchEditVisible = ref(false)
+const batchEditing = ref(false)
+const batchEdit = reactive({
+  priceMode: 'fixed' as 'fixed' | 'percent',
+  unitPrice: undefined as number | undefined,
+  category: '',
+  status: '' as '' | 'active' | 'inactive',
+  safetyStock: undefined as number | undefined,
+})
+function openBatchEdit() {
+  if (!selected.value.length) return
+  Object.assign(batchEdit, {
+    priceMode: 'fixed',
+    unitPrice: undefined,
+    category: '',
+    status: '',
+    safetyStock: undefined,
+  })
+  batchEditVisible.value = true
+}
+async function submitBatchEdit() {
+  const patch: Record<string, unknown> = {}
+  if (batchEdit.unitPrice !== undefined && batchEdit.unitPrice !== null) {
+    patch.unit_price = batchEdit.unitPrice
+  }
+  if (batchEdit.category && batchEdit.category.trim()) {
+    patch.category = batchEdit.category.trim()
+  }
+  if (batchEdit.status) patch.status = batchEdit.status
+  if (batchEdit.safetyStock !== undefined && batchEdit.safetyStock !== null) {
+    patch.safety_stock = batchEdit.safetyStock
+  }
+  if (!Object.keys(patch).length) {
+    ElMessage.warning('请至少填写一项要修改的内容')
+    return
+  }
+  batchEditing.value = true
+  try {
+    const { data } = await api.post('/products/batch-edit', {
+      ids: selected.value.map((r) => r.id),
+      patch,
+      price_mode: patch.unit_price !== undefined ? batchEdit.priceMode : 'fixed',
+    })
+    ElMessage.success(
+      `批量编辑完成：成功 ${data.updated} 条${data.missing ? `，未找到 ${data.missing} 条` : ''}`
+    )
+    addLog('info', '批量编辑商品', `成功 ${data.updated} 条`)
+    batchEditVisible.value = false
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '批量编辑失败')
+  } finally {
+    batchEditing.value = false
+  }
 }
 
 const exporting = ref(false)

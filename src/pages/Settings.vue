@@ -1,6 +1,24 @@
 <template>
   <div class="page">
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
+            <el-tab-pane label="数据备份" name="backup">
+        <div class="page-header">
+          <h2>数据备份</h2>
+        </div>
+        <div class="appearance-card">
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">一键导出全部核心数据</div>
+              <div class="appearance-desc">导出商品、库存、流水、订单、盘点等核心表为 JSON 文件，可用于本地归档或迁移备份</div>
+            </div>
+            <el-button type="primary" :loading="backupLoading" @click="doBackup">立即导出</el-button>
+          </div>
+          <div v-if="backupResult" class="backup-result">
+            <div>备份时间：{{ formatDate(backupResult.generated_at) }}</div>
+            <div>包含 {{ backupResult.tables.length }} 张表：{{ backupResult.tables.join('、') }}</div>
+          </div>
+        </div>
+      </el-tab-pane>
             <el-tab-pane label="系统设置" name="system">
         <div class="page-header">
           <h2>系统设置</h2>
@@ -386,6 +404,28 @@ function formatDate(v: string) {
 }
 
 const activeTab = ref('system')
+const backupLoading = ref(false)
+const backupResult = ref<any>(null)
+async function doBackup() {
+  backupLoading.value = true
+  try {
+    const { data } = await api.get('/system/backup')
+    const payload = data.data
+    backupResult.value = payload
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cb-erp-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`备份完成，共 ${payload.table_count} 张表`)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '备份导出失败')
+  } finally {
+    backupLoading.value = false
+  }
+}
 function onTabChange(name: string | number) {
   if (name === 'permissions') loadPermissions()
   if (name === 'warehouses') loadWarehouses()
@@ -1147,6 +1187,15 @@ onMounted(() => {
   color: var(--ink-3);
   margin-top: 4px;
   max-width: 420px;
+}
+.backup-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f5f7fa;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.8;
 }
 .appearance-control {
   display: flex;

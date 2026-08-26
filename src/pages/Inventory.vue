@@ -45,6 +45,9 @@
               <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left: 6px">低库存预警</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="安全库存" width="100" align="right">
+            <template #default="{ row }">{{ row.products?.safety_stock ?? 0 }}</template>
+          </el-table-column>
           <el-table-column prop="reserved_quantity" label="锁定数量" width="110" align="right" />
           <el-table-column prop="updated_at" label="更新时间" min-width="180">
             <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>

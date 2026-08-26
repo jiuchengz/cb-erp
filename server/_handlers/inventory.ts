@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getAdminClient();
 
     let query: any = supabase.from('inventory')
-      .select('*, products!inner(id, sku, name), warehouses!inner(id, name)', { count: 'exact' });
+      .select('*, products!inner(id, sku, name, safety_stock), warehouses!inner(id, name)', { count: 'exact' });
 
     if (productId) query = query.eq('product_id', productId);
     if (sku) {

@@ -44,6 +44,8 @@ export interface Product extends BaseEntity {
   first_leg_freight: number | null
   last_mile_delivery_peso: number | null
   ml_commission_rate: number | null
+  safety_stock: number
+  remark: string | null
 }
 
 export interface Warehouse extends BaseEntity {

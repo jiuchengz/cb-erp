@@ -31,6 +31,8 @@ const createSchema = z.object({
   ml_commission_rate: z.coerce.number().min(0).max(1).optional().default(0.165),
   // 海外库存（平台可用库存快照，批量导入写入）
   overseas_stock: z.coerce.number().min(0).optional().default(0),
+  // 安全库存阈值（自动库存预警）
+  safety_stock: z.coerce.number().min(0).optional().default(0),
   // 批量导入内联图片：前端压缩后的 base64，由后端上传 Storage 并写入 image_text
   image_base64: z.string().max(6_000_000).optional(),
 });
@@ -149,14 +151,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      const enriched = rows.map((r: any) => ({
-        ...r,
-        domestic_stock: domMap.get(r.id) || 0,
-        warehouse_overseas_stock: ovsMap.get(r.id) || 0,
-        overseas_stock: Number(r.overseas_stock ?? 0),
-        in_transit_qty: transitMap.get(r.id) || 0,
-        sales_qty: salesMap.get(r.id) || 0,
-      }));
+      const enriched = rows.map((r: any) => {
+        const sellable = Number(r.domestic_stock || 0) + Number(r.overseas_stock ?? 0);
+        const safety = Number(r.safety_stock ?? 0);
+        return {
+          ...r,
+          domestic_stock: domMap.get(r.id) || 0,
+          warehouse_overseas_stock: ovsMap.get(r.id) || 0,
+          overseas_stock: Number(r.overseas_stock ?? 0),
+          in_transit_qty: transitMap.get(r.id) || 0,
+          sales_qty: salesMap.get(r.id) || 0,
+          sellable_stock: sellable,
+          low_stock: safety > 0 && sellable > 0 && sellable < safety,
+          out_of_stock: sellable <= 0,
+        };
+      });
 
       return res.status(200).json({ data: enriched, total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }

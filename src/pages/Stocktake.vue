@@ -3,6 +3,7 @@
     <div class="page-header">
       <h2>库存盘点</h2>
       <div>
+        <el-button @click="openSummary">差异复盘</el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新建盘点单</el-button>
       </div>
     </div>
@@ -200,6 +201,79 @@
         <el-button type="primary" :disabled="!pickerSelection.length" @click="addSelected">添加所选 ({{ pickerSelection.length }})</el-button>
       </template>
     </el-dialog>
+
+    <el-drawer v-model="summaryVisible" title="盘点差异复盘" size="640px" destroy-on-close>
+      <div v-loading="summaryLoading">
+        <template v-if="summary">
+          <div class="summary-totals">
+            <div class="st-chip gain">
+              <b>{{ fmtQty(summary.totals.gain_qty) }}</b>
+              <span>盘盈数量</span>
+            </div>
+            <div class="st-chip loss">
+              <b>{{ fmtQty(summary.totals.loss_qty) }}</b>
+              <span>盘亏数量</span>
+            </div>
+            <div class="st-chip net" :class="summary.totals.net_qty >= 0 ? 'gain' : 'loss'">
+              <b>{{ fmtQty(summary.totals.net_qty) }}</b>
+              <span>净差异</span>
+            </div>
+          </div>
+          <div class="summary-note">共复盘 {{ summary.stocktake_count }} 张已完成盘点单，金额按商品售价估算（MXN）</div>
+
+          <h3 class="summary-title">按商品（Top 20）</h3>
+          <el-table :data="summary.by_product.slice(0, 20)" size="small" border max-height="320">
+            <el-table-column label="商品" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div>{{ row.name }}</div>
+                <div class="summary-sku">{{ row.sku }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="盘盈" width="80" align="right">
+              <template #default="{ row }">
+                <span v-if="row.gain_qty > 0" class="gain-text">+{{ fmtQty(row.gain_qty) }}</span>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="盘亏" width="80" align="right">
+              <template #default="{ row }">
+                <span v-if="row.loss_qty > 0" class="loss-text">-{{ fmtQty(row.loss_qty) }}</span>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="净差异金额" width="110" align="right">
+              <template #default="{ row }">
+                <span :class="row.net_amount >= 0 ? 'gain-text' : 'loss-text'">{{ fmtAmount(row.net_amount) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <h3 class="summary-title">按仓库</h3>
+          <el-table :data="summary.by_warehouse" size="small" border max-height="260">
+            <el-table-column prop="warehouse_name" label="仓库" min-width="150" />
+            <el-table-column label="盘点单数" width="90" align="right" prop="stocktake_count" />
+            <el-table-column label="盘盈" width="80" align="right">
+              <template #default="{ row }">
+                <span v-if="row.gain_qty > 0" class="gain-text">+{{ fmtQty(row.gain_qty) }}</span>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="盘亏" width="80" align="right">
+              <template #default="{ row }">
+                <span v-if="row.loss_qty > 0" class="loss-text">-{{ fmtQty(row.loss_qty) }}</span>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="净金额" width="100" align="right">
+              <template #default="{ row }">
+                <span :class="row.net_amount >= 0 ? 'gain-text' : 'loss-text'">{{ fmtAmount(row.net_amount) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <el-empty v-else-if="!summaryLoading" description="暂无已完成盘点数据" />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -225,6 +299,10 @@ function fmtDiff(v: any) {
   const n = Number(v || 0)
   const s = Number.isInteger(n) ? String(n) : n.toFixed(2)
   return n > 0 ? `+${s}` : s
+}
+function fmtAmount(v: any) {
+  const n = Number(v || 0)
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 function diffClass(v: any) {
   const n = Number(v || 0)
@@ -257,6 +335,25 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+const summaryVisible = ref(false)
+const summaryLoading = ref(false)
+const summary = ref<any>(null)
+async function loadSummary() {
+  summaryLoading.value = true
+  try {
+    const { data } = await api.get('/stocktakes/summary')
+    summary.value = data.data ?? null
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '复盘数据加载失败')
+  } finally {
+    summaryLoading.value = false
+  }
+}
+function openSummary() {
+  summaryVisible.value = true
+  loadSummary()
 }
 
 function onSizeChange(size: number) {
@@ -639,5 +736,57 @@ onMounted(async () => {
 }
 .diff-zero {
   color: #909399;
+}
+.summary-totals {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.st-chip {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f5f7fa;
+  text-align: center;
+}
+.st-chip b {
+  display: block;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.st-chip span {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.st-chip.gain b {
+  color: #e6a23c;
+}
+.st-chip.loss b {
+  color: #f56c6c;
+}
+.summary-note {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+.summary-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 16px 0 8px;
+}
+.summary-sku {
+  font-size: 12px;
+  color: #909399;
+}
+.gain-text {
+  color: #e6a23c;
+  font-weight: 600;
+}
+.loss-text {
+  color: #f56c6c;
+  font-weight: 600;
 }
 </style>

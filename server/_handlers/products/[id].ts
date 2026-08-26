@@ -30,6 +30,7 @@ const updateSchema = z.object({
   last_mile_delivery_peso: z.coerce.number().min(0).optional(),
   ml_commission_rate: z.coerce.number().min(0).max(1).optional(),
   overseas_stock: z.coerce.number().min(0).optional(),
+  safety_stock: z.coerce.number().min(0).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

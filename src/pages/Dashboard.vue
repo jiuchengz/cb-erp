@@ -129,6 +129,61 @@
       </div>
     </div>
 
+    <el-card shadow="never" class="alert-card">
+      <template #header>
+        <div class="card-header">
+          <span>库存预警</span>
+          <el-button link type="primary" @click="loadAlerts">刷新</el-button>
+        </div>
+      </template>
+      <div class="alert-summary">
+        <div class="alert-chip danger">
+          <b>{{ alerts.summary.out_of_stock }}</b> 断货
+        </div>
+        <div class="alert-chip warning">
+          <b>{{ alerts.summary.low_stock }}</b> 低库存
+        </div>
+        <div class="alert-chip success">
+          <b>{{ alerts.summary.safe }}</b> 正常
+        </div>
+      </div>
+      <el-table v-loading="alertsLoading" :data="alerts.items" size="small" empty-text="暂无预警商品">
+        <el-table-column label="预警" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.alert_type === 'out_of_stock' ? 'danger' : 'warning'" effect="dark" size="small">
+              {{ row.alert_type === 'out_of_stock' ? '断货' : '低库存' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="商品" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div>{{ row.name }}</div>
+            <div class="alert-sku">{{ row.sku || row.code || '—' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="可售库存" width="100" align="right">
+          <template #default="{ row }">{{ row.sellable_stock }}</template>
+        </el-table-column>
+        <el-table-column label="安全库存" width="100" align="right">
+          <template #default="{ row }">{{ row.safety_stock || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="在途补货" width="100" align="right">
+          <template #default="{ row }">{{ row.in_transit_qty ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column label="缺口" width="90" align="right">
+          <template #default="{ row }">
+            <span v-if="row.safety_stock > 0 && row.sellable_stock < row.safety_stock" class="alert-gap">
+              {{ row.safety_stock - row.sellable_stock }}
+            </span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="alerts.items.length" class="alert-more">
+        <router-link to="/inventory">前往库存页查看全部 →</router-link>
+      </div>
+    </el-card>
+
     <el-card shadow="never" class="recent-card">
       <template #header>
         <div class="card-header">
@@ -226,6 +281,23 @@ async function loadAnalysis() {
   }
 }
 
+const alertsLoading = ref(false)
+const alerts = ref<any>({
+  summary: { total: 0, out_of_stock: 0, low_stock: 0, safe: 0 },
+  items: [],
+})
+async function loadAlerts() {
+  alertsLoading.value = true
+  try {
+    const { data } = await api.get('/inventory/alerts')
+    alerts.value = data.data ?? alerts.value
+  } catch {
+    // 预警加载失败不阻塞首页
+  } finally {
+    alertsLoading.value = false
+  }
+}
+
 async function loadRecent() {
   loadingRecent.value = true
   try {
@@ -245,7 +317,7 @@ async function loadRecent() {
 }
 
 async function loadAll() {
-  await Promise.all([loadAnalysis(), loadRecent()])
+  await Promise.all([loadAnalysis(), loadRecent(), loadAlerts()])
 }
 
 function setQuick(days: number) {
@@ -387,6 +459,17 @@ onMounted(() => {
 .dl-pct { color: var(--ink-3); width: 46px; text-align: right; }
 
 .recent-card { margin-top: 8px; }
+.alert-card { margin-top: 8px; }
+.alert-summary { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.alert-chip { padding: 6px 14px; border-radius: 8px; font-size: 13px; color: var(--ink-2); background: #f5f7fa; }
+.alert-chip b { font-size: 16px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.alert-chip.danger b { color: #f56c6c; }
+.alert-chip.warning b { color: #e6a23c; }
+.alert-chip.success b { color: #67c23a; }
+.alert-sku { font-size: 12px; color: var(--ink-3); }
+.alert-gap { color: #f56c6c; font-weight: 600; }
+.alert-more { margin-top: 10px; text-align: right; font-size: 13px; }
+.alert-more a { color: var(--brand); text-decoration: none; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 
 @media (max-width: 1100px) {

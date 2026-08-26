@@ -13,6 +13,10 @@ import products from './_handlers/products';
 import productsTracking from './_handlers/products/tracking';
 import costProfit from './_handlers/cost-profit';
 import productsBatchDelete from './_handlers/products/batch-delete';
+import productsBatchEdit from './_handlers/products/batch-edit';
+import inventoryAlerts from './_handlers/inventory/alerts';
+import systemBackup from './_handlers/system/backup';
+import stocktakesSummary from './_handlers/stocktakes/summary';
 import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
 import replenishment from './_handlers/replenishment';
@@ -80,11 +84,13 @@ const routes: Route[] = [
   { pattern: /^\/system-settings$/, handler: systemSettings },
   { pattern: /^\/exchange-rates$/, handler: exchangeRates },
   { pattern: /^\/db-usage$/, handler: dbUsage },
+  { pattern: /^\/inventory\/alerts$/, handler: inventoryAlerts },
   { pattern: /^\/inventory\/adjust$/, handler: inventoryAdjust },
   { pattern: /^\/inventory\/transactions$/, handler: inventoryTransactions },
   { pattern: /^\/inventory\/([^/]+)$/, handler: inventoryId, params: ['id'] },
   { pattern: /^\/inventory$/, handler: inventory },
   { pattern: /^\/permissions$/, handler: permissions },
+  { pattern: /^\/products\/batch-edit$/, handler: productsBatchEdit },
   { pattern: /^\/products\/batch-delete$/, handler: productsBatchDelete },
   { pattern: /^\/products\/upload-image$/, handler: uploadImage },
   { pattern: /^\/products\/tracking$/, handler: productsTracking },
@@ -103,6 +109,7 @@ const routes: Route[] = [
   { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: shipmentsConfirmInbound, params: ['id'] },
   { pattern: /^\/shipments\/([^/]+)$/, handler: shipmentsId, params: ['id'] },
   { pattern: /^\/shipments$/, handler: shipments },
+  { pattern: /^\/stocktakes\/summary$/, handler: stocktakesSummary },
   { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: stocktakes, params: ['id'] },
   { pattern: /^\/stocktakes\/([^/]+)$/, handler: stocktakes, params: ['id'] },
   { pattern: /^\/stocktakes$/, handler: stocktakes },
@@ -111,6 +118,7 @@ const routes: Route[] = [
   { pattern: /^\/users\/([^/]+)$/, handler: usersId, params: ['id'] },
   { pattern: /^\/users$/, handler: users },
   { pattern: /^\/export\/xlsx$/, handler: exportXlsx },
+  { pattern: /^\/system\/backup$/, handler: systemBackup },
   { pattern: /^\/warehouses\/([^/]+)$/, handler: warehousesId, params: ['id'] },
   { pattern: /^\/warehouses$/, handler: warehouses },
 ];
