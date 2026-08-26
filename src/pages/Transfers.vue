@@ -595,16 +595,30 @@ async function printWorkOrder(id: string) {
     const items = d.shipment_items || []
     const totalQtyNum = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     const prod = (pid: string) => products.value.find((x) => x.id === pid)
-    const rowsHtml = items
-      .map((it: any, i: number) => {
-        const p = prod(it.product_id)
-        const img = p?.image_text
-        const imgHtml = img
-          ? `<img src="${img}" style="width:var(--img-size,60px);height:var(--img-size,60px);object-fit:contain;border:none;background:#fff" onerror="this.style.display='none'" />`
-          : `<span style="color:#aaa">-</span>`
-        return `
+    const unitOfItem = (it: any) => (prod(it.product_id)?.unit || '').trim()
+    // 按单位分组：个 → 套 → 对，其余单位放最后；无该单位的组直接跳过
+    const UNIT_ORDER = ['个', '套', '对']
+    const indexed = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: unitOfItem(it) }))
+    const groups: { unit: string; rows: typeof indexed }[] = []
+    for (const u of UNIT_ORDER) {
+      const rows = indexed.filter((x) => x.unit === u)
+      if (rows.length) groups.push({ unit: u, rows })
+    }
+    const rest = indexed.filter((x) => !UNIT_ORDER.includes(x.unit))
+    if (rest.length) groups.push({ unit: '其他', rows: rest })
+    const gapRow = `<tr class="gap-row"><td colspan="8"></td></tr>`
+    const rowsHtml = groups
+      .map((g, gi) => {
+        const body = g.rows
+          .map(({ it, idx }) => {
+            const p = prod(it.product_id)
+            const img = p?.image_text
+            const imgHtml = img
+              ? `<img src="${img}" style="width:var(--img-size,60px);height:var(--img-size,60px);object-fit:contain;border:none;background:#fff" onerror="this.style.display='none'" />`
+              : `<span style="color:#aaa">-</span>`
+            return `
         <tr>
-          <td>${i + 1}</td>
+          <td>${idx}</td>
           <td>${p?.code || it.product_id}</td>
           <td>${imgHtml}</td>
           <td>${p?.name || '-'}</td>
@@ -613,6 +627,9 @@ async function printWorkOrder(id: string) {
           <td>${p?.unit || '-'}</td>
           <td>${it.remark || '-'}</td>
         </tr>`
+          })
+          .join('')
+        return (gi > 0 ? gapRow : '') + body
       })
       .join('')
     const now = sysFormatDateTime(new Date())
@@ -645,6 +662,7 @@ async function printWorkOrder(id: string) {
   .items th, .items td { border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
   .items th { background: #f5f5f5; font-weight: 600; }
   .items td.num { text-align: right; font-weight: 600; white-space: nowrap; }
+  .gap-row td { border: none !important; padding: 5px !important; }
   .sum-row td { background: #fafafa; font-weight: 700; white-space: nowrap; }
   .print-time { text-align: right; margin-top: 14px; font-size: 11px; color: #666; }
   @media print {
