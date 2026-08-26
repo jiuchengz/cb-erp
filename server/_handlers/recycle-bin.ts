@@ -114,6 +114,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (path.endsWith('/recycle-bin/restore')) {
         const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq('id', id).select().single();
         if (error) throw error;
+        // 恢复未入仓的调拨货件：对称扣回国内库存（删除时已回补）
+        if (type === 'shipment' && (before as any).source === 'transfer' && before.cargo_status !== '已入仓') {
+          const items = (before as any).shipment_items || [];
+          if (items.length) {
+            const { data: domWh, error: domWhErr } = await supabase
+              .from('warehouses')
+              .select('id')
+              .eq('wh_type', 'domestic')
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (domWhErr) throw domWhErr;
+            if (domWh) {
+              for (const it of items) {
+                await supabase.rpc('adjust_inventory', {
+                  p_product_id: it.product_id,
+                  p_warehouse_id: domWh.id,
+                  p_quantity: -Number(it.quantity || 0),
+                  p_type: 'transfer_out',
+                  p_reference_type: 'shipment',
+                  p_reference_id: id,
+                  p_created_by: ctx.userId,
+                  p_note: '调拨发货恢复扣减国内库存',
+                });
+              }
+            }
+          }
+        }
         await writeAudit(ctx, req, 'restore', type, id, before, data);
         return res.status(200).json({ ok: true, data });
       }

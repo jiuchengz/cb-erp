@@ -117,6 +117,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 旧调用带 items 则插入明细，新表单（单行字段）跳过
       if (body.items && body.items.length > 0) {
+        // 调拨发货：先扣减国内仓库库存，库存不足则整单回滚
+        if (body.source === 'transfer') {
+          const { data: domWh, error: domWhErr } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('wh_type', 'domestic')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (domWhErr) throw domWhErr;
+          if (!domWh) throw Errors.conflict('暂无国内仓库，无法扣减国内库存');
+          const deducted: { product_id: string; quantity: number }[] = [];
+          for (const it of body.items) {
+            const { error: invErr } = await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: domWh.id,
+              p_quantity: -it.quantity,
+              p_type: 'transfer_out',
+              p_reference_type: 'shipment',
+              p_reference_id: shipment.id,
+              p_created_by: ctx.userId,
+              p_note: `调拨发货扣减 ${body.tracking_no || body.shipment_no || shipment.id}`,
+            });
+            if (invErr) {
+              // 回滚已扣减部分，再删除货件
+              for (const d of deducted) {
+                await supabase.rpc('adjust_inventory', {
+                  p_product_id: d.product_id,
+                  p_warehouse_id: domWh.id,
+                  p_quantity: d.quantity,
+                  p_type: 'adjustment',
+                  p_reference_type: 'shipment',
+                  p_reference_id: shipment.id,
+                  p_created_by: ctx.userId,
+                  p_note: '调拨发货失败回滚',
+                });
+              }
+              await supabase.from('shipments').delete().eq('id', shipment.id);
+              throw Errors.conflict(`国内库存不足，无法创建调拨发货：${it.product_id} 缺少 ${-it.quantity} 件`);
+            }
+            deducted.push({ product_id: it.product_id, quantity: it.quantity });
+          }
+        }
         const { error: itemErr } = await supabase
           .from('shipment_items')
           .insert(

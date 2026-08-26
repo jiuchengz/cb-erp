@@ -116,19 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           else if (whType === 'overseas') ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
 
-        // 在途：已到货未入库的拿货数量（purchase_orders.status = ARRIVED）
-        const { data: transitRows, error: transitErr } = await supabase
-          .from('purchase_order_items')
-          .select('product_id, quantity, purchase_orders!inner(status)')
-          .in('product_id', pageIds)
-          .eq('purchase_orders.status', 'ARRIVED');
-        if (transitErr) throw transitErr;
-        for (const r of transitRows || []) {
-          const pid = r.product_id as string;
-          transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
-        }
-
-        // 在途（调拨发货）：shipments(source=transfer) 货物状态非「已入仓」的货件数量
+        // 在途（仅调拨发货）：shipments(source=transfer) 货物状态非「已入仓」的货件数量
         const { data: transitShipRows, error: transitShipErr } = await supabase
           .from('shipment_items')
           .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at)')

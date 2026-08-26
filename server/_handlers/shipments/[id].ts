@@ -116,6 +116,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         throw error;
       }
 
+      // 调拨发货货物状态变为「已入仓」：自动增加海外仓库存（仅从未入仓变为已入仓时执行一次）
+      const becameInbound =
+        (before as any).source === 'transfer' &&
+        before.cargo_status !== '已入仓' &&
+        body.cargo_status === '已入仓';
+      if (becameInbound) {
+        const items = (body.items && body.items.length ? body.items : (before as any).shipment_items) || [];
+        const { data: ovsWh, error: ovsWhErr } = await supabase
+          .from('warehouses')
+          .select('id')
+          .eq('wh_type', 'overseas')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (ovsWhErr) throw ovsWhErr;
+        if (!ovsWh) throw Errors.conflict('暂无海外仓库，无法增加海外库存');
+        for (const it of items) {
+          const { error: invErr } = await supabase.rpc('adjust_inventory', {
+            p_product_id: it.product_id,
+            p_warehouse_id: ovsWh.id,
+            p_quantity: Number(it.quantity || 0),
+            p_type: 'transfer_in',
+            p_reference_type: 'shipment',
+            p_reference_id: id,
+            p_created_by: ctx.userId,
+            p_note: `调拨发货已入仓 ${data.tracking_no || data.shipment_no || id}`,
+          });
+          if (invErr) throw invErr;
+        }
+      }
+
       // 明细整体替换：先删旧明细，再插入新明细
       if (body.items && body.items.length > 0) {
         const { error: delErr } = await supabase.from('shipment_items').delete().eq('shipment_id', id);
@@ -147,6 +178,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('shipments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
+      // 删除未入仓的调拨货件：回补国内库存，避免已扣库存丢失
+      if ((before as any).source === 'transfer' && before.cargo_status !== '已入仓') {
+        const items = (before as any).shipment_items || [];
+        if (items.length) {
+          const { data: domWh, error: domWhErr } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('wh_type', 'domestic')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (domWhErr) throw domWhErr;
+          if (domWh) {
+            for (const it of items) {
+              await supabase.rpc('adjust_inventory', {
+                p_product_id: it.product_id,
+                p_warehouse_id: domWh.id,
+                p_quantity: Number(it.quantity || 0),
+                p_type: 'adjustment',
+                p_reference_type: 'shipment',
+                p_reference_id: id,
+                p_created_by: ctx.userId,
+                p_note: '调拨发货删除回补国内库存',
+              });
+            }
+          }
+        }
+      }
       await writeAudit(ctx, req, 'delete', 'shipment', id, before, null);
       return res.status(200).json({ ok: true });
     }

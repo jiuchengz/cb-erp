@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           warehouse_id: warehouseId,
           receive_date: receiveDate,
           remark: body.remark || null,
-          status: 'ARRIVED',
+          status: 'RECEIVED',
           total_amount: 0,
           created_by: ctx.userId,
         })
@@ -123,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               warehouse_id: warehouseId,
               receive_date: receiveDate,
               remark: body.remark || null,
-              status: 'ARRIVED',
+              status: 'RECEIVED',
               total_amount: 0,
               created_by: ctx.userId,
             })
@@ -141,6 +141,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (itemErr2) {
             await supabase.from('purchase_orders').delete().eq('id', retryOrder.id);
             throw itemErr2;
+          }
+          const { error: invErr2 } = await supabase.rpc('adjust_inventory', {
+            p_product_id: product.id,
+            p_warehouse_id: warehouseId,
+            p_quantity: body.quantity,
+            p_type: 'purchase_in',
+            p_reference_type: 'purchase_order',
+            p_reference_id: retryOrder.id,
+            p_created_by: ctx.userId,
+            p_note: `拿货入库 ${retryNo}`,
+          });
+          if (invErr2) {
+            await supabase.from('purchase_orders').delete().eq('id', retryOrder.id);
+            throw invErr2;
           }
           await writeAudit(ctx, req, 'create', 'purchase_order', retryOrder.id, null, {
             order_no: retryOrder.order_no,
@@ -163,6 +177,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (itemErr) {
         await supabase.from('purchase_orders').delete().eq('id', order.id);
         throw itemErr;
+      }
+
+      // 拿货即入库：写入国内仓库存并留流水
+      const { error: invErr } = await supabase.rpc('adjust_inventory', {
+        p_product_id: product.id,
+        p_warehouse_id: warehouseId,
+        p_quantity: body.quantity,
+        p_type: 'purchase_in',
+        p_reference_type: 'purchase_order',
+        p_reference_id: order.id,
+        p_created_by: ctx.userId,
+        p_note: `拿货入库 ${orderNo}`,
+      });
+      if (invErr) {
+        await supabase.from('purchase_orders').delete().eq('id', order.id);
+        throw invErr;
       }
 
       await writeAudit(ctx, req, 'create', 'purchase_order', order.id, null, {
