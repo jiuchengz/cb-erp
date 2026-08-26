@@ -35,9 +35,9 @@
 
     <div class="table-wrap">
       <el-table :data="rows" v-loading="loading" border stripe size="small" style="width: 100%" max-height="calc(100vh - 250px)">
-        <el-table-column prop="code" label="产品编码" min-width="130" fixed="left" show-overflow-tooltip />
-        <el-table-column prop="name" label="产品名称" min-width="180" fixed="left" show-overflow-tooltip />
-        <el-table-column label="图片" width="70" fixed="left">
+        <el-table-column prop="code" label="产品编码" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="name" label="产品名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="图片" width="70">
           <template #default="{ row }">
             <el-image
               v-if="row.image_text"
@@ -128,7 +128,7 @@
         <el-table-column label="空运费(自动)" width="100" align="right" class-name="calc-col">
           <template #default="{ row }">{{ fmt(row.air_freight) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="100">
           <template #default="{ row }">
             <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
           </template>
