@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       const source = typeof req.query.source === 'string' ? req.query.source.trim() : '';
       let select = '*, forwarders(name)';
-      if (source) select += ', shipment_items(quantity)';
+      if (source) select += ', shipment_items(product_id, quantity, remark)';
       let query: any = supabase.from('shipments').select(select, { count: 'exact' }).is('deleted_at', null);
       if (source) query = query.eq('source', source);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
