@@ -21,12 +21,21 @@
         @clear="load"
       />
       <el-button type="primary" @click="load">查询</el-button>
+      <span class="rate-inputs">
+        海运
+        <el-input-number v-model="settings.sea_rate" :min="0" :max="100000" :step="100" size="small" controls-position="right" style="width: 110px" />
+        元/方
+        ｜ 空运
+        <el-input-number v-model="settings.air_rate" :min="0" :max="100000" :step="1" size="small" controls-position="right" style="width: 110px" />
+        元/kg
+        <el-button size="small" type="primary" plain :loading="savingRates" @click="saveRates">保存运费单价</el-button>
+      </span>
       <span class="settings-hint">汇率 {{ settings.rate }} ｜ 含税 {{ settings.tax_rate }} ｜ 仓储 {{ settings.storage }}% ｜ 货损 {{ settings.loss }}% ｜ 广告 {{ settings.ad }}% ｜ 代扣 {{ settings.tax9 }}% ｜ 补税 {{ settings.tax7 }}% ｜ 默认佣金 {{ settings.comm }}%</span>
     </div>
 
     <div class="table-wrap">
-      <el-table :data="rows" v-loading="loading" border stripe size="small" style="width: 100%">
-        <el-table-column type="index" label="序号" width="60" fixed="left" />
+      <el-table :data="rows" v-loading="loading" border stripe size="small" style="width: 100%" max-height="calc(100vh - 250px)">
+        <el-table-column prop="code" label="产品编码" min-width="130" fixed="left" show-overflow-tooltip />
         <el-table-column prop="name" label="产品名称" min-width="180" fixed="left" show-overflow-tooltip />
         <el-table-column label="图片" width="70" fixed="left">
           <template #default="{ row }">
@@ -46,9 +55,6 @@
             <el-link v-if="row.link_id" type="primary" :href="'https://www.mercadolibre.com.mx/' + row.link_id" target="_blank" :underline="false">{{ row.link_id }}</el-link>
             <span v-else>-</span>
           </template>
-        </el-table-column>
-        <el-table-column label="1688卖家" min-width="110" show-overflow-tooltip>
-          <template #default>—</template>
         </el-table-column>
         <el-table-column label="ML佣金比例" width="110" align="right">
           <template #default="{ row }">{{ row.ml_commission_rate != null ? (row.ml_commission_rate * 100).toFixed(2) + '%' : (settings.comm).toFixed(2) + '%' }}</template>
@@ -115,9 +121,13 @@
         <el-table-column prop="length_cm" label="长cm" width="80" align="right" />
         <el-table-column prop="width_cm" label="宽cm" width="80" align="right" />
         <el-table-column prop="height_cm" label="高cm" width="80" align="right" />
-        <el-table-column prop="weight_kg" label="实重KG" width="90" align="right" />
-        <el-table-column prop="sea_freight" label="海运费" width="90" align="right" />
-        <el-table-column prop="air_freight" label="空运费" width="90" align="right" />
+        <el-table-column prop="weight_g" label="重量(克)" width="90" align="right" />
+        <el-table-column label="海运费(自动)" width="100" align="right" class-name="calc-col">
+          <template #default="{ row }">{{ fmt(row.sea_freight) }}</template>
+        </el-table-column>
+        <el-table-column label="空运费(自动)" width="100" align="right" class-name="calc-col">
+          <template #default="{ row }">{{ fmt(row.air_freight) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -168,14 +178,15 @@
           <span class="tip">×</span>
           <el-input-number v-model="editForm.height_cm" :min="0" :precision="1" style="width: 110px" />
         </el-form-item>
-        <el-form-item label="实重(KG)">
-          <el-input-number v-model="editForm.weight_kg" :min="0" :precision="2" style="width: 180px" />
+        <el-form-item label="重量(克)">
+          <el-input-number v-model="editForm.weight_g" :min="0" :precision="0" style="width: 180px" />
+          <span class="tip">用于空运费自动计算：重量/1000×空运单价</span>
         </el-form-item>
-        <el-form-item label="海运费(元)">
-          <el-input-number v-model="editForm.sea_freight" :min="0" :precision="2" style="width: 180px" />
+        <el-form-item label="海运费(自动计算)">
+          <span class="tip">长×宽×高/1000000×海运单价（顶部设置，元/方），保存后自动写入</span>
         </el-form-item>
-        <el-form-item label="空运费(元)">
-          <el-input-number v-model="editForm.air_freight" :min="0" :precision="2" style="width: 180px" />
+        <el-form-item label="空运费(自动计算)">
+          <span class="tip">重量(克)/1000×空运单价（顶部设置，元/kg），保存后自动写入</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -247,10 +258,13 @@ const settings = reactive({
   tax9: 9,
   tax7: 7,
   comm: 16.5,
+  sea_rate: 3000,
+  air_rate: 95,
 })
 
 const editVisible = ref(false)
 const saving = ref(false)
+const savingRates = ref(false)
 const editForm = reactive<any>({
   id: '',
   _name: '',
@@ -263,9 +277,7 @@ const editForm = reactive<any>({
   length_cm: 0,
   width_cm: 0,
   height_cm: 0,
-  weight_kg: 0,
-  sea_freight: 0,
-  air_freight: 0,
+  weight_g: 0,
 })
 
 const settingsVisible = ref(false)
@@ -308,9 +320,7 @@ function openEdit(row: any) {
     length_cm: Number(row.length_cm || 0),
     width_cm: Number(row.width_cm || 0),
     height_cm: Number(row.height_cm || 0),
-    weight_kg: Number(row.weight_kg || 0),
-    sea_freight: Number(row.sea_freight || 0),
-    air_freight: Number(row.air_freight || 0),
+    weight_g: Number(row.weight_g || 0),
   })
   editVisible.value = true
 }
@@ -328,9 +338,7 @@ async function saveRow() {
     payload.length_cm = Number(editForm.length_cm || 0)
     payload.width_cm = Number(editForm.width_cm || 0)
     payload.height_cm = Number(editForm.height_cm || 0)
-    payload.weight_kg = Number(editForm.weight_kg || 0)
-    payload.sea_freight = Number(editForm.sea_freight || 0)
-    payload.air_freight = Number(editForm.air_freight || 0)
+    payload.weight_g = Number(editForm.weight_g || 0)
     const { data } = await api.put('/cost-profit/save', payload)
     const saved = data.data
     const idx = rows.value.findIndex((r) => r.id === saved.id)
@@ -365,6 +373,24 @@ async function saveSettings() {
   }
 }
 
+async function saveRates() {
+  savingRates.value = true
+  try {
+    const { data } = await api.put('/cost-profit/settings', {
+      sea_rate: Number(settings.sea_rate || 0),
+      air_rate: Number(settings.air_rate || 0),
+    })
+    Object.assign(settings, data.data)
+    addLog('success', '更新海运/空运单价', 'cost_profit')
+    ElMessage.success('运费单价已保存')
+    load()
+  } catch (e: any) {
+    ElMessage.error('保存失败: ' + (e?.response?.data?.error?.message || e?.message || e))
+  } finally {
+    savingRates.value = false
+  }
+}
+
 /* ---------- 模板 ---------- */
 const TPL_COLS: { label: string; sample?: string | number }[] = [
   { label: '产品名称', sample: '示例商品' },
@@ -378,9 +404,7 @@ const TPL_COLS: { label: string; sample?: string | number }[] = [
   { label: '长cm', sample: 20 },
   { label: '宽cm', sample: 15 },
   { label: '高cm', sample: 10 },
-  { label: '实重KG', sample: 0.5 },
-  { label: '海运费', sample: 0 },
-  { label: '空运费', sample: 0 },
+  { label: '重量(克)', sample: 500 },
 ]
 
 function downloadTpl() {
@@ -412,9 +436,7 @@ async function onImportFile(e: Event) {
       length: ['长', '长cm', 'length_cm'],
       width: ['宽', '宽cm', 'width_cm'],
       height: ['高', '高cm', 'height_cm'],
-      weight: ['实重', '实重KG', 'weight_kg'],
-      sea: ['海运费', 'sea_freight'],
-      air: ['空运费', 'air_freight'],
+      weight: ['重量', '实重', '重量(克)', 'weight_g'],
     })
     if (col.name === undefined && col.link === undefined) {
       ElMessage.error('表头无法识别，请使用下载的模板文件，确保包含"产品名称"或"链接"列')
@@ -455,9 +477,7 @@ async function onImportFile(e: Event) {
       if (col.length !== undefined) payload.length_cm = cellNum(r, col.length)
       if (col.width !== undefined) payload.width_cm = cellNum(r, col.width)
       if (col.height !== undefined) payload.height_cm = cellNum(r, col.height)
-      if (col.weight !== undefined) payload.weight_kg = cellNum(r, col.weight)
-      if (col.sea !== undefined) payload.sea_freight = cellNum(r, col.sea)
-      if (col.air !== undefined) payload.air_freight = cellNum(r, col.air)
+      if (col.weight !== undefined) payload.weight_g = cellNum(r, col.weight)
       await api.put('/cost-profit/save', payload)
       ok++
     }
@@ -516,9 +536,9 @@ async function onExport() {
       { key: 'length_cm', label: '长cm' },
       { key: 'width_cm', label: '宽cm' },
       { key: 'height_cm', label: '高cm' },
-      { key: 'weight_kg', label: '实重KG' },
-      { key: 'sea_freight', label: '海运费' },
-      { key: 'air_freight', label: '空运费' },
+      { key: 'weight_g', label: '重量(克)' },
+      { key: 'sea_freight', label: '海运费(自动)' },
+      { key: 'air_freight', label: '空运费(自动)' },
     ]
     const payload = buildExportPayload({ rows: list, columns, withImages: false })
     await exportViaServer('成本利润表_' + todayStr() + '.xlsx', payload, false, '成本利润表')
@@ -555,6 +575,14 @@ onMounted(load)
 .settings-hint {
   color: #909399;
   font-size: 12px;
+}
+.rate-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #606266;
+  font-size: 13px;
+  white-space: nowrap;
 }
 .table-wrap {
   border: 1px solid #ebeef5;

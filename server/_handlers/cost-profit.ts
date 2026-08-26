@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS = {
   tax9: 9,         // 9% 平台代扣税 %
   tax7: 7,         // 7% 额外补税 %
   comm: 16.5,      // 默认 ML 佣金比例 %
+  sea_rate: 3000,  // 海运费单价（元/方）
+  air_rate: 95,    // 空运费单价（元/kg）
 };
 
 const settingsSchema = z.object({
@@ -29,6 +31,8 @@ const settingsSchema = z.object({
   tax9: z.coerce.number().min(0).max(100).optional(),
   tax7: z.coerce.number().min(0).max(100).optional(),
   comm: z.coerce.number().min(0).max(100).optional(),
+  sea_rate: z.coerce.number().min(0).max(100000).optional(),
+  air_rate: z.coerce.number().min(0).max(100000).optional(),
 });
 
 const saveSchema = z.object({
@@ -42,9 +46,7 @@ const saveSchema = z.object({
   length_cm: z.coerce.number().min(0).optional(),
   width_cm: z.coerce.number().min(0).optional(),
   height_cm: z.coerce.number().min(0).optional(),
-  weight_kg: z.coerce.number().min(0).optional(),
-  air_freight: z.coerce.number().min(0).optional(),
-  sea_freight: z.coerce.number().min(0).optional(),
+  weight_g: z.coerce.number().min(0).optional(),
 });
 
 async function loadSettings(supabase: any): Promise<typeof DEFAULT_SETTINGS> {
@@ -91,6 +93,11 @@ export function calcProfitFields(p: any, s: typeof DEFAULT_SETTINGS) {
   const AE = K - M;                                       // 销售毛利(元)
   const AF = K > 0 ? AE / K : 0;                          // 销售毛利率
 
+  // 海运费自动计算：长x宽x高(cm) / 1000000 x 海运单价(元/方)
+  const sea_freight_calc = (Number(p.length_cm || 0) * Number(p.width_cm || 0) * Number(p.height_cm || 0)) / 1000000 * s.sea_rate;
+  // 空运费自动计算：重量(g) / 1000 x 空运单价(元/kg)
+  const air_freight_calc = (Number(p.weight_g || 0) / 1000) * s.air_rate;
+
   return {
     sale_price_cny: round2(K),
     taxed_cost_cny: round2(M),
@@ -110,6 +117,8 @@ export function calcProfitFields(p: any, s: typeof DEFAULT_SETTINGS) {
     profit_ratio: AD,
     gross_profit_cny: round2(AE),
     gross_profit_ratio: AF,
+    sea_freight: round2(sea_freight_calc),
+    air_freight: round2(air_freight_calc),
   };
 }
 
@@ -175,10 +184,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const merged = { ...existing, ...fields };
       const profit = calcProfitFields(merged, settings);
+      const updateFields = {
+        ...fields,
+        sea_freight: profit.sea_freight,
+        air_freight: profit.air_freight,
+        platform_profit: profit.profit_cny,
+        updated_at: new Date().toISOString(),
+      };
 
       const { error: updErr } = await supabase
         .from('products')
-        .update({ ...fields, platform_profit: profit.profit_cny, updated_at: new Date().toISOString() })
+        .update(updateFields)
         .eq('id', id);
       if (updErr) throw updErr;
       await writeAudit(ctx, req, 'update', 'products', id, null, { ...fields, platform_profit: profit.profit_cny });

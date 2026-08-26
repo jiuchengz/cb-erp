@@ -101964,8 +101964,12 @@ var DEFAULT_SETTINGS = {
   // 9% 平台代扣税 %
   tax7: 7,
   // 7% 额外补税 %
-  comm: 16.5
+  comm: 16.5,
   // 默认 ML 佣金比例 %
+  sea_rate: 3e3,
+  // 海运费单价（元/方）
+  air_rate: 95
+  // 空运费单价（元/kg）
 };
 var settingsSchema = external_exports.object({
   rate: external_exports.coerce.number().min(0.01).max(10).optional(),
@@ -101975,7 +101979,9 @@ var settingsSchema = external_exports.object({
   ad: external_exports.coerce.number().min(0).max(100).optional(),
   tax9: external_exports.coerce.number().min(0).max(100).optional(),
   tax7: external_exports.coerce.number().min(0).max(100).optional(),
-  comm: external_exports.coerce.number().min(0).max(100).optional()
+  comm: external_exports.coerce.number().min(0).max(100).optional(),
+  sea_rate: external_exports.coerce.number().min(0).max(1e5).optional(),
+  air_rate: external_exports.coerce.number().min(0).max(1e5).optional()
 });
 var saveSchema = external_exports.object({
   id: external_exports.string().min(1),
@@ -101988,9 +101994,7 @@ var saveSchema = external_exports.object({
   length_cm: external_exports.coerce.number().min(0).optional(),
   width_cm: external_exports.coerce.number().min(0).optional(),
   height_cm: external_exports.coerce.number().min(0).optional(),
-  weight_kg: external_exports.coerce.number().min(0).optional(),
-  air_freight: external_exports.coerce.number().min(0).optional(),
-  sea_freight: external_exports.coerce.number().min(0).optional()
+  weight_g: external_exports.coerce.number().min(0).optional()
 });
 async function loadSettings(supabase) {
   const { data, error } = await supabase.from("system_settings").select("value").eq("key", "cost_profit_settings").maybeSingle();
@@ -102024,6 +102028,8 @@ function calcProfitFields(p, s) {
   const AD = K > 0 ? AC / K : 0;
   const AE = K - M;
   const AF = K > 0 ? AE / K : 0;
+  const sea_freight_calc = Number(p.length_cm || 0) * Number(p.width_cm || 0) * Number(p.height_cm || 0) / 1e6 * s.sea_rate;
+  const air_freight_calc = Number(p.weight_g || 0) / 1e3 * s.air_rate;
   return {
     sale_price_cny: round2(K),
     taxed_cost_cny: round2(M),
@@ -102042,7 +102048,9 @@ function calcProfitFields(p, s) {
     profit_cny: round2(AC),
     profit_ratio: AD,
     gross_profit_cny: round2(AE),
-    gross_profit_ratio: AF
+    gross_profit_ratio: AF,
+    sea_freight: round2(sea_freight_calc),
+    air_freight: round2(air_freight_calc)
   };
 }
 function round2(v) {
@@ -102095,7 +102103,14 @@ async function handler12(req, res) {
       if (!existing) throw new Error("\u5546\u54C1\u4E0D\u5B58\u5728");
       const merged = { ...existing, ...fields };
       const profit = calcProfitFields(merged, settings);
-      const { error: updErr } = await supabase.from("products").update({ ...fields, platform_profit: profit.profit_cny, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+      const updateFields = {
+        ...fields,
+        sea_freight: profit.sea_freight,
+        air_freight: profit.air_freight,
+        platform_profit: profit.profit_cny,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const { error: updErr } = await supabase.from("products").update(updateFields).eq("id", id);
       if (updErr) throw updErr;
       await writeAudit(ctx, req, "update", "products", id, null, { ...fields, platform_profit: profit.profit_cny });
       return res.status(200).json({ data: { ...merged, ...profit } });
