@@ -824,7 +824,19 @@ async function exportRows(withImages = false) {
     ElMessage.warning('请先勾选要导出的行')
     return
   }
-  const targets = selected.value
+  // 与打印工单一致：导出前确保商品基础数据已加载，避免商品编码/名称/条形码/单位缺失
+  if (!products.value.length) {
+    await loadOptions()
+  }
+  // 与打印工单一致：明细取自详情接口（完整字段），保证导出内容与打印工单完全相同
+  const targets: any[] = []
+  for (const ship of selected.value) {
+    try {
+      targets.push(await fetchDetail(ship.id))
+    } catch {
+      targets.push(ship)
+    }
+  }
   const prod = (pid: string) => products.value.find((x) => x.id === pid)
   const aoa: any[][] = []
   const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = []
