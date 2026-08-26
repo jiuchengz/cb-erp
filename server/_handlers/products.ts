@@ -22,6 +22,7 @@ const createSchema = z.object({
   image_text: z.string().max(255).nullable().optional(),
   link_id: z.string().max(255).nullable().optional(),
   unit: z.string().max(50).optional().default('套'),
+  remark: z.string().max(1000).nullable().optional(),
   competitor_id: z.string().max(255).nullable().optional(),
   shipping_mode: z.string().max(20).optional().default('海运'),
   purchase_cost: z.coerce.number().min(0).optional().default(0),

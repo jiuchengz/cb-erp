@@ -92,6 +92,12 @@
         <template #default="{ row }">{{ row.sku || '—' }}</template>
       </el-table-column>
       <el-table-column prop="barcode" label="条形码" min-width="140" />
+      <el-table-column label="单位" width="90">
+        <template #default="{ row }">{{ row.unit || '—' }}</template>
+      </el-table-column>
+      <el-table-column label="备注" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.remark || '—' }}</template>
+      </el-table-column>
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
       <el-table-column label="在途数量" width="110" align="right">
@@ -246,6 +252,9 @@
         </el-form-item>
         <el-form-item label="单位">
           <el-input v-model="form.unit" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填，商品备注说明" />
         </el-form-item>
         <el-form-item label="售价">
           <el-input-number v-model="form.unit_price" :min="0" :precision="2" :step="1" />
@@ -586,6 +595,7 @@ const emptyForm = () => ({
   category: '',
   listing_time: '',
   unit: '套',
+  remark: '',
   unit_price: 0,
   purchase_cost: 0,
   first_leg_freight: 0,
@@ -616,6 +626,7 @@ function openEdit(row: Product) {
     category: row.category || '',
     listing_time: row.listing_time || '',
     unit: row.unit || '套',
+    remark: row.remark || '',
     unit_price: row.unit_price ?? 0,
     purchase_cost: row.purchase_cost ?? 0,
     first_leg_freight: row.first_leg_freight ?? 0,
@@ -720,6 +731,8 @@ async function exportRows(withImages = false) {
     { key: 'link_id', label: '链接ID' },
     { key: 'sku', label: 'SKU' },
     { key: 'barcode', label: '条形码' },
+    { key: 'unit', label: '单位' },
+    { key: 'remark', label: '备注' },
     { key: 'domestic_stock', label: '国内库存' },
     { key: 'overseas_stock', label: '国外库存' },
     { key: 'in_transit_qty', label: '在途数量' },
@@ -803,6 +816,7 @@ function downloadTpl() {
       { label: '分类', sample: '家居' },
       { label: '上新时间', sample: '2026-08' },
       { label: '单位', sample: '套' },
+      { label: '备注', sample: '主图白底，包装含说明书' },
       { label: '售价', sample: 329 },
       { label: '采购成本', sample: 120 },
       { label: '头程运费', sample: 15 },
@@ -842,6 +856,7 @@ async function onImportFile(e: Event) {
       category: ['分类', 'category'],
       listing_time: ['上新时间', 'listing_time'],
       unit: ['单位', 'unit'],
+      remark: ['备注', 'remark'],
       unit_price: ['售价', 'unit_price', '价格'],
       purchase_cost: ['采购成本', 'purchase_cost'],
       first_leg_freight: ['头程运费', 'first_leg_freight'],
@@ -908,6 +923,7 @@ async function onImportFile(e: Event) {
           category: cut(cellStr(row, col.category), 100),
           listing_time: cut(cellStr(row, col.listing_time), 255),
           unit: cut(cellStr(row, col.unit) || '套', 50),
+          remark: cut(cellStr(row, col.remark), 1000),
           unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
           purchase_cost: col.purchase_cost !== undefined ? cellNum(row, col.purchase_cost) : 0,
           first_leg_freight: col.first_leg_freight !== undefined ? cellNum(row, col.first_leg_freight) : 0,
