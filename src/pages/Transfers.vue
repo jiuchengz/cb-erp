@@ -835,46 +835,66 @@ async function exportRows(withImages = false) {
     r++
   }
   const meta = (label1: string, v1: unknown, label2: string, v2: unknown) => {
-    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', '', ''])
+    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', ''])
     r++
   }
+  // 与打印工单一致：按单位分组 个→套→对→其他，组间空行，缺组跳过
+  const UNIT_ORDER = ['个', '套', '对']
   targets.forEach((ship, idx) => {
     if (idx > 0) {
       push([])
     }
+    // 货件标题行：多货件导出时在表格中明确区分
+    const titleRow = r
+    aoa.push([`【货件号：${ship.tracking_no || '-'}】`, '', '', '', '', '', '', ''])
+    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 7 } })
+    r++
     meta('货件号', ship.tracking_no, '货代号', ship.cargo_code)
     meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
     meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
     const statusRow = r
-    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', '', ''])
-    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 7 } })
+    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', ''])
+    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 6 } })
     r++
     push([])
-    aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '单位', '备注', '数量'])
+    aoa.push(['序号', '产品编码', '图片', '产品中文名称', '条形码', '数量', '单位', '备注'])
     r++
     const items = ship.shipment_items || []
-    items.forEach((it: any, i: number) => {
-      const p = prod(it.product_id)
-      const img = p?.image_text || ''
-      if (withImages && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'))) {
-        imageCells.push({ r, c: 2, url: img })
-        aoa.push([i + 1, p ? productCode(p) : it.product_id, '', p?.name || '', p?.sku || '', p?.barcode || '', p?.unit || '', it.remark || '', it.quantity])
-      } else {
-        aoa.push([i + 1, p ? productCode(p) : it.product_id, img, p?.name || '', p?.sku || '', p?.barcode || '', p?.unit || '', it.remark || '', it.quantity])
+    const indexed = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: (prod(it.product_id)?.unit || '').trim() }))
+    const groups: { rows: typeof indexed }[] = []
+    for (const u of UNIT_ORDER) {
+      const rows = indexed.filter((x) => x.unit === u)
+      if (rows.length) groups.push({ rows })
+    }
+    const rest = indexed.filter((x) => !UNIT_ORDER.includes(x.unit))
+    if (rest.length) groups.push({ rows: rest })
+    groups.forEach((g, gi) => {
+      if (gi > 0) {
+        push([])
       }
-      r++
+      g.rows.forEach(({ it, idx: seq }) => {
+        const p = prod(it.product_id)
+        const img = p?.image_text || ''
+        if (withImages && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'))) {
+          imageCells.push({ r, c: 2, url: img })
+          aoa.push([seq, p ? productCode(p) : it.product_id, '', p?.name || '', p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
+        } else {
+          aoa.push([seq, p ? productCode(p) : it.product_id, img, p?.name || '', p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
+        }
+        r++
+      })
     })
     const total = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     const sumRow = r
-    aoa.push(['合计数量（总数）', '', '', '', '', '', '', '', total])
-    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 7 } })
+    aoa.push(['合计数量（总数）', '', '', '', '', total, '', ''])
+    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 4 } })
     r++
   })
   exporting.value = true
   try {
     await exportViaServer(
       `调拨发货_${todayStr()}.xlsx`,
-      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 16 }, { wch: 8 }], imageCells },
+      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 8 }, { wch: 8 }, { wch: 16 }], imageCells },
       withImages,
       '调拨发货'
     )
