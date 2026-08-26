@@ -29,6 +29,9 @@ create index if not exists idx_stocktakes_warehouse on public.stocktakes(warehou
 create index if not exists idx_stocktake_items_stocktake on public.stocktake_items(stocktake_id);
 create index if not exists idx_stocktake_items_product on public.stocktake_items(product_id);
 
+-- 明细表补充创建时间列（用于排序）
+alter table public.stocktake_items add column if not exists created_at timestamptz not null default now();
+
 -- 库存流水类型扩展：盘点入库 / 盘点出库
 alter table public.inventory_transactions drop constraint if exists inventory_transactions_type_check;
 alter table public.inventory_transactions add constraint inventory_transactions_type_check check (

@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('stocktake_items')
           .select('*, products!inner(id, sku, name, code, unit)')
           .eq('stocktake_id', id)
-          .order('created_at', { ascending: true });
+          .order('id', { ascending: true });
         if (itErr) throw itErr;
         const totalDiff = (items || []).reduce(
           (acc: number, it: any) => acc + Number(it.difference || 0),
@@ -170,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('stocktake_items')
         .select('*')
         .eq('stocktake_id', id)
-        .order('created_at', { ascending: true });
+        .order('id', { ascending: true });
       if (itErr) throw itErr;
       if (!items || !items.length) throw Errors.badRequest('盘点单没有明细，请先添加盘点商品');
 

@@ -101777,7 +101777,7 @@ async function handler9(req, res) {
           if (stErr.code === "PGRST116") throw Errors.notFound("\u76D8\u70B9\u5355\u4E0D\u5B58\u5728");
           throw stErr;
         }
-        const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*, products!inner(id, sku, name, code, unit)").eq("stocktake_id", id).order("created_at", { ascending: true });
+        const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*, products!inner(id, sku, name, code, unit)").eq("stocktake_id", id).order("id", { ascending: true });
         if (itErr) throw itErr;
         const totalDiff = (items || []).reduce(
           (acc, it) => acc + Number(it.difference || 0),
@@ -101842,7 +101842,7 @@ async function handler9(req, res) {
         throw stErr;
       }
       if (st.status === "COMPLETED") throw Errors.conflict("\u8BE5\u76D8\u70B9\u5355\u5DF2\u5B8C\u6210\u5BA1\u6838\uFF0C\u4E0D\u80FD\u91CD\u590D\u5BA1\u6838");
-      const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*").eq("stocktake_id", id).order("created_at", { ascending: true });
+      const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*").eq("stocktake_id", id).order("id", { ascending: true });
       if (itErr) throw itErr;
       if (!items || !items.length) throw Errors.badRequest("\u76D8\u70B9\u5355\u6CA1\u6709\u660E\u7EC6\uFF0C\u8BF7\u5148\u6DFB\u52A0\u76D8\u70B9\u5546\u54C1");
       const diffs = [];
