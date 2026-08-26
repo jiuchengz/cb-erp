@@ -31099,8 +31099,8 @@ var require_saxes = __commonJS({
        *
        * @param handler The handler to set.
        */
-      on(name, handler50) {
-        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler50;
+      on(name, handler51) {
+        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler51;
       }
       /**
        * Unset an event handler.
@@ -31145,11 +31145,11 @@ var require_saxes = __commonJS({
        */
       fail(message) {
         const err = this.makeError(message);
-        const handler50 = this.errorHandler;
-        if (handler50 === void 0) {
+        const handler51 = this.errorHandler;
+        if (handler51 === void 0) {
           throw err;
         } else {
-          handler50(err);
+          handler51(err);
         }
         return this;
       }
@@ -32165,20 +32165,20 @@ var require_saxes = __commonJS({
       // END OF STATE ENGINE METHODS
       handleTextInRoot() {
         let { i: start, forbiddenState } = this;
-        const { chunk, textHandler: handler50 } = this;
+        const { chunk, textHandler: handler51 } = this;
         scanLoop:
           while (true) {
             switch (this.getCode()) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler50(text + slice);
+                    handler51(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler50(slice);
+                    handler51(slice);
                   }
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32187,7 +32187,7 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32213,7 +32213,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case NL_LIKE:
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
@@ -32221,7 +32221,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case EOC:
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break scanLoop;
@@ -32233,7 +32233,7 @@ var require_saxes = __commonJS({
       }
       handleTextOutsideRoot() {
         let { i: start } = this;
-        const { chunk, textHandler: handler50 } = this;
+        const { chunk, textHandler: handler51 } = this;
         let nonSpace = false;
         outRootLoop:
           while (true) {
@@ -32241,14 +32241,14 @@ var require_saxes = __commonJS({
             switch (code) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler50(text + slice);
+                    handler51(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler50(slice);
+                    handler51(slice);
                   }
                 }
                 break outRootLoop;
@@ -32256,20 +32256,20 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 nonSpace = true;
                 break outRootLoop;
               case NL_LIKE:
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
                 start = this.i;
                 break;
               case EOC:
-                if (handler50 !== void 0) {
+                if (handler51 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break outRootLoop;
@@ -32499,12 +32499,12 @@ var require_saxes = __commonJS({
           this.text += "</>";
           return;
         }
-        const handler50 = this.closeTagHandler;
+        const handler51 = this.closeTagHandler;
         let l2 = tags.length;
         while (l2-- > 0) {
           const tag = this.tag = tags.pop();
           this.topNS = tag.ns;
-          handler50 === null || handler50 === void 0 ? void 0 : handler50(tag);
+          handler51 === null || handler51 === void 0 ? void 0 : handler51(tag);
           if (tag.name === name) {
             break;
           }
@@ -48942,23 +48942,23 @@ var require_async = __commonJS({
           unsaturated: [],
           empty: []
         };
-        function on(event, handler50) {
-          events[event].push(handler50);
+        function on(event, handler51) {
+          events[event].push(handler51);
         }
-        function once2(event, handler50) {
+        function once2(event, handler51) {
           const handleAndRemove = (...args) => {
             off(event, handleAndRemove);
-            handler50(...args);
+            handler51(...args);
           };
           events[event].push(handleAndRemove);
         }
-        function off(event, handler50) {
+        function off(event, handler51) {
           if (!event) return Object.keys(events).forEach((ev) => events[ev] = []);
-          if (!handler50) return events[event] = [];
-          events[event] = events[event].filter((ev) => ev !== handler50);
+          if (!handler51) return events[event] = [];
+          events[event] = events[event].filter((ev) => ev !== handler51);
         }
         function trigger(event, ...args) {
-          events[event].forEach((handler50) => handler50(...args));
+          events[event].forEach((handler51) => handler51(...args));
         }
         var processingScheduled = false;
         function _insert(data, insertAtFront, rejectOnError, callback) {
@@ -49027,8 +49027,8 @@ var require_async = __commonJS({
           }
           return false;
         }
-        const eventMethod = (name) => (handler50) => {
-          if (!handler50) {
+        const eventMethod = (name) => (handler51) => {
+          if (!handler51) {
             return new Promise((resolve, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
@@ -49037,7 +49037,7 @@ var require_async = __commonJS({
             });
           }
           off(name);
-          on(name, handler50);
+          on(name, handler51);
         };
         var isProcessing = false;
         var q = {
@@ -78284,7 +78284,7 @@ var require_debuggability = __commonJS({
       };
       Promise2.prototype._onCancel = function() {
       };
-      Promise2.prototype._setOnCancel = function(handler50) {
+      Promise2.prototype._setOnCancel = function(handler51) {
         ;
       };
       Promise2.prototype._attachCancellationCallback = function(onCancel) {
@@ -78839,10 +78839,10 @@ var require_finally = __commonJS({
       var util2 = require_util4();
       var CancellationError = Promise2.CancellationError;
       var errorObj2 = util2.errorObj;
-      function PassThroughHandlerContext(promise, type, handler50) {
+      function PassThroughHandlerContext(promise, type, handler51) {
         this.promise = promise;
         this.type = type;
-        this.handler = handler50;
+        this.handler = handler51;
         this.called = false;
         this.cancelPromise = null;
       }
@@ -78877,10 +78877,10 @@ var require_finally = __commonJS({
       }
       function finallyHandler(reasonOrValue) {
         var promise = this.promise;
-        var handler50 = this.handler;
+        var handler51 = this.handler;
         if (!this.called) {
           this.called = true;
-          var ret2 = this.isFinallyHandler() ? handler50.call(promise._boundValue()) : handler50.call(promise._boundValue(), reasonOrValue);
+          var ret2 = this.isFinallyHandler() ? handler51.call(promise._boundValue()) : handler51.call(promise._boundValue(), reasonOrValue);
           if (ret2 !== void 0) {
             promise._setReturnedNonUndefined();
             var maybePromise = tryConvertToPromise(ret2, promise);
@@ -78916,26 +78916,26 @@ var require_finally = __commonJS({
           return reasonOrValue;
         }
       }
-      Promise2.prototype._passThrough = function(handler50, type, success, fail2) {
-        if (typeof handler50 !== "function") return this.then();
+      Promise2.prototype._passThrough = function(handler51, type, success, fail2) {
+        if (typeof handler51 !== "function") return this.then();
         return this._then(
           success,
           fail2,
           void 0,
-          new PassThroughHandlerContext(this, type, handler50),
+          new PassThroughHandlerContext(this, type, handler51),
           void 0
         );
       };
-      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler50) {
+      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler51) {
         return this._passThrough(
-          handler50,
+          handler51,
           0,
           finallyHandler,
           finallyHandler
         );
       };
-      Promise2.prototype.tap = function(handler50) {
-        return this._passThrough(handler50, 1, finallyHandler);
+      Promise2.prototype.tap = function(handler51) {
+        return this._passThrough(handler51, 1, finallyHandler);
       };
       return PassThroughHandlerContext;
     };
@@ -79336,10 +79336,10 @@ var require_direct_resolve = __commonJS({
           );
         } else {
           var _reason = arguments[1];
-          var handler50 = function() {
+          var handler51 = function() {
             throw _reason;
           };
-          return this.caught(reason, handler50);
+          return this.caught(reason, handler51);
         }
       };
       Promise2.prototype.catchReturn = function(value) {
@@ -79355,10 +79355,10 @@ var require_direct_resolve = __commonJS({
         } else {
           var _value = arguments[1];
           if (_value instanceof Promise2) _value.suppressUnhandledRejections();
-          var handler50 = function() {
+          var handler51 = function() {
             return _value;
           };
-          return this.caught(value, handler50);
+          return this.caught(value, handler51);
         }
       };
     };
@@ -81460,22 +81460,22 @@ var require_promise = __commonJS({
         }
         var domain = getDomain();
         if (!((bitField & 50397184) === 0)) {
-          var handler50, value, settler = target._settlePromiseCtx;
+          var handler51, value, settler = target._settlePromiseCtx;
           if ((bitField & 33554432) !== 0) {
             value = target._rejectionHandler0;
-            handler50 = didFulfill;
+            handler51 = didFulfill;
           } else if ((bitField & 16777216) !== 0) {
             value = target._fulfillmentHandler0;
-            handler50 = didReject;
+            handler51 = didReject;
             target._unsetRejectionIsUnhandled();
           } else {
             settler = target._settlePromiseLateCancellationObserver;
             value = new CancellationError("late cancellation observer");
             target._attachExtraTrace(value);
-            handler50 = didReject;
+            handler51 = didReject;
           }
           async.invoke(settler, target, {
-            handler: domain === null ? handler50 : typeof handler50 === "function" && util2.domainBind(domain, handler50),
+            handler: domain === null ? handler51 : typeof handler51 === "function" && util2.domainBind(domain, handler51),
             promise,
             receiver,
             value
@@ -81656,7 +81656,7 @@ var require_promise = __commonJS({
           promise._rejectCallback(r, true);
         }
       };
-      Promise2.prototype._settlePromiseFromHandler = function(handler50, receiver, value, promise) {
+      Promise2.prototype._settlePromiseFromHandler = function(handler51, receiver, value, promise) {
         var bitField = promise._bitField;
         if ((bitField & 65536) !== 0) return;
         promise._pushContext();
@@ -81666,10 +81666,10 @@ var require_promise = __commonJS({
             x = errorObj2;
             x.e = new TypeError2("cannot .spread() a non-array: " + util2.classString(value));
           } else {
-            x = tryCatch2(handler50).apply(this._boundValue(), value);
+            x = tryCatch2(handler51).apply(this._boundValue(), value);
           }
         } else {
-          x = tryCatch2(handler50).call(receiver, value);
+          x = tryCatch2(handler51).call(receiver, value);
         }
         var promiseCreated = promise._popContext();
         bitField = promise._bitField;
@@ -81694,7 +81694,7 @@ var require_promise = __commonJS({
       Promise2.prototype._setFollowee = function(promise) {
         this._rejectionHandler0 = promise;
       };
-      Promise2.prototype._settlePromise = function(promise, handler50, receiver, value) {
+      Promise2.prototype._settlePromise = function(promise, handler51, receiver, value) {
         var isPromise = promise instanceof Promise2;
         var bitField = this._bitField;
         var asyncGuaranteed = (bitField & 134217728) !== 0;
@@ -81702,10 +81702,10 @@ var require_promise = __commonJS({
           if (isPromise) promise._invokeInternalOnCancel();
           if (receiver instanceof PassThroughHandlerContext && receiver.isFinallyHandler()) {
             receiver.cancelPromise = promise;
-            if (tryCatch2(handler50).call(receiver, value) === errorObj2) {
+            if (tryCatch2(handler51).call(receiver, value) === errorObj2) {
               promise._reject(errorObj2.e);
             }
-          } else if (handler50 === reflectHandler) {
+          } else if (handler51 === reflectHandler) {
             promise._fulfill(reflectHandler.call(receiver));
           } else if (receiver instanceof Proxyable) {
             receiver._promiseCancelled(promise);
@@ -81714,12 +81714,12 @@ var require_promise = __commonJS({
           } else {
             receiver.cancel();
           }
-        } else if (typeof handler50 === "function") {
+        } else if (typeof handler51 === "function") {
           if (!isPromise) {
-            handler50.call(receiver, value, promise);
+            handler51.call(receiver, value, promise);
           } else {
             if (asyncGuaranteed) promise._setAsyncGuaranteed();
-            this._settlePromiseFromHandler(handler50, receiver, value, promise);
+            this._settlePromiseFromHandler(handler51, receiver, value, promise);
           }
         } else if (receiver instanceof Proxyable) {
           if (!receiver._isResolved()) {
@@ -81739,15 +81739,15 @@ var require_promise = __commonJS({
         }
       };
       Promise2.prototype._settlePromiseLateCancellationObserver = function(ctx) {
-        var handler50 = ctx.handler;
+        var handler51 = ctx.handler;
         var promise = ctx.promise;
         var receiver = ctx.receiver;
         var value = ctx.value;
-        if (typeof handler50 === "function") {
+        if (typeof handler51 === "function") {
           if (!(promise instanceof Promise2)) {
-            handler50.call(receiver, value, promise);
+            handler51.call(receiver, value, promise);
           } else {
-            this._settlePromiseFromHandler(handler50, receiver, value, promise);
+            this._settlePromiseFromHandler(handler51, receiver, value, promise);
           }
         } else if (promise instanceof Promise2) {
           promise._reject(value);
@@ -81756,12 +81756,12 @@ var require_promise = __commonJS({
       Promise2.prototype._settlePromiseCtx = function(ctx) {
         this._settlePromise(ctx.promise, ctx.handler, ctx.receiver, ctx.value);
       };
-      Promise2.prototype._settlePromise0 = function(handler50, value, bitField) {
+      Promise2.prototype._settlePromise0 = function(handler51, value, bitField) {
         var promise = this._promise0;
         var receiver = this._receiverAt(0);
         this._promise0 = void 0;
         this._receiver0 = void 0;
-        this._settlePromise(promise, handler50, receiver, value);
+        this._settlePromise(promise, handler51, receiver, value);
       };
       Promise2.prototype._clearCallbackDataAtIndex = function(index) {
         var base = index * 4 - 4;
@@ -81801,20 +81801,20 @@ var require_promise = __commonJS({
       };
       Promise2.prototype._fulfillPromises = function(len, value) {
         for (var i = 1; i < len; i++) {
-          var handler50 = this._fulfillmentHandlerAt(i);
+          var handler51 = this._fulfillmentHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler50, receiver, value);
+          this._settlePromise(promise, handler51, receiver, value);
         }
       };
       Promise2.prototype._rejectPromises = function(len, reason) {
         for (var i = 1; i < len; i++) {
-          var handler50 = this._rejectionHandlerAt(i);
+          var handler51 = this._rejectionHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler50, receiver, reason);
+          this._settlePromise(promise, handler51, receiver, reason);
         }
       };
       Promise2.prototype._settlePromises = function() {
@@ -88420,14 +88420,14 @@ var require_iterate_stream = __commonJS({
     function once(eventEmitter, type) {
       return new Promise((resolve) => {
         let fired = false;
-        const handler50 = () => {
+        const handler51 = () => {
           if (!fired) {
             fired = true;
-            eventEmitter.removeListener(type, handler50);
+            eventEmitter.removeListener(type, handler51);
             resolve();
           }
         };
-        eventEmitter.addListener(type, handler50);
+        eventEmitter.addListener(type, handler51);
       });
     }
   }
@@ -101445,6 +101445,10 @@ async function handler4(req, res) {
     const aoa = Array.isArray(body.aoa) ? body.aoa : [];
     const merges = Array.isArray(body.merges) ? body.merges : [];
     const cols = Array.isArray(body.cols) ? body.cols : [];
+    const widths = Array.isArray(body.widths) ? body.widths : [];
+    const rowHeightRanges = Array.isArray(body.rowHeightRanges) ? body.rowHeightRanges : [];
+    const titleRows = Array.isArray(body.titleRows) ? body.titleRows : [];
+    const styled = !!body.styled;
     const withImages = !!body.withImages;
     const imageCells = Array.isArray(body.imageCells) ? body.imageCells : [];
     const wb = new import_exceljs.default.Workbook();
@@ -101452,13 +101456,48 @@ async function handler4(req, res) {
     for (const row of aoa) {
       ws.addRow((row || []).map((v) => v === null || v === void 0 ? "" : v));
     }
-    if (cols.length) {
+    if (widths.length) {
+      ws.columns = widths.map((w) => ({ width: w == null || Number.isNaN(Number(w)) ? 12 : Math.max(2, Number(w)) }));
+    } else if (cols.length) {
       ws.columns = cols.map((c) => ({ width: Math.max(6, (c.wch || 12) * 1.1) }));
+    }
+    for (const rg of rowHeightRanges) {
+      for (let row = rg.s; row <= rg.e; row++) {
+        try {
+          ws.getRow(row + 1).height = rg.h;
+        } catch {
+        }
+      }
     }
     for (const m of merges) {
       try {
         ws.mergeCells(m.s.r + 1, m.s.c + 1, m.e.r + 1, m.e.c + 1);
       } catch {
+      }
+    }
+    if (styled) {
+      const baseFont = { name: "\u5B8B\u4F53", size: 11 };
+      const titleFont = { name: "\u5B8B\u4F53", size: 24 };
+      const align = { horizontal: "center", vertical: "middle" };
+      const border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+      const titleSet = new Set(titleRows);
+      for (let rr = 1; rr <= ws.rowCount; rr++) {
+        const row = ws.getRow(rr);
+        const font = titleSet.has(rr - 1) ? titleFont : baseFont;
+        for (let c = 1; c <= 8; c++) {
+          try {
+            const cell = row.getCell(c);
+            cell.font = font;
+            cell.alignment = align;
+            cell.border = border;
+          } catch {
+          }
+        }
       }
     }
     if (withImages && imageCells.length) {
@@ -101668,8 +101707,10 @@ async function handler8(req, res) {
     const q = parse2(paginationSchema, req.query);
     const sku = typeof req.query.sku === "string" ? req.query.sku.trim() : "";
     const warehouseId = typeof req.query.warehouse_id === "string" ? req.query.warehouse_id.trim() : "";
+    const productId = typeof req.query.product_id === "string" ? req.query.product_id.trim() : "";
     const supabase = getAdminClient();
     let query = supabase.from("inventory").select("*, products!inner(id, sku, name), warehouses!inner(id, name)", { count: "exact" });
+    if (productId) query = query.eq("product_id", productId);
     if (sku) {
       const { data: prods } = await supabase.from("products").select("id").eq("sku", sku).is("deleted_at", null);
       const ids = (prods || []).map((p) => p.id);
@@ -101686,8 +101727,259 @@ async function handler8(req, res) {
   }
 }
 
-// server/_handlers/permissions.ts
+// server/_handlers/stocktakes.ts
+var itemSchema2 = external_exports.object({
+  product_id: external_exports.string().uuid(),
+  actual_quantity: external_exports.coerce.number().min(0).default(0),
+  remark: external_exports.string().max(200).optional().nullable()
+});
+var createSchema2 = external_exports.object({
+  warehouse_id: external_exports.string().uuid(),
+  stocktake_date: external_exports.string().optional().nullable(),
+  remark: external_exports.string().max(500).optional().nullable(),
+  items: external_exports.array(itemSchema2).max(500).optional()
+});
+var updateSchema = external_exports.object({
+  warehouse_id: external_exports.string().uuid().optional(),
+  stocktake_date: external_exports.string().optional().nullable(),
+  remark: external_exports.string().max(500).optional().nullable(),
+  status: external_exports.enum(["DRAFT", "IN_PROGRESS"]).optional(),
+  items: external_exports.array(itemSchema2).max(500).optional()
+});
+function pathOf(req) {
+  return new URL(req.url || "/", "http://internal").pathname.replace(/^\/api/, "").split("/").filter(Boolean);
+}
+async function getBookQty(supabase, productId, warehouseId) {
+  const { data } = await supabase.from("inventory").select("quantity").eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
+  return Number(data?.quantity ?? 0);
+}
+async function genStocktakeNo(supabase) {
+  const d = /* @__PURE__ */ new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const prefix = `ST-${ymd}-`;
+  const { data, error } = await supabase.from("stocktakes").select("stocktake_no").like("stocktake_no", `${prefix}%`).order("stocktake_no", { ascending: false }).limit(1);
+  if (error) throw error;
+  const seq = (data && data.length ? parseInt(data[0].stocktake_no.slice(prefix.length), 10) || 0 : 0) + 1;
+  return `${prefix}${String(seq).padStart(3, "0")}`;
+}
 async function handler9(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    const supabase = getAdminClient();
+    const parts = pathOf(req);
+    if (req.method === "GET") {
+      requirePermission(ctx, "inventory.read");
+      if (parts.length === 2) {
+        const id = parts[1];
+        const { data: st, error: stErr } = await supabase.from("stocktakes").select("*, warehouses!inner(id, name)").eq("id", id).is("deleted_at", null).single();
+        if (stErr) {
+          if (stErr.code === "PGRST116") throw Errors.notFound("\u76D8\u70B9\u5355\u4E0D\u5B58\u5728");
+          throw stErr;
+        }
+        const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*, products!inner(id, sku, name, code, unit)").eq("stocktake_id", id).order("created_at", { ascending: true });
+        if (itErr) throw itErr;
+        const totalDiff = (items || []).reduce(
+          (acc, it) => acc + Number(it.difference || 0),
+          0
+        );
+        return res.status(200).json({
+          data: {
+            ...st,
+            warehouse_name: st.warehouses?.name || "",
+            items: items || [],
+            total_difference: totalDiff
+          }
+        });
+      }
+      const q = parse2(paginationSchema, req.query);
+      let query = supabase.from("stocktakes").select("*, warehouses!inner(id, name)", { count: "exact" }).is("deleted_at", null);
+      const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+      if (status) query = query.eq("status", status);
+      const warehouseId = typeof req.query.warehouse_id === "string" ? req.query.warehouse_id.trim() : "";
+      if (warehouseId) query = query.eq("warehouse_id", warehouseId);
+      query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      const rows = data || [];
+      const ids = rows.map((r) => r.id);
+      const itemMap = /* @__PURE__ */ new Map();
+      if (ids.length) {
+        const { data: itemRows, error: itemErr } = await supabase.from("stocktake_items").select("stocktake_id, difference").in("stocktake_id", ids);
+        if (itemErr) throw itemErr;
+        for (const it of itemRows || []) {
+          const cur = itemMap.get(it.stocktake_id) || { count: 0, diff: 0 };
+          cur.count += 1;
+          cur.diff += Number(it.difference || 0);
+          itemMap.set(it.stocktake_id, cur);
+        }
+      }
+      return res.status(200).json({
+        data: rows.map((r) => ({
+          id: r.id,
+          stocktake_no: r.stocktake_no,
+          warehouse_id: r.warehouse_id,
+          warehouse_name: r.warehouses?.name || "",
+          stocktake_date: r.stocktake_date,
+          status: r.status,
+          remark: r.remark,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          item_count: itemMap.get(r.id)?.count || 0,
+          total_difference: itemMap.get(r.id)?.diff || 0
+        })),
+        total: count ?? 0,
+        page: q.page,
+        pageSize: q.pageSize
+      });
+    }
+    if (req.method === "POST" && parts.length === 3 && parts[2] === "audit") {
+      requirePermission(ctx, "inventory.adjust");
+      const id = parts[1];
+      const { data: st, error: stErr } = await supabase.from("stocktakes").select("*").eq("id", id).is("deleted_at", null).single();
+      if (stErr) {
+        if (stErr.code === "PGRST116") throw Errors.notFound("\u76D8\u70B9\u5355\u4E0D\u5B58\u5728");
+        throw stErr;
+      }
+      if (st.status === "COMPLETED") throw Errors.conflict("\u8BE5\u76D8\u70B9\u5355\u5DF2\u5B8C\u6210\u5BA1\u6838\uFF0C\u4E0D\u80FD\u91CD\u590D\u5BA1\u6838");
+      const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*").eq("stocktake_id", id).order("created_at", { ascending: true });
+      if (itErr) throw itErr;
+      if (!items || !items.length) throw Errors.badRequest("\u76D8\u70B9\u5355\u6CA1\u6709\u660E\u7EC6\uFF0C\u8BF7\u5148\u6DFB\u52A0\u76D8\u70B9\u5546\u54C1");
+      const diffs = [];
+      for (const it of items) {
+        const current = await getBookQty(supabase, it.product_id, st.warehouse_id);
+        const diff = Number(it.actual_quantity || 0) - current;
+        if (diff < 0 && -diff > current) {
+          throw Errors.conflict(`\u5546\u54C1 ${it.product_id} \u76D8\u4E8F\u6570\u91CF\u8D85\u8FC7\u8D26\u9762\u5E93\u5B58\uFF08\u8D26\u9762 ${current}\uFF09`);
+        }
+        diffs.push({ item: it, diff });
+      }
+      for (const { item, diff } of diffs) {
+        if (diff === 0) continue;
+        const { error: invErr } = await supabase.rpc("adjust_inventory", {
+          p_product_id: item.product_id,
+          p_warehouse_id: st.warehouse_id,
+          p_quantity: diff,
+          p_type: diff > 0 ? "stocktake_in" : "stocktake_out",
+          p_reference_type: "stocktake",
+          p_reference_id: id,
+          p_created_by: ctx.userId,
+          p_note: `\u5E93\u5B58\u76D8\u70B9 ${st.stocktake_no}`
+        });
+        if (invErr) throw invErr;
+      }
+      const { error: updErr } = await supabase.from("stocktakes").update({ status: "COMPLETED", updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+      if (updErr) throw updErr;
+      for (const { item, diff } of diffs) {
+        await supabase.from("stocktake_items").update({ difference: diff }).eq("id", item.id);
+      }
+      const totalDiff = diffs.reduce((acc, d) => acc + d.diff, 0);
+      await writeAudit(ctx, req, "audit", "stocktake", id, st, { stocktake_no: st.stocktake_no, total_difference: totalDiff });
+      return res.status(200).json({ ok: true, total_difference: totalDiff });
+    }
+    if (req.method === "POST") {
+      requirePermission(ctx, "inventory.adjust");
+      const body = parse2(createSchema2, req.body || {});
+      const stocktakeNo = await genStocktakeNo(supabase);
+      const { data: st, error } = await supabase.from("stocktakes").insert({
+        stocktake_no: stocktakeNo,
+        warehouse_id: body.warehouse_id,
+        stocktake_date: body.stocktake_date || null,
+        remark: body.remark || null,
+        status: "DRAFT",
+        created_by: ctx.userId
+      }).select().single();
+      if (error) {
+        if (error.code === "23505") throw Errors.conflict("\u76D8\u70B9\u5355\u53F7\u51B2\u7A81\uFF0C\u8BF7\u91CD\u8BD5");
+        throw error;
+      }
+      if (body.items && body.items.length) {
+        const rows = [];
+        for (const it of body.items) {
+          const book = await getBookQty(supabase, it.product_id, body.warehouse_id);
+          rows.push({
+            stocktake_id: st.id,
+            product_id: it.product_id,
+            book_quantity: book,
+            actual_quantity: it.actual_quantity,
+            difference: Number(it.actual_quantity || 0) - book,
+            remark: it.remark || null
+          });
+        }
+        const { error: itemErr } = await supabase.from("stocktake_items").insert(rows);
+        if (itemErr) {
+          await supabase.from("stocktakes").delete().eq("id", st.id);
+          throw itemErr;
+        }
+        await supabase.from("stocktakes").update({ status: "IN_PROGRESS" }).eq("id", st.id);
+      }
+      await writeAudit(ctx, req, "create", "stocktake", st.id, null, { stocktake_no: st.stocktake_no });
+      return res.status(201).json({ data: st });
+    }
+    if (req.method === "PATCH") {
+      requirePermission(ctx, "inventory.adjust");
+      const id = parts[1];
+      const { data: before, error: getErr } = await supabase.from("stocktakes").select("*").eq("id", id).is("deleted_at", null).single();
+      if (getErr) {
+        if (getErr.code === "PGRST116") throw Errors.notFound("\u76D8\u70B9\u5355\u4E0D\u5B58\u5728");
+        throw getErr;
+      }
+      if (before.status === "COMPLETED") throw Errors.conflict("\u76D8\u70B9\u5355\u5DF2\u5B8C\u6210\u5BA1\u6838\uFF0C\u4E0D\u80FD\u7F16\u8F91");
+      const body = parse2(updateSchema, req.body || {});
+      const warehouseId = body.warehouse_id || before.warehouse_id;
+      const update = { updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+      if (body.warehouse_id !== void 0) update.warehouse_id = body.warehouse_id;
+      if (body.stocktake_date !== void 0) update.stocktake_date = body.stocktake_date;
+      if (body.remark !== void 0) update.remark = body.remark;
+      if (body.status) update.status = body.status;
+      const { data: updated, error: updErr } = await supabase.from("stocktakes").update(update).eq("id", id).select().single();
+      if (updErr) throw updErr;
+      if (body.items !== void 0) {
+        const { error: delErr } = await supabase.from("stocktake_items").delete().eq("stocktake_id", id);
+        if (delErr) throw delErr;
+        if (body.items.length) {
+          const rows = [];
+          for (const it of body.items) {
+            const book = await getBookQty(supabase, it.product_id, warehouseId);
+            rows.push({
+              stocktake_id: id,
+              product_id: it.product_id,
+              book_quantity: book,
+              actual_quantity: it.actual_quantity,
+              difference: Number(it.actual_quantity || 0) - book,
+              remark: it.remark || null
+            });
+          }
+          const { error: insErr } = await supabase.from("stocktake_items").insert(rows);
+          if (insErr) throw insErr;
+        }
+        await supabase.from("stocktakes").update({ status: "IN_PROGRESS" }).eq("id", id);
+      }
+      await writeAudit(ctx, req, "update", "stocktake", id, before, updated);
+      return res.status(200).json({ data: updated });
+    }
+    if (req.method === "DELETE") {
+      requirePermission(ctx, "inventory.adjust");
+      const id = parts[1];
+      const { data: before, error: getErr } = await supabase.from("stocktakes").select("*").eq("id", id).is("deleted_at", null).single();
+      if (getErr) {
+        if (getErr.code === "PGRST116") throw Errors.notFound("\u76D8\u70B9\u5355\u4E0D\u5B58\u5728");
+        throw getErr;
+      }
+      if (before.status === "COMPLETED") throw Errors.conflict("\u5DF2\u5B8C\u6210\u5BA1\u6838\u7684\u76D8\u70B9\u5355\u4E0D\u80FD\u5220\u9664\uFF0C\u5982\u9700\u4FEE\u6B63\u8BF7\u65B0\u5EFA\u76D8\u70B9\u5355");
+      const { error } = await supabase.from("stocktakes").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+      if (error) throw error;
+      await writeAudit(ctx, req, "delete", "stocktake", id, before, null);
+      return res.status(200).json({ ok: true });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/permissions.ts
+async function handler10(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -101705,7 +101997,7 @@ async function handler9(req, res) {
 }
 
 // server/_handlers/products.ts
-var createSchema2 = external_exports.object({
+var createSchema3 = external_exports.object({
   sku: external_exports.string().max(200).nullable().optional(),
   name: external_exports.string().min(1).max(200),
   barcode: external_exports.string().max(64).nullable().optional(),
@@ -101719,6 +102011,7 @@ var createSchema2 = external_exports.object({
   image_text: external_exports.string().max(255).nullable().optional(),
   link_id: external_exports.string().max(255).nullable().optional(),
   unit: external_exports.string().max(50).optional().default("\u5957"),
+  remark: external_exports.string().max(1e3).nullable().optional(),
   competitor_id: external_exports.string().max(255).nullable().optional(),
   shipping_mode: external_exports.string().max(20).optional().default("\u6D77\u8FD0"),
   purchase_cost: external_exports.coerce.number().min(0).optional().default(0),
@@ -101753,7 +102046,7 @@ async function uploadProductImage(supabase, base64, sku) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
-async function handler10(req, res) {
+async function handler11(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -101795,12 +102088,6 @@ async function handler10(req, res) {
           if (whType === "domestic") domMap.set(pid, (domMap.get(pid) || 0) + qty);
           else if (whType === "overseas") ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
-        const { data: transitRows, error: transitErr } = await supabase.from("purchase_order_items").select("product_id, quantity, purchase_orders!inner(status)").in("product_id", pageIds).eq("purchase_orders.status", "ARRIVED");
-        if (transitErr) throw transitErr;
-        for (const r of transitRows || []) {
-          const pid = r.product_id;
-          transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
-        }
         const { data: transitShipRows, error: transitShipErr } = await supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at)").in("product_id", pageIds);
         if (transitShipErr) throw transitShipErr;
         for (const r of transitShipRows || []) {
@@ -101835,7 +102122,7 @@ async function handler10(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "products.write");
-      const body = parse2(createSchema2, req.body || {});
+      const body = parse2(createSchema3, req.body || {});
       const supabase = getAdminClient();
       if (body.code) {
         const { data: dup } = await supabase.from("products").select("id").eq("code", body.code).is("deleted_at", null).limit(1);
@@ -101870,7 +102157,7 @@ async function handler10(req, res) {
 }
 
 // server/_handlers/products/tracking.ts
-async function handler11(req, res) {
+async function handler12(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102056,7 +102343,7 @@ function calcProfitFields(p, s) {
 function round2(v) {
   return Math.round((v + Number.EPSILON) * 100) / 100;
 }
-async function handler12(req, res) {
+async function handler13(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102125,7 +102412,7 @@ async function handler12(req, res) {
 var batchDeleteSchema = external_exports.object({
   ids: external_exports.array(external_exports.string().uuid()).min(1).max(500)
 });
-async function handler13(req, res) {
+async function handler14(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102155,7 +102442,7 @@ var schema = external_exports.object({
   base64: external_exports.string().min(20).max(6e6),
   sku: external_exports.string().max(200).optional().default("img")
 });
-async function handler14(req, res) {
+async function handler15(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102206,7 +102493,7 @@ async function handler14(req, res) {
 }
 
 // server/_handlers/purchase-orders.ts
-var createSchema3 = external_exports.object({
+var createSchema4 = external_exports.object({
   product_code: external_exports.string().min(1).max(64),
   quantity: external_exports.coerce.number().positive(),
   receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -102226,7 +102513,7 @@ function genOrderNo(d = /* @__PURE__ */ new Date()) {
   const rand = String(Math.floor(Math.random() * 9e3) + 1e3);
   return `CG-${y}${m}${day}-${rand}`;
 }
-async function handler15(req, res) {
+async function handler16(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102244,7 +102531,7 @@ async function handler15(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "procurement.write");
-      const body = parse2(createSchema3, req.body || {});
+      const body = parse2(createSchema4, req.body || {});
       const supabase = getAdminClient();
       const { data: product, error: prodErr } = await supabase.from("products").select("id, sku, code, name").eq("code", body.product_code.trim()).is("deleted_at", null).limit(1).maybeSingle();
       if (prodErr) throw prodErr;
@@ -102270,7 +102557,7 @@ async function handler15(req, res) {
         warehouse_id: warehouseId,
         receive_date: receiveDate,
         remark: body.remark || null,
-        status: "ARRIVED",
+        status: "RECEIVED",
         total_amount: 0,
         created_by: ctx.userId
       }).select().single();
@@ -102283,7 +102570,7 @@ async function handler15(req, res) {
             warehouse_id: warehouseId,
             receive_date: receiveDate,
             remark: body.remark || null,
-            status: "ARRIVED",
+            status: "RECEIVED",
             total_amount: 0,
             created_by: ctx.userId
           }).select().single();
@@ -102299,6 +102586,20 @@ async function handler15(req, res) {
           if (itemErr2) {
             await supabase.from("purchase_orders").delete().eq("id", retryOrder.id);
             throw itemErr2;
+          }
+          const { error: invErr2 } = await supabase.rpc("adjust_inventory", {
+            p_product_id: product.id,
+            p_warehouse_id: warehouseId,
+            p_quantity: body.quantity,
+            p_type: "purchase_in",
+            p_reference_type: "purchase_order",
+            p_reference_id: retryOrder.id,
+            p_created_by: ctx.userId,
+            p_note: `\u62FF\u8D27\u5165\u5E93 ${retryNo}`
+          });
+          if (invErr2) {
+            await supabase.from("purchase_orders").delete().eq("id", retryOrder.id);
+            throw invErr2;
           }
           await writeAudit(ctx, req, "create", "purchase_order", retryOrder.id, null, {
             order_no: retryOrder.order_no,
@@ -102321,6 +102622,20 @@ async function handler15(req, res) {
         await supabase.from("purchase_orders").delete().eq("id", order.id);
         throw itemErr;
       }
+      const { error: invErr } = await supabase.rpc("adjust_inventory", {
+        p_product_id: product.id,
+        p_warehouse_id: warehouseId,
+        p_quantity: body.quantity,
+        p_type: "purchase_in",
+        p_reference_type: "purchase_order",
+        p_reference_id: order.id,
+        p_created_by: ctx.userId,
+        p_note: `\u62FF\u8D27\u5165\u5E93 ${orderNo}`
+      });
+      if (invErr) {
+        await supabase.from("purchase_orders").delete().eq("id", order.id);
+        throw invErr;
+      }
       await writeAudit(ctx, req, "create", "purchase_order", order.id, null, {
         order_no: order.order_no,
         product_code: body.product_code.trim(),
@@ -102335,18 +102650,18 @@ async function handler15(req, res) {
 }
 
 // server/_handlers/replenishment.ts
-var itemSchema2 = external_exports.object({
+var itemSchema3 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
-var createSchema4 = external_exports.object({
+var createSchema5 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   warehouse_id: external_exports.string().uuid(),
   replenish_qty: external_exports.coerce.number().min(0).optional(),
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  items: external_exports.array(itemSchema2).min(1).max(200)
+  items: external_exports.array(itemSchema3).min(1).max(200)
 });
-async function handler16(req, res) {
+async function handler17(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102417,7 +102732,7 @@ async function handler16(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "replenishment.write");
-      const body = parse2(createSchema4, req.body || {});
+      const body = parse2(createSchema5, req.body || {});
       const supabase = getAdminClient();
       const totalQty = body.items.reduce((s, it) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase.from("replenishment_orders").insert({
@@ -102446,7 +102761,7 @@ async function handler16(req, res) {
 }
 
 // server/_handlers/roles.ts
-async function handler17(req, res) {
+async function handler18(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102464,7 +102779,7 @@ async function handler17(req, res) {
 }
 
 // server/_handlers/sales.ts
-var itemSchema3 = external_exports.object({
+var itemSchema4 = external_exports.object({
   product_id: external_exports.string().uuid().nullable().optional(),
   sku: external_exports.string().max(100).nullable().optional(),
   product_name: external_exports.string().max(200).nullable().optional(),
@@ -102472,15 +102787,15 @@ var itemSchema3 = external_exports.object({
   unit_price: external_exports.coerce.number().min(0).optional(),
   discount: external_exports.coerce.number().min(0).optional()
 });
-var createSchema5 = external_exports.object({
+var createSchema6 = external_exports.object({
   order_no: external_exports.string().min(1).max(64),
   customer_id: external_exports.string().uuid().nullable().optional(),
   currency: external_exports.string().max(8).optional(),
   platform: external_exports.string().max(50).nullable().optional(),
   sale_date: external_exports.string().max(20).nullable().optional(),
-  items: external_exports.array(itemSchema3).min(1).max(200)
+  items: external_exports.array(itemSchema4).min(1).max(200)
 });
-async function handler18(req, res) {
+async function handler19(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102518,7 +102833,7 @@ async function handler18(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "sales.write");
-      const body = parse2(createSchema5, req.body || {});
+      const body = parse2(createSchema6, req.body || {});
       const supabase = getAdminClient();
       const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
       const { data: prods, error: prodErr } = await supabase.from("products").select("id, sku, name").in("id", prodIds).is("deleted_at", null);
@@ -102576,17 +102891,18 @@ async function handler18(req, res) {
 }
 
 // server/_handlers/shipments.ts
-var itemSchema4 = external_exports.object({
+var itemSchema5 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive(),
+  remark: external_exports.string().max(1e3).nullable().optional(),
   sales_order_id: external_exports.string().uuid().optional()
 });
-var createSchema6 = external_exports.object({
+var createSchema7 = external_exports.object({
   // 兼容旧调用：tracking_no / items 均可选；新表单走单行字段（旧文件发货模块 11 字段）
   tracking_no: external_exports.string().min(1).max(64).optional(),
   carrier: external_exports.string().max(128).nullable().optional(),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
-  items: external_exports.array(itemSchema4).min(1).max(200).optional(),
+  items: external_exports.array(itemSchema5).min(1).max(200).optional(),
   warehouse_no: external_exports.string().max(50).nullable().optional(),
   ship_date: external_exports.string().max(32).nullable().optional(),
   shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
@@ -102609,7 +102925,7 @@ var createSchema6 = external_exports.object({
   cargo_code: external_exports.string().max(100).nullable().optional(),
   source: external_exports.enum(["manual", "transfer"]).optional()
 });
-async function handler19(req, res) {
+async function handler20(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102619,7 +102935,7 @@ async function handler19(req, res) {
       const supabase = getAdminClient();
       const source = typeof req.query.source === "string" ? req.query.source.trim() : "";
       let select = "*, forwarders(name)";
-      if (source) select += ", shipment_items(quantity)";
+      if (source) select += ", shipment_items(product_id, quantity, remark)";
       let query = supabase.from("shipments").select(select, { count: "exact" }).is("deleted_at", null);
       if (source) query = query.eq("source", source);
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -102639,7 +102955,7 @@ async function handler19(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(createSchema6, req.body || {});
+      const body = parse2(createSchema7, req.body || {});
       const supabase = getAdminClient();
       const { data: shipment, error } = await supabase.from("shipments").insert({
         // 兼容新表单（无 tracking_no 走 shipment_no 兜底）
@@ -102673,11 +102989,47 @@ async function handler19(req, res) {
         throw error;
       }
       if (body.items && body.items.length > 0) {
+        if (body.source === "transfer") {
+          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+          if (domWhErr) throw domWhErr;
+          if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
+          const deducted = [];
+          for (const it of body.items) {
+            const { error: invErr } = await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: domWh.id,
+              p_quantity: -it.quantity,
+              p_type: "transfer_out",
+              p_reference_type: "shipment",
+              p_reference_id: shipment.id,
+              p_created_by: ctx.userId,
+              p_note: `\u8C03\u62E8\u53D1\u8D27\u6263\u51CF ${body.tracking_no || body.shipment_no || shipment.id}`
+            });
+            if (invErr) {
+              for (const d of deducted) {
+                await supabase.rpc("adjust_inventory", {
+                  p_product_id: d.product_id,
+                  p_warehouse_id: domWh.id,
+                  p_quantity: d.quantity,
+                  p_type: "adjustment",
+                  p_reference_type: "shipment",
+                  p_reference_id: shipment.id,
+                  p_created_by: ctx.userId,
+                  p_note: "\u8C03\u62E8\u53D1\u8D27\u5931\u8D25\u56DE\u6EDA"
+                });
+              }
+              await supabase.from("shipments").delete().eq("id", shipment.id);
+              throw Errors.conflict(`\u56FD\u5185\u5E93\u5B58\u4E0D\u8DB3\uFF0C\u65E0\u6CD5\u521B\u5EFA\u8C03\u62E8\u53D1\u8D27\uFF1A${it.product_id} \u7F3A\u5C11 ${-it.quantity} \u4EF6`);
+            }
+            deducted.push({ product_id: it.product_id, quantity: it.quantity });
+          }
+        }
         const { error: itemErr } = await supabase.from("shipment_items").insert(
           body.items.map((it) => ({
             shipment_id: shipment.id,
             product_id: it.product_id,
             quantity: it.quantity,
+            remark: it.remark || null,
             sales_order_id: it.sales_order_id || null
           }))
         );
@@ -102696,17 +103048,17 @@ async function handler19(req, res) {
 }
 
 // server/_handlers/transfers.ts
-var itemSchema5 = external_exports.object({
+var itemSchema6 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
-var createSchema7 = external_exports.object({
+var createSchema8 = external_exports.object({
   transfer_no: external_exports.string().min(1).max(64),
   from_warehouse_id: external_exports.string().uuid(),
   to_warehouse_id: external_exports.string().uuid(),
-  items: external_exports.array(itemSchema5).min(1).max(200)
+  items: external_exports.array(itemSchema6).min(1).max(200)
 }).refine((v) => v.from_warehouse_id !== v.to_warehouse_id, { message: "\u8C03\u51FA\u4E0E\u8C03\u5165\u4ED3\u5E93\u4E0D\u80FD\u76F8\u540C" });
-async function handler20(req, res) {
+async function handler21(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102724,7 +103076,7 @@ async function handler20(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "transfer.write");
-      const body = parse2(createSchema7, req.body || {});
+      const body = parse2(createSchema8, req.body || {});
       const supabase = getAdminClient();
       const { data: transfer, error } = await supabase.from("transfers").insert({
         transfer_no: body.transfer_no,
@@ -102753,7 +103105,7 @@ async function handler20(req, res) {
 }
 
 // server/_handlers/users.ts
-var createSchema8 = external_exports.object({
+var createSchema9 = external_exports.object({
   email: external_exports.string().email(),
   name: external_exports.string().min(1).max(100),
   password: external_exports.string().min(6).max(72),
@@ -102767,13 +103119,13 @@ async function getProfileWithRoles(supabase, id) {
   }
   return data;
 }
-async function handler21(req, res) {
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
     if (req.method === "POST") {
       requirePermission(ctx, "user.manage");
-      const body = parse2(createSchema8, req.body || {});
+      const body = parse2(createSchema9, req.body || {});
       const supabase = getAdminClient();
       const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
         email: body.email,
@@ -102818,13 +103170,13 @@ async function handler21(req, res) {
 }
 
 // server/_handlers/warehouses.ts
-var createSchema9 = external_exports.object({
+var createSchema10 = external_exports.object({
   code: external_exports.string().min(1).max(32),
   name: external_exports.string().min(1).max(100),
   address: external_exports.string().max(300).nullable().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional().default("domestic")
 });
-async function handler22(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102837,7 +103189,7 @@ async function handler22(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "inventory.write");
-      const body = parse2(createSchema9, req.body || {});
+      const body = parse2(createSchema10, req.body || {});
       const supabase = getAdminClient();
       const { data, error } = await supabase.from("warehouses").insert(body).select().single();
       if (error) {
@@ -102866,7 +103218,7 @@ var importRowSchema = external_exports.object({
 var importSchema = external_exports.object({
   rows: external_exports.array(importRowSchema).min(1).max(5e3)
 });
-async function handler23(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102974,7 +103326,7 @@ async function handler23(req, res) {
 }
 
 // server/_handlers/daily-sales/summary.ts
-async function handler24(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103093,7 +103445,7 @@ function num(v) {
 function ceilN(v) {
   return Math.ceil(v);
 }
-async function handler25(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103418,7 +103770,7 @@ async function handler25(req, res) {
 }
 
 // server/_handlers/dashboard.ts
-async function handler26(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103500,7 +103852,7 @@ function toItems(rows, type, cfg) {
     deleted_at: r.deleted_at
   }));
 }
-async function handler27(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103548,6 +103900,27 @@ async function handler27(req, res) {
       if (path.endsWith("/recycle-bin/restore")) {
         const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq("id", id).select().single();
         if (error) throw error;
+        if (type === "shipment" && before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3") {
+          const items = before.shipment_items || [];
+          if (items.length) {
+            const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+            if (domWhErr) throw domWhErr;
+            if (domWh) {
+              for (const it of items) {
+                await supabase.rpc("adjust_inventory", {
+                  p_product_id: it.product_id,
+                  p_warehouse_id: domWh.id,
+                  p_quantity: -Number(it.quantity || 0),
+                  p_type: "transfer_out",
+                  p_reference_type: "shipment",
+                  p_reference_id: id,
+                  p_created_by: ctx.userId,
+                  p_note: "\u8C03\u62E8\u53D1\u8D27\u6062\u590D\u6263\u51CF\u56FD\u5185\u5E93\u5B58"
+                });
+              }
+            }
+          }
+        }
         await writeAudit(ctx, req, "restore", type, id, before, data);
         return res.status(200).json({ ok: true, data });
       }
@@ -103603,7 +103976,7 @@ var CURRENCIES = [
   { code: "ARS", symbol: "AR$", name: "\u963F\u6839\u5EF7\u6BD4\u7D22" },
   { code: "PEN", symbol: "S/", name: "\u79D8\u9C81\u7D22\u5C14" }
 ];
-async function handler28(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103712,7 +104085,7 @@ async function fetchFromErApi() {
 async function fetchFromExchangeRateApi() {
   return fetchRatesFrom("https://api.exchangerate-api.com/v4/latest/USD");
 }
-async function handler29(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     await requireAuth(req);
@@ -103749,13 +104122,13 @@ async function handler29(req, res) {
 }
 
 // server/_handlers/forwarders.ts
-var createSchema10 = external_exports.object({
+var createSchema11 = external_exports.object({
   name: external_exports.string().min(1).max(100),
   contact: external_exports.string().max(100).nullable().optional(),
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler30(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103774,7 +104147,7 @@ async function handler30(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(createSchema10, req.body || {});
+      const body = parse2(createSchema11, req.body || {});
       const { data, error } = await supabase.from("forwarders").insert({
         name: body.name,
         contact: body.contact || null,
@@ -103795,14 +104168,14 @@ async function handler30(req, res) {
 }
 
 // server/_handlers/forwarders/[id].ts
-var updateSchema = external_exports.object({
+var updateSchema2 = external_exports.object({
   name: external_exports.string().min(1).max(100).optional(),
   contact: external_exports.string().max(100).nullable().optional(),
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler31(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103810,7 +104183,7 @@ async function handler31(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(updateSchema, req.body || {});
+      const body = parse2(updateSchema2, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("forwarders").select("*").eq("id", id).single();
       if (!before) throw Errors.notFound("\u8D27\u4EE3\u4E0D\u5B58\u5728");
@@ -103845,12 +104218,12 @@ async function handler31(req, res) {
 }
 
 // server/_handlers/cargo-statuses.ts
-var createSchema11 = external_exports.object({
+var createSchema12 = external_exports.object({
   name: external_exports.string().min(1).max(50),
   color: external_exports.string().max(7).default("#FFFFFF"),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler32(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103863,7 +104236,7 @@ async function handler32(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(createSchema11, req.body || {});
+      const body = parse2(createSchema12, req.body || {});
       const { data, error } = await supabase.from("cargo_statuses").insert({ name: body.name, color: body.color, sort_order: body.sort_order }).select().single();
       if (error) {
         if (error.code === "23505") throw Errors.conflict(`\u8D27\u7269\u72B6\u6001\u540D\u79F0\u5DF2\u5B58\u5728\uFF1A${body.name}`);
@@ -103879,12 +104252,12 @@ async function handler32(req, res) {
 }
 
 // server/_handlers/cargo-statuses/[id].ts
-var updateSchema2 = external_exports.object({
+var updateSchema3 = external_exports.object({
   name: external_exports.string().min(1).max(50).optional(),
   color: external_exports.string().max(7).optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler33(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103892,7 +104265,7 @@ async function handler33(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(updateSchema2, req.body || {});
+      const body = parse2(updateSchema3, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("cargo_statuses").select("*").eq("id", id).single();
       if (!before) throw Errors.notFound("\u8D27\u7269\u72B6\u6001\u4E0D\u5B58\u5728");
@@ -103927,13 +104300,13 @@ async function handler33(req, res) {
 }
 
 // server/_handlers/after-sale-types.ts
-var createSchema12 = external_exports.object({
+var createSchema13 = external_exports.object({
   value: external_exports.string().min(1).max(50).regex(/^[a-zA-Z0-9_]+$/, "\u7C7B\u578B\u6807\u8BC6\u4EC5\u652F\u6301\u82F1\u6587/\u6570\u5B57/\u4E0B\u5212\u7EBF"),
   name: external_exports.string().min(1).max(50),
   need_stock_in: external_exports.boolean().default(false),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler34(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103946,7 +104319,7 @@ async function handler34(req, res) {
     }
     if (req.method === "POST") {
       requirePermission(ctx, "after_sales.write");
-      const body = parse2(createSchema12, req.body || {});
+      const body = parse2(createSchema13, req.body || {});
       const { data, error } = await supabase.from("after_sale_types").insert({ value: body.value, name: body.name, need_stock_in: body.need_stock_in, sort_order: body.sort_order }).select().single();
       if (error) {
         if (error.code === "23505") throw Errors.conflict(`\u552E\u540E\u7C7B\u578B\u6807\u8BC6\u5DF2\u5B58\u5728\uFF1A${body.value}`);
@@ -103962,12 +104335,12 @@ async function handler34(req, res) {
 }
 
 // server/_handlers/after-sale-types/[id].ts
-var updateSchema3 = external_exports.object({
+var updateSchema4 = external_exports.object({
   name: external_exports.string().min(1).max(50).optional(),
   need_stock_in: external_exports.boolean().optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler35(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103975,7 +104348,7 @@ async function handler35(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "after_sales.write");
-      const body = parse2(updateSchema3, req.body || {});
+      const body = parse2(updateSchema4, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("after_sale_types").select("*").eq("id", id).single();
       if (!before) throw Errors.notFound("\u552E\u540E\u7C7B\u578B\u4E0D\u5B58\u5728");
@@ -104017,11 +104390,11 @@ var AFTER_SALES_FLOW = {
   REJECTED: [],
   PLATFORM_INTERVENED: ["COMPLETED", "REJECTED"]
 };
-var itemSchema6 = external_exports.object({
+var itemSchema7 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
-var updateSchema4 = external_exports.object({
+var updateSchema5 = external_exports.object({
   status: external_exports.enum(["PENDING", "APPROVED", "PROCESSING", "COMPLETED", "REJECTED", "PLATFORM_INTERVENED"]).optional(),
   order_no: external_exports.string().min(1).max(64).optional(),
   type: external_exports.string().min(1).optional(),
@@ -104029,9 +104402,9 @@ var updateSchema4 = external_exports.object({
   warehouse_id: external_exports.string().uuid().nullable().optional(),
   reason: external_exports.string().max(256).nullable().optional(),
   result: external_exports.string().max(512).optional(),
-  items: external_exports.array(itemSchema6).min(1).max(200).optional()
+  items: external_exports.array(itemSchema7).min(1).max(200).optional()
 }).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler36(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104047,7 +104420,7 @@ async function handler36(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse2(updateSchema4, req.body || {});
+      const body = parse2(updateSchema5, req.body || {});
       const { data: before, error: getErr } = await supabase.from("after_sales").select("*, after_sale_items(*, products(id, name, link_id, image_text))").eq("id", id).is("deleted_at", null).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u552E\u540E\u5355\u4E0D\u5B58\u5728");
@@ -104125,7 +104498,7 @@ async function handler36(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler37(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104162,7 +104535,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler38(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104197,7 +104570,7 @@ async function handler38(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler39(req, res) {
+async function handler40(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104227,7 +104600,7 @@ async function handler39(req, res) {
 }
 
 // server/_handlers/products/[id].ts
-var updateSchema5 = external_exports.object({
+var updateSchema6 = external_exports.object({
   sku: external_exports.string().max(64).nullable().optional(),
   name: external_exports.string().min(1).max(200).optional(),
   barcode: external_exports.string().max(64).nullable().optional(),
@@ -104241,6 +104614,7 @@ var updateSchema5 = external_exports.object({
   image_text: external_exports.string().max(255).nullable().optional(),
   link_id: external_exports.string().max(255).nullable().optional(),
   unit: external_exports.string().max(50).optional(),
+  remark: external_exports.string().max(1e3).nullable().optional(),
   competitor_id: external_exports.string().max(255).nullable().optional(),
   shipping_mode: external_exports.string().max(20).optional(),
   purchase_cost: external_exports.coerce.number().min(0).optional(),
@@ -104249,7 +104623,7 @@ var updateSchema5 = external_exports.object({
   ml_commission_rate: external_exports.coerce.number().min(0).max(1).optional(),
   overseas_stock: external_exports.coerce.number().min(0).optional()
 });
-async function handler40(req, res) {
+async function handler41(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104266,7 +104640,7 @@ async function handler40(req, res) {
     }
     if (req.method === "PATCH") {
       requirePermission(ctx, "products.write");
-      const body = parse2(updateSchema5, req.body || {});
+      const body = parse2(updateSchema6, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("products").select("*").eq("id", id).is("deleted_at", null).single();
       const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
@@ -104310,7 +104684,7 @@ var PURCHASE_FLOW = {
   RECEIVED: [],
   CANCELLED: []
 };
-var updateSchema6 = external_exports.object({
+var updateSchema7 = external_exports.object({
   status: external_exports.enum(["DRAFT", "SUBMITTED", "APPROVED", "PURCHASING", "PARTIAL", "RECEIVED", "CANCELLED", "ARRIVED"]).optional(),
   receive_date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional(),
@@ -104321,7 +104695,7 @@ var updateSchema6 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler41(req, res) {
+async function handler42(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104337,7 +104711,7 @@ async function handler41(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse2(updateSchema6, req.body || {});
+      const body = parse2(updateSchema7, req.body || {});
       const { data: before, error: getErr } = await supabase.from("purchase_orders").select("*, purchase_order_items(*)").eq("id", id).is("deleted_at", null).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u91C7\u8D2D\u5355\u4E0D\u5B58\u5728");
@@ -104433,23 +104807,23 @@ var REPLENISHMENT_FLOW = {
   COMPLETED: [],
   CANCELLED: []
 };
-var itemSchema7 = external_exports.object({
+var itemSchema8 = external_exports.object({
   product_id: external_exports.string().uuid(),
   quantity: external_exports.coerce.number().positive()
 });
-var updateSchema7 = external_exports.object({
+var updateSchema8 = external_exports.object({
   status: external_exports.enum(["PROCESSING", "CANCELLED", "COMPLETED"]).optional(),
   replenish_qty: external_exports.coerce.number().min(0).optional(),
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   warehouse_id: external_exports.string().uuid().optional(),
-  items: external_exports.array(itemSchema7).min(1).max(200).optional()
+  items: external_exports.array(itemSchema8).min(1).max(200).optional()
 }).refine(
   (v) => v.status !== void 0 || v.replenish_qty !== void 0 || v.replenishment_time !== void 0 || v.warehouse_id !== void 0 || v.items !== void 0,
   {
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler42(req, res) {
+async function handler43(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104465,7 +104839,7 @@ async function handler42(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse2(updateSchema7, req.body || {});
+      const body = parse2(updateSchema8, req.body || {});
       const { data: before, error: getErr } = await supabase.from("replenishment_orders").select("*, replenishment_order_items(*)").eq("id", id).is("deleted_at", null).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8865\u8D27\u5355\u4E0D\u5B58\u5728");
@@ -104546,11 +104920,11 @@ var SALES_FLOW = {
   DELIVERED: [],
   CANCELLED: []
 };
-var updateSchema8 = external_exports.object({
+var updateSchema9 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler43(req, res) {
+async function handler44(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104566,7 +104940,7 @@ async function handler43(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse2(updateSchema8, req.body || {});
+      const body = parse2(updateSchema9, req.body || {});
       const { data: before, error: getErr } = await supabase.from("sales_orders").select("*").eq("id", id).is("deleted_at", null).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8BA2\u5355\u4E0D\u5B58\u5728");
@@ -104615,7 +104989,7 @@ var SHIPMENT_FLOW = {
   DELIVERED: [],
   CANCELLED: []
 };
-var updateSchema9 = external_exports.object({
+var updateSchema10 = external_exports.object({
   status: external_exports.enum(["PENDING", "SHIPPED", "IN_TRANSIT", "DELIVERED", "CANCELLED"]).optional(),
   forwarder_id: external_exports.string().uuid().nullable().optional(),
   cargo_status: external_exports.string().max(20).nullable().optional(),
@@ -104641,9 +105015,9 @@ var updateSchema9 = external_exports.object({
   // 调拨发货管理字段
   cargo_code: external_exports.string().max(100).nullable().optional(),
   tracking_no: external_exports.string().max(100).nullable().optional(),
-  items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive() })).min(1).max(200).optional()
+  items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional()
 });
-async function handler44(req, res) {
+async function handler45(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104660,7 +105034,7 @@ async function handler44(req, res) {
     }
     if (req.method === "PATCH") {
       requirePermission(ctx, "shipment.write");
-      const body = parse2(updateSchema9, req.body || {});
+      const body = parse2(updateSchema10, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before, error: getErr } = await supabase.from("shipments").select("*, forwarders(name), shipment_items(*)").eq("id", id).is("deleted_at", null).single();
       if (getErr) {
@@ -104707,6 +105081,26 @@ async function handler44(req, res) {
         if (error.code === "PGRST116") throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
         throw error;
       }
+      const becameInbound = before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3" && body.cargo_status === "\u5DF2\u5165\u4ED3";
+      if (becameInbound) {
+        const items = (body.items && body.items.length ? body.items : before.shipment_items) || [];
+        const { data: ovsWh, error: ovsWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "overseas").order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (ovsWhErr) throw ovsWhErr;
+        if (!ovsWh) throw Errors.conflict("\u6682\u65E0\u6D77\u5916\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u589E\u52A0\u6D77\u5916\u5E93\u5B58");
+        for (const it of items) {
+          const { error: invErr } = await supabase.rpc("adjust_inventory", {
+            p_product_id: it.product_id,
+            p_warehouse_id: ovsWh.id,
+            p_quantity: Number(it.quantity || 0),
+            p_type: "transfer_in",
+            p_reference_type: "shipment",
+            p_reference_id: id,
+            p_created_by: ctx.userId,
+            p_note: `\u8C03\u62E8\u53D1\u8D27\u5DF2\u5165\u4ED3 ${data.tracking_no || data.shipment_no || id}`
+          });
+          if (invErr) throw invErr;
+        }
+      }
       if (body.items && body.items.length > 0) {
         const { error: delErr } = await supabase.from("shipment_items").delete().eq("shipment_id", id);
         if (delErr) throw delErr;
@@ -104714,7 +105108,8 @@ async function handler44(req, res) {
           body.items.map((it) => ({
             shipment_id: id,
             product_id: it.product_id,
-            quantity: it.quantity
+            quantity: it.quantity,
+            remark: it.remark || null
           }))
         );
         if (insErr) throw insErr;
@@ -104731,6 +105126,27 @@ async function handler44(req, res) {
       }
       const { error } = await supabase.from("shipments").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
       if (error) throw error;
+      if (before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3") {
+        const items = before.shipment_items || [];
+        if (items.length) {
+          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+          if (domWhErr) throw domWhErr;
+          if (domWh) {
+            for (const it of items) {
+              await supabase.rpc("adjust_inventory", {
+                p_product_id: it.product_id,
+                p_warehouse_id: domWh.id,
+                p_quantity: Number(it.quantity || 0),
+                p_type: "adjustment",
+                p_reference_type: "shipment",
+                p_reference_id: id,
+                p_created_by: ctx.userId,
+                p_note: "\u8C03\u62E8\u53D1\u8D27\u5220\u9664\u56DE\u8865\u56FD\u5185\u5E93\u5B58"
+              });
+            }
+          }
+        }
+      }
       await writeAudit(ctx, req, "delete", "shipment", id, before, null);
       return res.status(200).json({ ok: true });
     }
@@ -104741,7 +105157,7 @@ async function handler44(req, res) {
 }
 
 // server/_handlers/shipments/confirm-inbound.ts
-async function handler45(req, res) {
+async function handler46(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -104815,10 +105231,10 @@ var TRANSFER_FLOW = {
   RECEIVED: [],
   CANCELLED: []
 };
-var updateSchema10 = external_exports.object({
+var updateSchema11 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler46(req, res) {
+async function handler47(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104834,7 +105250,7 @@ async function handler46(req, res) {
       return res.status(200).json({ data });
     }
     if (req.method === "PATCH") {
-      const body = parse2(updateSchema10, req.body || {});
+      const body = parse2(updateSchema11, req.body || {});
       const { data: before, error: getErr } = await supabase.from("transfers").select("*, transfer_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u8C03\u62E8\u5355\u4E0D\u5B58\u5728");
@@ -104911,7 +105327,7 @@ async function handler46(req, res) {
 }
 
 // server/_handlers/users/[id].ts
-var updateSchema11 = external_exports.object({
+var updateSchema12 = external_exports.object({
   // 邮箱/密码走 Supabase Auth（service_role），其余字段走 profiles
   email: external_exports.string().email().optional(),
   name: external_exports.string().min(1).max(100).optional(),
@@ -104927,7 +105343,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler47(req, res) {
+async function handler48(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104935,7 +105351,7 @@ async function handler47(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "user.manage");
-      const body = parse2(updateSchema11, req.body || {});
+      const body = parse2(updateSchema12, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       await getProfileWithRoles2(supabase, id);
       if (body.email !== void 0 || body.password !== void 0) {
@@ -104988,14 +105404,14 @@ async function handler47(req, res) {
 }
 
 // server/_handlers/warehouses/[id].ts
-var updateSchema12 = external_exports.object({
+var updateSchema13 = external_exports.object({
   code: external_exports.string().min(1).max(32).optional(),
   name: external_exports.string().min(1).max(100).optional(),
   address: external_exports.string().max(300).nullable().optional(),
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler48(req, res) {
+async function handler49(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105003,7 +105419,7 @@ async function handler48(req, res) {
     const supabase = getAdminClient();
     if (req.method === "PATCH") {
       requirePermission(ctx, "inventory.write");
-      const body = parse2(updateSchema12, req.body || {});
+      const body = parse2(updateSchema13, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const { data: before } = await supabase.from("warehouses").select("*").eq("id", id).single();
       if (!before) throw Errors.notFound("\u4ED3\u5E93\u4E0D\u5B58\u5728");
@@ -105042,57 +105458,60 @@ var routes = [
   { pattern: /^\/auth\/login$/, handler: handler3 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler26 },
-  { pattern: /^\/recycle-bin\/restore$/, handler: handler27 },
-  { pattern: /^\/recycle-bin\/purge$/, handler: handler27 },
-  { pattern: /^\/recycle-bin$/, handler: handler27 },
-  { pattern: /^\/analysis$/, handler: handler25 },
-  { pattern: /^\/daily-sales\/summary$/, handler: handler24 },
-  { pattern: /^\/daily-sales$/, handler: handler23 },
-  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler33, params: ["id"] },
-  { pattern: /^\/cargo-statuses$/, handler: handler32 },
-  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler35, params: ["id"] },
-  { pattern: /^\/after-sale-types$/, handler: handler34 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler31, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler30 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler36, params: ["id"] },
+  { pattern: /^\/dashboard\/stats$/, handler: handler27 },
+  { pattern: /^\/recycle-bin\/restore$/, handler: handler28 },
+  { pattern: /^\/recycle-bin\/purge$/, handler: handler28 },
+  { pattern: /^\/recycle-bin$/, handler: handler28 },
+  { pattern: /^\/analysis$/, handler: handler26 },
+  { pattern: /^\/daily-sales\/summary$/, handler: handler25 },
+  { pattern: /^\/daily-sales$/, handler: handler24 },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler34, params: ["id"] },
+  { pattern: /^\/cargo-statuses$/, handler: handler33 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler36, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler35 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler32, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler31 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler37, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler5 },
   { pattern: /^\/audit-logs$/, handler: handler6 },
-  { pattern: /^\/system-settings$/, handler: handler28 },
-  { pattern: /^\/exchange-rates$/, handler: handler29 },
+  { pattern: /^\/system-settings$/, handler: handler29 },
+  { pattern: /^\/exchange-rates$/, handler: handler30 },
   { pattern: /^\/db-usage$/, handler: handler7 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler38 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler39 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler37, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler39 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler40 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler38, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler8 },
-  { pattern: /^\/permissions$/, handler: handler9 },
-  { pattern: /^\/products\/batch-delete$/, handler: handler13 },
-  { pattern: /^\/products\/upload-image$/, handler: handler14 },
-  { pattern: /^\/products\/tracking$/, handler: handler11 },
-  { pattern: /^\/cost-profit\/settings$/, handler: handler12 },
-  { pattern: /^\/cost-profit\/save$/, handler: handler12 },
-  { pattern: /^\/cost-profit$/, handler: handler12 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler40, params: ["id"] },
-  { pattern: /^\/products$/, handler: handler10 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler41, params: ["id"] },
-  { pattern: /^\/purchase-orders$/, handler: handler15 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler42, params: ["id"] },
-  { pattern: /^\/replenishment$/, handler: handler16 },
-  { pattern: /^\/roles$/, handler: handler17 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler43, params: ["id"] },
-  { pattern: /^\/sales$/, handler: handler18 },
-  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler45, params: ["id"] },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler44, params: ["id"] },
-  { pattern: /^\/shipments$/, handler: handler19 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler46, params: ["id"] },
-  { pattern: /^\/transfers$/, handler: handler20 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler47, params: ["id"] },
-  { pattern: /^\/users$/, handler: handler21 },
+  { pattern: /^\/permissions$/, handler: handler10 },
+  { pattern: /^\/products\/batch-delete$/, handler: handler14 },
+  { pattern: /^\/products\/upload-image$/, handler: handler15 },
+  { pattern: /^\/products\/tracking$/, handler: handler12 },
+  { pattern: /^\/cost-profit\/settings$/, handler: handler13 },
+  { pattern: /^\/cost-profit\/save$/, handler: handler13 },
+  { pattern: /^\/cost-profit$/, handler: handler13 },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler41, params: ["id"] },
+  { pattern: /^\/products$/, handler: handler11 },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler42, params: ["id"] },
+  { pattern: /^\/purchase-orders$/, handler: handler16 },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler43, params: ["id"] },
+  { pattern: /^\/replenishment$/, handler: handler17 },
+  { pattern: /^\/roles$/, handler: handler18 },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler44, params: ["id"] },
+  { pattern: /^\/sales$/, handler: handler19 },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler46, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler45, params: ["id"] },
+  { pattern: /^\/shipments$/, handler: handler20 },
+  { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: handler9, params: ["id"] },
+  { pattern: /^\/stocktakes\/([^/]+)$/, handler: handler9, params: ["id"] },
+  { pattern: /^\/stocktakes$/, handler: handler9 },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler47, params: ["id"] },
+  { pattern: /^\/transfers$/, handler: handler21 },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler48, params: ["id"] },
+  { pattern: /^\/users$/, handler: handler22 },
   { pattern: /^\/export\/xlsx$/, handler: handler4 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler48, params: ["id"] },
-  { pattern: /^\/warehouses$/, handler: handler22 }
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler49, params: ["id"] },
+  { pattern: /^\/warehouses$/, handler: handler23 }
 ];
-async function handler49(req, res) {
+async function handler50(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -105115,7 +105534,7 @@ async function handler49(req, res) {
   }
 }
 export {
-  handler49 as default
+  handler50 as default
 };
 /*! Bundled license information:
 

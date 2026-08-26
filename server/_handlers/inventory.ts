@@ -18,11 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const q = parse(paginationSchema, req.query);
     const sku = typeof req.query.sku === 'string' ? req.query.sku.trim() : '';
     const warehouseId = typeof req.query.warehouse_id === 'string' ? req.query.warehouse_id.trim() : '';
+    const productId = typeof req.query.product_id === 'string' ? req.query.product_id.trim() : '';
     const supabase = getAdminClient();
 
     let query: any = supabase.from('inventory')
       .select('*, products!inner(id, sku, name), warehouses!inner(id, name)', { count: 'exact' });
 
+    if (productId) query = query.eq('product_id', productId);
     if (sku) {
       const { data: prods } = await supabase.from('products').select('id').eq('sku', sku).is('deleted_at', null);
       const ids = (prods || []).map((p: any) => p.id);

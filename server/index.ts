@@ -7,6 +7,7 @@ import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
 import dbUsage from './_handlers/db-usage';
 import inventory from './_handlers/inventory';
+import stocktakes from './_handlers/stocktakes';
 import permissions from './_handlers/permissions';
 import products from './_handlers/products';
 import productsTracking from './_handlers/products/tracking';
@@ -102,6 +103,9 @@ const routes: Route[] = [
   { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: shipmentsConfirmInbound, params: ['id'] },
   { pattern: /^\/shipments\/([^/]+)$/, handler: shipmentsId, params: ['id'] },
   { pattern: /^\/shipments$/, handler: shipments },
+  { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: stocktakes, params: ['id'] },
+  { pattern: /^\/stocktakes\/([^/]+)$/, handler: stocktakes, params: ['id'] },
+  { pattern: /^\/stocktakes$/, handler: stocktakes },
   { pattern: /^\/transfers\/([^/]+)$/, handler: transfersId, params: ['id'] },
   { pattern: /^\/transfers$/, handler: transfers },
   { pattern: /^\/users\/([^/]+)$/, handler: usersId, params: ['id'] },
