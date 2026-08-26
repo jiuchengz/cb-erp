@@ -73,7 +73,6 @@
     <div class="table-wrap">
     <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
-      <el-table-column prop="listing_time" label="上新时间" width="110" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column label="图片" width="90">
         <template #default="{ row }">
@@ -88,19 +87,25 @@
         </template>
       </el-table-column>
       <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="link_id" label="链接ID" min-width="120" show-overflow-tooltip />
       <el-table-column label="SKU" min-width="140">
         <template #default="{ row }">{{ row.sku || '—' }}</template>
       </el-table-column>
       <el-table-column prop="barcode" label="条形码" min-width="140" />
-      <el-table-column prop="category" label="分类" min-width="120" />
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
-      <el-table-column prop="in_transit_qty" label="在途数量" width="100" align="right" />
-      <el-table-column prop="sales_qty" :label="salesColumnLabel" width="110" align="right" />
-      <el-table-column prop="unit" label="单位" width="80" />
-      <el-table-column prop="unit_price" label="售价比索" width="110" align="right" />
-      <el-table-column label="售价元" width="100" align="right">
-        <template #default="{ row }">{{ money(Number(row.unit_price ?? 0) * rate) }}</template>
+      <el-table-column label="在途数量" width="110" align="right">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
+        </template>
+      </el-table-column>
+      <el-table-column :label="salesColumnLabel" width="120" align="right">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.sales_qty ?? 0 }}</el-link>
+        </template>
+      </el-table-column>
+      <el-table-column label="售价" width="120" align="right">
+        <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
       </el-table-column>
       <el-table-column prop="purchase_cost" label="不含税采购成本" width="130" align="right" />
       <el-table-column prop="first_leg_freight" label="头程运费" width="100" align="right" />
@@ -108,29 +113,9 @@
       <el-table-column label="ML佣金比例" width="110" align="right">
         <template #default="{ row }">{{ pct(row.ml_commission_rate) }}</template>
       </el-table-column>
-      <el-table-column label="平台利润(元)" width="120" align="right">
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <span :class="profit(row) >= 0 ? 'profit-pos' : 'profit-neg'">{{ money(profit(row)) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="shipping_mode" label="空海运" width="100" />
-      <el-table-column prop="competitor_id" label="竞品ID" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="link_id" label="链接ID" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="currency" label="币种" width="90" />
-      <el-table-column prop="status" label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'info'">
-            {{ row.status === 'active' ? '启用' : '停用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" min-width="180">
-        <template #default="{ row }">
-          {{ formatDate(row.created_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
-        <template #default="{ row }">
+          <el-button link type="primary" @click="openTrack(row)">明细</el-button>
           <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-if="canDelete" link type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -148,6 +133,83 @@
       @current-change="load"
       @size-change="onSizeChange"
     />
+
+    <el-drawer v-model="trackVisible" :title="trackTitle" size="720px" destroy-on-close>
+      <div v-loading="trackLoading">
+        <template v-if="trackData">
+          <div class="track-summary">
+            <el-descriptions :column="4" border size="small">
+              <el-descriptions-item label="SKU">{{ trackData.product.sku || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="产品编号">{{ trackData.product.code || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="链接ID">{{ trackData.product.link_id || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="海外库存">{{ trackData.product.overseas_stock ?? 0 }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+
+          <div class="track-filter-bar">
+            <span class="track-filter-label">筛选状态：</span>
+            <el-radio-group v-model="trackShipFilter" size="small">
+              <el-radio-button value="全部">全部</el-radio-button>
+              <el-radio-button v-for="st in trackCargoStatuses" :key="st.name" :value="st.name">{{ st.name }}</el-radio-button>
+            </el-radio-group>
+          </div>
+          <h4 class="track-section-title">在途 / 发货批次（{{ trackShipments.length }} / {{ trackData.shipments.length }}）</h4>
+          <el-table :data="trackShipments" border size="small" max-height="300">
+            <el-table-column label="货件号" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.tracking_no || row.cargo_code || '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="ship_date" label="发货日期" width="110" />
+            <el-table-column label="货物状态" width="110">
+              <template #default="{ row }">
+                <el-tag v-if="row.cargo_status === '已入仓'" type="success" size="small">{{ row.cargo_status || '—' }}</el-tag>
+                <el-tag v-else type="warning" size="small">{{ row.cargo_status || '—' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="estimated_arrival" label="预计到港" width="110" />
+            <el-table-column label="状态更新" width="160">
+              <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+            </el-table-column>
+            <el-table-column prop="quantity" label="数量" width="80" align="right" />
+            <el-table-column prop="forwarder" label="货代" min-width="100" show-overflow-tooltip />
+          </el-table>
+          <div v-if="!trackData.shipments.length" class="track-empty">暂无发货批次记录</div>
+
+          <div class="track-filter-bar">
+            <span class="track-filter-label">选择时间：</span>
+            <el-radio-group v-model="trackSalesRange" size="small">
+              <el-radio-button value="7d">近7天</el-radio-button>
+              <el-radio-button value="15d">近15天</el-radio-button>
+              <el-radio-button value="30d">近30天</el-radio-button>
+              <el-radio-button value="all">全部</el-radio-button>
+              <el-radio-button value="custom">自定义</el-radio-button>
+            </el-radio-group>
+            <el-date-picker
+              v-if="trackSalesRange === 'custom'"
+              v-model="trackCustomRange"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              size="small"
+              style="width: 250px"
+            />
+          </div>
+          <h4 class="track-section-title">销量明细（{{ trackSalesRangeLabel }}，{{ trackSales.length }} 天）</h4>
+          <el-table :data="trackSales" border size="small" max-height="300">
+            <el-table-column prop="sale_date" label="日期" width="120" />
+            <el-table-column prop="platform" label="平台" width="140" />
+            <el-table-column prop="quantity" label="销量" width="100" align="right" />
+            <el-table-column prop="refund_qty" label="退款" width="100" align="right" />
+            <el-table-column label="实际销量" width="100" align="right">
+              <template #default="{ row }">{{ Number(row.quantity || 0) - Number(row.refund_qty || 0) }}</template>
+            </el-table-column>
+            <el-table-column prop="unit_price" label="单价(比索)" width="110" align="right" />
+          </el-table>
+          <div v-if="!trackSales.length" class="track-empty">所选时间范围内暂无销量数据</div>
+        </template>
+      </div>
+    </el-drawer>
 
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
       <el-form :model="form" label-width="110px">
@@ -264,7 +326,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/api'
-import { formatDateTime as sysFormatDateTime } from '../utils/system'
+import { formatDateTime as sysFormatDateTime, formatMoney } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
@@ -322,15 +384,12 @@ function daysAgoStr(n: number) {
 }
 
 const salesRangeLabel = computed(() => {
-  if (salesRangeKey.value === 'all') return '销量：全部时间'
-  if (salesRangeKey.value === 'custom') return customSalesRange.value?.length ? `销量：${customSalesRange.value[0]} ~ ${customSalesRange.value[1]}` : '销量：自定义'
-  return `销量：${salesRangePresets[salesRangeKey.value].label}`
+  if (salesRangeKey.value === 'all') return '全部时间'
+  if (salesRangeKey.value === 'custom') return customSalesRange.value?.length ? `${customSalesRange.value[0]} ~ ${customSalesRange.value[1]}` : '自定义'
+  return salesRangePresets[salesRangeKey.value].label
 })
 
-const salesColumnLabel = computed(() => {
-  if (salesFrom.value && salesTo.value) return `销量(${salesFrom.value} 至 ${salesTo.value})`
-  return '销量'
-})
+const salesColumnLabel = computed(() => '销量')
 
 function onSalesRangeCommand(cmd: string) {
   if (cmd === 'custom') {
@@ -361,6 +420,70 @@ function onDateRangeChange(val: [string, string] | null) {
     salesRangeKey.value = 'all'
   }
   load()
+}
+
+// 商品跟踪明细（在途批次时间线 + 按天销量）
+const trackVisible = ref(false)
+const trackLoading = ref(false)
+const trackData = ref<any>(null)
+const trackRow = ref<any>(null)
+const trackTitle = computed(() => `商品明细：${trackRow.value?.name || ''}`)
+const trackShipFilter = ref('全部')
+const trackSalesRange = ref('15d')
+const trackCustomRange = ref<[string, string] | null>(null)
+// 货物状态字典：与发货管理「状态管理」共用 /api/cargo-statuses，动态同步
+const trackCargoStatuses = ref<any[]>([])
+
+const trackShipments = computed(() => {
+  const list = trackData.value?.shipments || []
+  if (trackShipFilter.value === '全部') return list
+  return list.filter((s: any) => s.cargo_status === trackShipFilter.value)
+})
+
+const trackSales = computed(() => {
+  const list = trackData.value?.sales || []
+  if (trackSalesRange.value === 'custom') {
+    const [from, to] = trackCustomRange.value || []
+    if (from && to) return list.filter((s: any) => s.sale_date >= from && s.sale_date <= to)
+    return list
+  }
+  if (trackSalesRange.value === 'all') return list
+  const days = { '7d': 7, '15d': 15, '30d': 30 }[trackSalesRange.value as '7d' | '15d' | '30d']
+  const from = daysAgoStr(days - 1)
+  const to = todayStr()
+  return list.filter((s: any) => s.sale_date >= from && s.sale_date <= to)
+})
+
+const trackSalesRangeLabel = computed(() => {
+  const map: Record<string, string> = { '7d': '近7天', '15d': '近15天', '30d': '近30天', all: '全部时间', custom: '自定义' }
+  return map[trackSalesRange.value] || '近15天'
+})
+
+function openTrack(row: any) {
+  trackRow.value = row
+  trackShipFilter.value = '全部'
+  trackSalesRange.value = '15d'
+  trackCustomRange.value = null
+  trackVisible.value = true
+  loadTrack(row.id)
+}
+
+async function loadTrack(id: string) {
+  trackLoading.value = true
+  try {
+    const params: Record<string, any> = { id }
+    const [tr, cs] = await Promise.all([
+      api.get('/products/tracking', { params }),
+      api.get('/cargo-statuses').catch(() => null),
+    ])
+    trackData.value = tr.data.data ?? null
+    if (cs?.data?.data?.length) trackCargoStatuses.value = cs.data.data
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载明细失败')
+    trackData.value = null
+  } finally {
+    trackLoading.value = false
+  }
 }
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
@@ -592,38 +715,24 @@ function onExportCmd(cmd: string) {
 
 async function exportRows(withImages = false) {
   const columns = [
-    { key: 'sku', label: 'SKU' },
     { key: 'code', label: '产品编号' },
     { key: 'name', label: '名称' },
+    { key: 'link_id', label: '链接ID' },
+    { key: 'sku', label: 'SKU' },
     { key: 'barcode', label: '条形码' },
-    { key: 'category', label: '分类' },
     { key: 'domestic_stock', label: '国内库存' },
-    { key: 'overseas_stock', label: '海外库存' },
-    { key: 'warehouse_overseas_stock', label: '海外仓库存' },
+    { key: 'overseas_stock', label: '国外库存' },
     { key: 'in_transit_qty', label: '在途数量' },
     { key: 'sales_qty', label: '销量' },
-    { key: 'listing_time', label: '上新时间' },
-    { key: 'unit', label: '单位' },
-    { key: 'unit_price', label: '售价' },
-    { key: 'purchase_cost', label: '采购成本' },
-    { key: 'shipping_mode', label: '空海运' },
-    { key: 'competitor_id', label: '竞品ID' },
-    { key: 'link_id', label: '链接ID' },
-    { key: 'currency', label: '币种' },
-    {
-      key: 'status',
-      label: '状态',
-      value: (r: Product) => (r.status === 'active' ? '启用' : '停用'),
-    },
+    { key: 'unit_price', label: '售价', value: (r: Product) => formatMoney(r.unit_price) },
+    { key: 'purchase_cost', label: '不含税采购成本' },
+    { key: 'first_leg_freight', label: '头程运费' },
+    { key: 'last_mile_delivery_peso', label: '尾程派送(比索)' },
+    { key: 'ml_commission_rate', label: 'ML佣金比例', value: (r: Product) => pct(r.ml_commission_rate) },
     {
       key: 'image_text',
       label: '图片',
       value: (r: Product) => (isImageUrl(r.image_text) ? r.image_text : ''),
-    },
-    {
-      key: 'created_at',
-      label: '创建时间',
-      value: (r: Product) => formatDate(r.created_at),
     },
   ]
   exporting.value = true
@@ -1004,5 +1113,40 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
 .sales-range-active {
   color: var(--accent, var(--el-color-primary));
   font-weight: 600;
+}
+.profit-pos {
+  color: #67c23a;
+  font-weight: 600;
+}
+.profit-neg {
+  color: #f56c6c;
+  font-weight: 600;
+}
+.track-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.track-filter-label {
+  font-size: 13px;
+  color: #606266;
+}
+.track-summary {
+  margin-bottom: 12px;
+}
+.track-section-title {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.track-empty {
+  padding: 16px 0;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 13px;
+  border: 1px dashed var(--color-border, #dcdfe6);
+  border-radius: 4px;
 }
 </style>

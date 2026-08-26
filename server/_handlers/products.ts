@@ -127,6 +127,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
 
+        // 在途（调拨发货）：shipments(source=transfer) 货物状态非「已入仓」的货件数量
+        const { data: transitShipRows, error: transitShipErr } = await supabase
+          .from('shipment_items')
+          .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at)')
+          .in('product_id', pageIds);
+        if (transitShipErr) throw transitShipErr;
+        for (const r of transitShipRows || []) {
+          const sh = r.shipments as any;
+          if (!sh || sh.source !== 'transfer' || sh.deleted_at) continue;
+          if (sh.cargo_status && sh.cargo_status === '已入仓') continue;
+          const pid = r.product_id as string;
+          transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
+        }
+
         // 销量：从 daily_sales 按 link_id 聚合（销售数量-退款数量=实际销量）；
         // sales_from/sales_to 传了则按 sale_date 过滤
         if (pageLinkIds.length) {

@@ -123,7 +123,8 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/products', label: '商品', icon: Goods },
-      { path: '/inventory', label: '库存', icon: Box }
+      { path: '/inventory', label: '库存', icon: Box },
+      { path: '/cost-profit', label: '成本利润', icon: Goods }
     ]
   },
   {

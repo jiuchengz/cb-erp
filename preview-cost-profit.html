@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cb-erp 成本利润表 · 离线预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #303133; padding: 24px; }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #909399; font-size: 13px; margin-bottom: 20px; line-height: 1.7; }
+  .card { background: #fff; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 12px; border-left: 4px solid #409eff; padding-left: 10px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .btn { display: inline-block; background: #409eff; color: #fff; border: none; border-radius: 4px; padding: 7px 16px; font-size: 13px; cursor: pointer; }
+  .btn-plain { background: #fff; color: #606266; border: 1px solid #dcdfe6; }
+  .btn-warn { background: #e6a23c; color: #fff; }
+  .btn-danger { background: #f56c6c; color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .input-demo { border: 1px solid #dcdfe6; border-radius: 4px; padding: 7px 12px; font-size: 13px; width: 220px; }
+  .tag { display: inline-block; background: #ecf5ff; color: #409eff; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+  .tag-green { background: #f0f9eb; color: #67c23a; }
+  .tag-orange { background: #fdf6ec; color: #e6a23c; }
+  .tag-red { background: #fef0f0; color: #f56c6c; }
+  .note { font-size: 12px; color: #909399; margin-top: 10px; line-height: 1.8; }
+  .note b { color: #606266; }
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+  th, td { border: 1px solid #ebeef5; padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { background: #fafafa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.new { background: #f0f9eb; }
+  .new-col { color: #67c23a; font-weight: 600; }
+  .calc-col { color: #909399; }
+  .thumb { width: 40px; height: 40px; border-radius: 4px; background: #f0f2f5; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #c0c4cc; }
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-mask.show { display: flex; }
+  .modal { background: #fff; border-radius: 8px; width: 860px; max-height: 86vh; overflow: auto; padding: 20px 24px; }
+  .modal h3 { font-size: 16px; margin-bottom: 16px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px 16px; }
+  .form-item label { display: block; font-size: 12px; color: #606266; margin-bottom: 4px; }
+  .form-item input, .form-item select { width: 100%; border: 1px solid #dcdfe6; border-radius: 4px; padding: 7px 10px; font-size: 13px; }
+  .form-item.full { grid-column: 1 / -1; }
+  .form-item .src-tag { font-size: 11px; color: #909399; margin-left: 6px; }
+  .modal-foot { margin-top: 16px; text-align: right; display: flex; gap: 10px; justify-content: flex-end; }
+  .profit-formula { background: #f8f9fb; border: 1px dashed #dcdfe6; border-radius: 6px; padding: 12px 14px; font-size: 12.5px; color: #606266; line-height: 2; margin-bottom: 12px; }
+  .profit-formula code { background: #fff; border: 1px solid #ebeef5; border-radius: 3px; padding: 1px 5px; font-size: 12px; color: #409eff; }
+  .steps { list-style: none; }
+  .steps li { font-size: 13px; line-height: 2; color: #303133; }
+  .steps li::before { content: "·"; color: #409eff; font-weight: 700; margin-right: 6px; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+  .settings-grid .form-item label b { color: #303133; }
+  .formula-live { background: #f0f9eb; border: 1px solid #c2e7b0; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; color: #4e7d3a; line-height: 1.9; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>成本利润表 · 离线预览</h1>
+  <div class="sub">本页为静态效果预览（含模拟数据），确认布局与字段后接入系统。绿色高亮列为本次新增字段，灰色列为自动计算列。</div>
+
+  <div class="card">
+    <h2>页面布局：顶部操作区</h2>
+    <div class="toolbar">
+      <button class="btn btn-plain">下载模板</button>
+      <button class="btn btn-warn">批量上传</button>
+      <button class="btn">批量导出</button>
+      <button class="btn btn-plain" onclick="openSettings()">设置</button>
+      <input class="input-demo" placeholder="搜索：产品编号 / 名称 / SKU / 链接ID" value="搜索：产品编号 / 名称 / SKU / 链接ID">
+      <button class="btn btn-plain">查询</button>
+      <span style="flex:1"></span>
+      <span class="tag tag-green">数据来源：商品表（实时同步）</span>
+    </div>
+    <div class="note">
+      <b>同步机制：</b>成本利润表的产品直接读取商品表，商品模块新增/修改的产品自动出现在这里；本页编辑保存后写回商品表，两边数据保持一致。<br>
+      <b>设置：</b>点击「设置」可自由调整汇率与各项费率，保存后全表利润按新公式重算并写回商品表。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>表格列（与 Excel 模板「墨西哥ML店铺利润试算模板」B~AM 39 列严格对齐，横向滚动查看）</h2>
+    <div class="table-scroll">
+    <table id="mainTable">
+      <thead>
+        <tr>
+          <th>序号</th>
+          <th>产品名称</th>
+          <th>图片</th>
+          <th>链接</th>
+          <th>1688卖家</th>
+          <th></th>
+          <th>选项</th>
+          <th style="text-align:right">ML佣金比例</th>
+          <th style="text-align:right">售价(比索)</th>
+          <th style="text-align:right" class="calc-col">售价(元)=J*0.38</th>
+          <th style="text-align:right">不含税采购成本(元)</th>
+          <th style="text-align:right" class="calc-col">13%含税采购成本(元)=L*1.13</th>
+          <th style="text-align:right" class="calc-col">含税采购成本(比索)=M/0.38</th>
+          <th style="text-align:right">头程运费(元)</th>
+          <th style="text-align:right" class="calc-col">头程运费(比索)=O/0.38</th>
+          <th style="text-align:right" class="calc-col">货值(比索)=P+N</th>
+          <th style="text-align:right" class="calc-col">FULL仓储0.8%=Q*0.008</th>
+          <th style="text-align:right" class="calc-col">货损5%=Q*0.05</th>
+          <th style="text-align:right" class="calc-col">ML佣金(比索)=J*I</th>
+          <th style="text-align:right">尾程派送费(比索,手工)</th>
+          <th style="text-align:right">附加费(比索,手工)</th>
+          <th style="text-align:right" class="calc-col">广告费8%=J*0.08</th>
+          <th style="text-align:right" class="calc-col">9%代扣税=J*0.09</th>
+          <th style="text-align:right" class="calc-col">7%补税=J*0.07</th>
+          <th style="text-align:right" class="calc-col">总成本=SUM(Q:Y)</th>
+          <th style="text-align:right" class="calc-col">总成本占比=Z/J</th>
+          <th style="text-align:right" class="calc-col">平台利润(比索)=J-Z</th>
+          <th style="text-align:right" class="calc-col">平台利润(元)=AB*0.38</th>
+          <th style="text-align:right" class="calc-col">平台利润率=AC/K</th>
+          <th style="text-align:right" class="calc-col">销售毛利(元)=K-M</th>
+          <th style="text-align:right" class="calc-col">销售毛利率=AE/K</th>
+          <th style="text-align:right" class="new-col">长cm</th>
+          <th style="text-align:right" class="new-col">宽cm</th>
+          <th style="text-align:right" class="new-col">高cm</th>
+          <th style="text-align:right" class="new-col">实重KG</th>
+          <th style="text-align:right" class="new-col">海运费</th>
+          <th style="text-align:right" class="new-col">空运费</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    </div>
+    <div class="note">
+      <b>利润列：</b>按 Excel 模板公式自动计算，结果写回商品表「平台利润」字段，商品模块可看到同一数值。<b>长/宽/高(cm)、实重(KG)、海运费、空运费</b>为独立填写列，不参与总成本计算。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>利润计算规则（可配置，随「设置」实时变化）</h2>
+    <div class="formula-live" id="formulaLive">加载中…</div>
+    <div class="note">
+      点击「设置」可修改汇率与各项费率，保存后按新参数重算全表利润；佣金优先取商品行内比例，未填时用设置中的默认佣金比例。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>编辑弹窗（操作 → 编辑，可修改全部字段）</h2>
+    <div class="toolbar">
+      <button class="btn" onclick="document.getElementById('modal').style.display='flex'">查看编辑弹窗效果</button>
+    </div>
+    <div class="note">点击商品行「编辑」弹出此窗，成本利润相关字段均可修改，保存后：① 同步写回商品表；② 按 Excel 模板公式重算利润写回商品表「平台利润」字段。</div>
+  </div>
+
+  <div class="card">
+    <h2>批量上传 / 批量导出</h2>
+    <ul class="steps">
+      <li><b>下载模板</b>：Excel 模板包含全部字段（含新增的长、宽、高、实重KG、海运费、空运费）</li>
+      <li><b>批量上传</b>：按产品编码/SKU 匹配商品表更新成本、佣金、尺寸、实重、运费等，利润自动重算写回</li>
+      <li><b>批量导出</b>：导出当前筛选结果，含全部字段与利润列，走系统统一后端导出</li>
+    </ul>
+  </div>
+
+  <div id="modal" class="modal-mask" style="display:none">
+    <div class="modal">
+      <h3>编辑成本利润 <span class="tag" id="editTag">正时规侧盖垫</span></h3>
+      <div class="form-grid">
+        <div class="form-item"><label>产品名称</label><input id="eName" value="正时规侧盖垫"></div>
+        <div class="form-item"><label>链接</label><input id="eLink" value="MLM-981234567"></div>
+        <div class="form-item"><label>1688卖家</label><input id="eSeller" value="义乌配件批发"></div>
+        <div class="form-item"><label>ML佣金比例 (%)</label><input id="eComm" value="16.5"></div>
+        <div class="form-item"><label>售价(比索)</label><input id="ePrice" value="350.00"></div>
+        <div class="form-item"><label>不含税采购成本(元)</label><input id="ePurchase" value="33.00"></div>
+        <div class="form-item"><label>头程运费(元)</label><input id="eFirst" value="6.00"></div>
+        <div class="form-item"><label>尾程派送费(比索,手工)</label><input id="eLast" value="60.00"></div>
+        <div class="form-item"><label>附加费(比索,手工)</label><input id="eAdd" value="0"></div>
+        <div class="form-item"><label>长(cm)<span class="src-tag">新增</span></label><input id="eLen" value="30"></div>
+        <div class="form-item"><label>宽(cm)<span class="src-tag">新增</span></label><input id="eWidth" value="20"></div>
+        <div class="form-item"><label>高(cm)<span class="src-tag">新增</span></label><input id="eHeight" value="10"></div>
+        <div class="form-item"><label>实重(KG)<span class="src-tag">新增</span></label><input id="eWeight" value="1.5"></div>
+        <div class="form-item"><label>海运费(元)<span class="src-tag">新增</span></label><input id="eSea" value="18.00"></div>
+        <div class="form-item"><label>空运费(元)<span class="src-tag">新增</span></label><input id="eAir" value="0"></div>
+        <div class="form-item full"><label>平台利润(元)<span class="src-tag">按 Excel 模板公式自动计算</span></label><input id="eProfit" value="" style="background:#f0f9eb;color:#67c23a;font-weight:600" readonly></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-plain" onclick="document.getElementById('modal').style.display='none'">取消</button>
+        <button class="btn" onclick="document.getElementById('modal').style.display='none'">保存（写回商品表）</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal-mask" style="display:none">
+    <div class="modal">
+      <h3>利润计算公式设置</h3>
+      <div class="formula-live" id="settingsFormula">加载中…</div>
+      <div class="settings-grid">
+        <div class="form-item"><label><b>汇率</b><span class="src-tag">MXN → CNY</span></label><input id="sRate" type="number" step="0.001"></div>
+        <div class="form-item"><label><b>含税系数</b><span class="src-tag">不含税成本 × 系数</span></label><input id="sTaxRate" type="number" step="0.01"></div>
+        <div class="form-item"><label><b>FULL仓储费率 (%)</b></label><input id="sStorage" type="number" step="0.1"></div>
+        <div class="form-item"><label><b>货损费率 (%)</b></label><input id="sLoss" type="number" step="0.1"></div>
+        <div class="form-item"><label><b>广告费率 (%)</b></label><input id="sAd" type="number" step="0.1"></div>
+        <div class="form-item"><label><b>9%平台代扣税率 (%)</b></label><input id="sTax9" type="number" step="0.1"></div>
+        <div class="form-item"><label><b>7%额外补税率 (%)</b></label><input id="sTax7" type="number" step="0.1"></div>
+        <div class="form-item"><label><b>默认ML佣金比例 (%)</b><span class="src-tag">商品未填时使用</span></label><input id="sComm" type="number" step="0.1"></div>
+      </div>
+      <div class="note">调整后点击「保存并重算」：全表利润按 Excel 模板公式立即重算，接入系统后同步写回商品表「平台利润」字段。</div>
+      <div class="modal-foot">
+        <button class="btn btn-plain" onclick="document.getElementById('settingsModal').style.display='none'">取消</button>
+        <button class="btn" onclick="saveSettings()">保存并重算</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>新增字段清单（商品表加列，迁移 SQL 执行后生效）</h2>
+    <table>
+      <thead><tr><th>字段</th><th>含义</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>length_cm</td><td>长</td><td>numeric</td><td>cm，保留1位</td></tr>
+        <tr><td>width_cm</td><td>宽</td><td>numeric</td><td>cm，保留1位</td></tr>
+        <tr><td>height_cm</td><td>高</td><td>numeric</td><td>cm，保留1位</td></tr>
+        <tr><td>weight_kg</td><td>实重</td><td>numeric</td><td>KG，保留2位</td></tr>
+        <tr><td>sea_freight</td><td>海运费</td><td>numeric</td><td>元，独立填写列，不参与总成本</td></tr>
+        <tr><td>air_freight</td><td>空运费</td><td>numeric</td><td>元，独立填写列，不参与总成本</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// 模拟数据（严格对齐 Excel 模板字段；利润列按设置公式自动计算）
+var rows = [
+  { no: 1, name: '正时规侧盖垫', color: '#ff9c6e', link: 'MLM-981234567', seller: '义乌配件批发', price: 350, purchase: 33, first: 6, last: 60, addFee: 0, comm: 0.165, len: 30, width: 20, height: 10, weight: 1.5, sea: 18, air: 0 },
+  { no: 2, name: '撑杆', color: '#9254de', link: 'MLM-981234568', seller: '广州五金优品', price: 260, purchase: 24, first: 2, last: 37, addFee: 0, comm: 0.135, len: 45, width: 8, height: 6, weight: 0.9, sea: 12, air: 0 },
+  { no: 3, name: '汽车点火线圈 4缸通用 墨西哥版', color: '#52c41a', link: 'MLM-981234569', seller: '深圳汽配之家', price: 385, purchase: 96.5, first: 8.2, last: 12.6, addFee: 0, comm: 0.165, len: 30, width: 20, height: 10, weight: 6.5, sea: 18, air: 32 },
+];
+
+// 默认设置（可在设置弹窗中自由调整，对齐 Excel 模板）
+var settings = { rate: 0.38, taxRate: 1.13, storage: 0.8, loss: 5, ad: 8, tax9: 9, tax7: 7, comm: 16.5 };
+
+function pct(v) { return (v * 100).toFixed(1) + '%'; }
+function num(v) { return (v == null || isNaN(v)) ? '—' : Number(v).toFixed(2); }
+
+// 按 Excel 模板公式逐列计算
+function calcRow(r) {
+  var s = settings;
+  var J = r.price;                              // 售价比索
+  var K = J * s.rate;                           // 售价(元)=J*汇率
+  var L = r.purchase;                           // 不含税采购成本(元)
+  var M = L * s.taxRate;                        // 13%含税采购成本(元)=L*1.13
+  var N = M / s.rate;                           // 含税采购成本(比索)=M/汇率
+  var O = r.first;                              // 头程运费(元)
+  var P = O / s.rate;                           // 头程运费(比索)=O/汇率
+  var Q = P + N;                                // 货值(比索)=P+N
+  var R = Q * (s.storage / 100);                // FULL仓储0.8%=Q*0.008
+  var S = Q * (s.loss / 100);                   // 货损5%=Q*0.05
+  var T = J * (r.comm != null ? r.comm : s.comm / 100); // ML佣金(比索)=J*I
+  var U = r.last || 0;                          // 尾程派送费(比索,手工)
+  var V = r.addFee || 0;                        // 附加费(比索,手工)
+  var W = J * (s.ad / 100);                     // 广告费8%=J*0.08
+  var X = J * (s.tax9 / 100);                   // 9%代扣税=J*0.09
+  var Y = J * (s.tax7 / 100);                   // 7%补税=J*0.07
+  var Z = Q + R + S + T + U + V + W + X + Y;    // 总成本=SUM(Q:Y)
+  var AA = J > 0 ? Z / J : 0;                   // 总成本占比=Z/J
+  var AB = J - Z;                               // 平台利润(比索)=J-Z
+  var AC = AB * s.rate;                         // 平台利润(元)=AB*汇率
+  var AD = K > 0 ? AC / K : 0;                  // 平台利润率=AC/K
+  var AE = K - M;                               // 销售毛利(元)=K-M
+  var AF = K > 0 ? AE / K : 0;                  // 销售毛利率=AE/K
+  return { J: J, K: K, L: L, M: M, N: N, O: O, P: P, Q: Q, R: R, S: S, T: T, U: U, V: V, W: W, X: X, Y: Y, Z: Z, AA: AA, AB: AB, AC: AC, AD: AD, AE: AE, AF: AF };
+}
+
+function formulaText() {
+  var s = settings;
+  return '汇率 ' + s.rate + ' ｜ 含税系数 ' + s.taxRate + ' ｜ FULL仓储 ' + s.storage + '% ｜ 货损 ' + s.loss + '% ｜ 广告 ' + s.ad + '% ｜ 9%代扣税 ' + s.tax9 + '% ｜ 7%补税 ' + s.tax7 + '% ｜ 默认佣金 ' + s.comm + '%';
+}
+
+function render() {
+  var html = '';
+  rows.forEach(function (r, idx) {
+    var c = calcRow(r);
+    var color = c.AB >= 0 ? '#67c23a' : '#f56c6c';
+    html += '<tr>';
+    html += '<td>' + r.no + '</td>';
+    html += '<td>' + r.name + '</td>';
+    html += '<td><span class="thumb" style="background:linear-gradient(135deg,#fff3e0,' + r.color + ')"></span></td>';
+    html += '<td>' + r.link + '</td>';
+    html += '<td>' + r.seller + '</td>';
+    html += '<td></td>';
+    html += '<td></td>';
+    html += '<td class="num">' + pct(r.comm) + '</td>';
+    html += '<td class="num">' + num(c.J) + '</td>';
+    html += '<td class="num calc-col">' + num(c.K) + '</td>';
+    html += '<td class="num">' + num(c.L) + '</td>';
+    html += '<td class="num calc-col">' + num(c.M) + '</td>';
+    html += '<td class="num calc-col">' + num(c.N) + '</td>';
+    html += '<td class="num">' + num(c.O) + '</td>';
+    html += '<td class="num calc-col">' + num(c.P) + '</td>';
+    html += '<td class="num calc-col">' + num(c.Q) + '</td>';
+    html += '<td class="num calc-col">' + num(c.R) + '</td>';
+    html += '<td class="num calc-col">' + num(c.S) + '</td>';
+    html += '<td class="num calc-col">' + num(c.T) + '</td>';
+    html += '<td class="num">' + num(c.U) + '</td>';
+    html += '<td class="num">' + num(c.V) + '</td>';
+    html += '<td class="num calc-col">' + num(c.W) + '</td>';
+    html += '<td class="num calc-col">' + num(c.X) + '</td>';
+    html += '<td class="num calc-col">' + num(c.Y) + '</td>';
+    html += '<td class="num calc-col" style="font-weight:600">' + num(c.Z) + '</td>';
+    html += '<td class="num calc-col">' + pct(c.AA) + '</td>';
+    html += '<td class="num calc-col">' + num(c.AB) + '</td>';
+    html += '<td class="num" style="color:' + color + ';font-weight:600">' + num(c.AC) + '</td>';
+    html += '<td class="num calc-col">' + pct(c.AD) + '</td>';
+    html += '<td class="num calc-col">' + num(c.AE) + '</td>';
+    html += '<td class="num calc-col">' + pct(c.AF) + '</td>';
+    html += '<td class="num new">' + (r.len || '—') + '</td>';
+    html += '<td class="num new">' + (r.width || '—') + '</td>';
+    html += '<td class="num new">' + (r.height || '—') + '</td>';
+    html += '<td class="num new">' + (r.weight != null ? r.weight.toFixed(2) : '—') + '</td>';
+    html += '<td class="num new">' + (r.sea || '—') + '</td>';
+    html += '<td class="num new">' + (r.air || '—') + '</td>';
+    html += '<td><button class="btn btn-sm" onclick="openEdit(' + idx + ')">编辑</button> <button class="btn btn-sm btn-danger">删除</button></td>';
+    html += '</tr>';
+  });
+  document.getElementById('tbody').innerHTML = html;
+
+  var f = formulaText();
+  document.getElementById('formulaLive').innerHTML =
+    '<b>当前公式参数：</b>' + f + '<br>' +
+    '<b>售价(元)</b> = 售价(比索) × 汇率(' + settings.rate + ')<br>' +
+    '<b>13%含税采购成本(元)</b> = 不含税采购成本 × 含税系数(' + settings.taxRate + ')<br>' +
+    '<b>含税采购成本(比索)</b> = 13%含税采购成本 ÷ 汇率<br>' +
+    '<b>头程运费(比索)</b> = 头程运费(元) ÷ 汇率<br>' +
+    '<b>货值(比索)</b> = 含税采购成本(比索) + 头程运费(比索)<br>' +
+    '<b>总成本(比索)</b> = 货值 + FULL仓储(' + settings.storage + '%) + 货损(' + settings.loss + '%) + ML佣金(售价×比例) + 尾程派送(手工) + 附加费(手工) + 广告(' + settings.ad + '%) + 9%代扣税 + 7%补税<br>' +
+    '<b>平台利润(元)</b> = ( 售价比索 − 总成本比索 ) × 汇率(' + settings.rate + ')<br>' +
+    '<b>销售毛利(元)</b> = 售价(元) − 13%含税采购成本(元)<br>' +
+    '<b>长/宽/高、实重、海运费、空运费</b> = 独立填写列，不参与总成本';
+}
+
+function openSettings() {
+  document.getElementById('sRate').value = settings.rate;
+  document.getElementById('sTaxRate').value = settings.taxRate;
+  document.getElementById('sStorage').value = settings.storage;
+  document.getElementById('sLoss').value = settings.loss;
+  document.getElementById('sAd').value = settings.ad;
+  document.getElementById('sTax9').value = settings.tax9;
+  document.getElementById('sTax7').value = settings.tax7;
+  document.getElementById('sComm').value = settings.comm;
+  document.getElementById('settingsModal').style.display = 'flex';
+}
+
+function saveSettings() {
+  settings.rate = parseFloat(document.getElementById('sRate').value) || 0.38;
+  settings.taxRate = parseFloat(document.getElementById('sTaxRate').value) || 1.13;
+  settings.storage = parseFloat(document.getElementById('sStorage').value) || 0;
+  settings.loss = parseFloat(document.getElementById('sLoss').value) || 0;
+  settings.ad = parseFloat(document.getElementById('sAd').value) || 0;
+  settings.tax9 = parseFloat(document.getElementById('sTax9').value) || 0;
+  settings.tax7 = parseFloat(document.getElementById('sTax7').value) || 0;
+  settings.comm = parseFloat(document.getElementById('sComm').value) || 0;
+  document.getElementById('settingsModal').style.display = 'none';
+  render();
+}
+
+function openEdit(idx) {
+  var r = rows[idx];
+  document.getElementById('editTag').textContent = r.name;
+  document.getElementById('eName').value = r.name;
+  document.getElementById('eLink').value = r.link;
+  document.getElementById('eSeller').value = r.seller;
+  document.getElementById('eComm').value = (r.comm * 100).toFixed(1);
+  document.getElementById('ePrice').value = r.price.toFixed(2);
+  document.getElementById('ePurchase').value = r.purchase.toFixed(2);
+  document.getElementById('eFirst').value = r.first.toFixed(2);
+  document.getElementById('eLast').value = r.last.toFixed(2);
+  document.getElementById('eAdd').value = r.addFee || 0;
+  document.getElementById('eLen').value = r.len || '';
+  document.getElementById('eWidth').value = r.width || '';
+  document.getElementById('eHeight').value = r.height || '';
+  document.getElementById('eWeight').value = r.weight != null ? r.weight : '';
+  document.getElementById('eSea').value = r.sea || 0;
+  document.getElementById('eAir').value = r.air || 0;
+  document.getElementById('eProfit').value = calcRow(r).AC.toFixed(2);
+  document.getElementById('modal').style.display = 'flex';
+}
+
+render();
+</script>
+</body>
+</html>

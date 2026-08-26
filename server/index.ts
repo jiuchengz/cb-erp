@@ -9,6 +9,8 @@ import dbUsage from './_handlers/db-usage';
 import inventory from './_handlers/inventory';
 import permissions from './_handlers/permissions';
 import products from './_handlers/products';
+import productsTracking from './_handlers/products/tracking';
+import costProfit from './_handlers/cost-profit';
 import productsBatchDelete from './_handlers/products/batch-delete';
 import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
@@ -84,6 +86,10 @@ const routes: Route[] = [
   { pattern: /^\/permissions$/, handler: permissions },
   { pattern: /^\/products\/batch-delete$/, handler: productsBatchDelete },
   { pattern: /^\/products\/upload-image$/, handler: uploadImage },
+  { pattern: /^\/products\/tracking$/, handler: productsTracking },
+  { pattern: /^\/cost-profit\/settings$/, handler: costProfit },
+  { pattern: /^\/cost-profit\/save$/, handler: costProfit },
+  { pattern: /^\/cost-profit$/, handler: costProfit },
   { pattern: /^\/products\/([^/]+)$/, handler: productsId, params: ['id'] },
   { pattern: /^\/products$/, handler: products },
   { pattern: /^\/purchase-orders\/([^/]+)$/, handler: purchaseOrdersId, params: ['id'] },
