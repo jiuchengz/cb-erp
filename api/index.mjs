@@ -97075,7 +97075,8 @@ function handleError2(res, e) {
     return res.status(e.status).json({ error: { code: e.code, message: e.message } });
   }
   console.error("[api] unhandled error:", e);
-  return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "\u670D\u52A1\u5668\u5185\u90E8\u9519\u8BEF" } });
+  const dbg = e instanceof Error ? e.message : JSON.stringify(e ?? "");
+  return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: dbg || "\u670D\u52A1\u5668\u5185\u90E8\u9519\u8BEF" } });
 }
 var Errors = {
   unauthorized: (msg = "\u672A\u767B\u5F55\u6216\u767B\u5F55\u5DF2\u5931\u6548") => new ApiError(401, "UNAUTHORIZED", msg),

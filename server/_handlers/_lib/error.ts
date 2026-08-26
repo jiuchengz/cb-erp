@@ -21,7 +21,8 @@ export function handleError(res: VercelResponse, e: unknown) {
     return res.status(e.status).json({ error: { code: e.code, message: e.message } });
   }
   console.error('[api] unhandled error:', e);
-  return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: '服务器内部错误' } });
+  const dbg = e instanceof Error ? e.message : JSON.stringify(e ?? '');
+  return res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: dbg || '服务器内部错误' } });
 }
 
 // 常用错误快捷方式
