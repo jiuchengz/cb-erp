@@ -59,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cols: { wch?: number }[] = Array.isArray(body.cols) ? body.cols : [];
     const widths: (number | null | undefined)[] = Array.isArray(body.widths) ? body.widths : [];
     const rowHeightRanges: RowHeightRange[] = Array.isArray(body.rowHeightRanges) ? body.rowHeightRanges : [];
+    const titleRows: number[] = Array.isArray(body.titleRows) ? body.titleRows : [];
     const styled: boolean = !!body.styled;
     const withImages: boolean = !!body.withImages;
     const imageCells: ImageCell[] = Array.isArray(body.imageCells) ? body.imageCells : [];
@@ -95,8 +96,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // styled 模式：整表应用 宋体11 / 居中 / thin 边框，与「调整后的表格」参考文件一致
+    // 标题行（titleRows）额外使用 宋体24 大字号
     if (styled) {
-      const font = { name: '宋体', size: 11 };
+      const baseFont = { name: '宋体', size: 11 };
+      const titleFont = { name: '宋体', size: 24 };
       const align = { horizontal: 'center' as const, vertical: 'middle' as const };
       const border = {
         top: { style: 'thin' as const },
@@ -104,9 +107,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         bottom: { style: 'thin' as const },
         right: { style: 'thin' as const },
       };
+      const titleSet = new Set(titleRows);
       // 注意：eachRow 不会遍历 addRow([]) 创建的空行，空行也需要样式，故按 rowCount 遍历
       for (let rr = 1; rr <= ws.rowCount; rr++) {
         const row = ws.getRow(rr);
+        const font = titleSet.has(rr - 1) ? titleFont : baseFont;
         for (let c = 1; c <= 8; c++) {
           try {
             const cell = row.getCell(c);

@@ -62,6 +62,8 @@ export interface ServerExportPayload {
   widths?: number[]
   /** 行高区间：从 s 行到 e 行（0-based）统一设为 h */
   rowHeightRanges?: { s: number; e: number; h: number }[]
+  /** 标题行（0-based），styled 时这些行使用 宋体24 大字号（其余行宋体11） */
+  titleRows?: number[]
   /** 为 true 时整表应用 宋体11/居中/thin 边框 样式 */
   styled?: boolean
   imageCells?: ExportCell[]
