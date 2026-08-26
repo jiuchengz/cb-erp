@@ -608,11 +608,10 @@ async function printWorkOrder(id: string) {
           <td>${p?.code || it.product_id}</td>
           <td>${imgHtml}</td>
           <td>${p?.name || '-'}</td>
-          <td>${p?.sku || '-'}</td>
           <td>${p?.barcode || '-'}</td>
+          <td class="num">${it.quantity}</td>
           <td>${p?.unit || '-'}</td>
           <td>${it.remark || '-'}</td>
-          <td class="num">${it.quantity}</td>
         </tr>`
       })
       .join('')
@@ -693,18 +692,19 @@ async function printWorkOrder(id: string) {
           <th style="min-width:110px">产品编码</th>
           <th style="width:76px">图片</th>
           <th style="min-width:150px">产品中文名称</th>
-          <th style="min-width:110px">SKU</th>
           <th style="min-width:160px">条形码</th>
+          <th style="width:80px">数量</th>
           <th style="width:60px">单位</th>
           <th style="min-width:120px">备注</th>
-          <th style="width:80px">数量</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
         <tr class="sum-row">
-          <td colspan="8" style="text-align:right">合计数量（总数）</td>
+          <td colspan="5" style="text-align:right">合计数量（总数）</td>
           <td class="num">${totalQtyNum}</td>
+          <td></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
