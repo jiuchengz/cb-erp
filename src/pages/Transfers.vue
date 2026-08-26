@@ -841,6 +841,7 @@ async function exportRows(withImages = false) {
   const aoa: any[][] = []
   const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = []
   const imageCells: { r: number; c: number; url: string }[] = []
+  const rowHeightRanges: { s: number; e: number; h: number }[] = []
   let r = 0
   const push = (row: any[]) => {
     aoa.push(row)
@@ -856,11 +857,6 @@ async function exportRows(withImages = false) {
     if (idx > 0) {
       push([])
     }
-    // 货件标题行：多货件导出时在表格中明确区分
-    const titleRow = r
-    aoa.push([`【货件号：${ship.tracking_no || '-'}】`, '', '', '', '', '', '', ''])
-    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 7 } })
-    r++
     meta('货件号', ship.tracking_no, '货代号', ship.cargo_code)
     meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
     meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
@@ -871,6 +867,8 @@ async function exportRows(withImages = false) {
     push([])
     aoa.push(['序号', '产品编码', '图片', '产品中文名称', '条形码', '数量', '单位', '备注'])
     r++
+    // 与参考文件一致：表头之后（明细区/组间空行/合计行）行高统一 40，表头与信息区保持默认
+    const rangeStart = r
     const items = ship.shipment_items || []
     const indexed = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: (prod(it.product_id)?.unit || '').trim() }))
     const groups: { rows: typeof indexed }[] = []
@@ -901,12 +899,21 @@ async function exportRows(withImages = false) {
     aoa.push(['合计数量（总数）', '', '', '', '', total, '', ''])
     merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 4 } })
     r++
+    rowHeightRanges.push({ s: rangeStart, e: sumRow, h: 40 })
   })
   exporting.value = true
   try {
     await exportViaServer(
       `调拨发货_${todayStr()}.xlsx`,
-      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 8 }, { wch: 8 }, { wch: 16 }], imageCells },
+      {
+        aoa,
+        merges,
+        // 与参考文件「调整后的表格」列宽一致：序号/编码/图片/名称/条形码/数量/单位/备注
+        widths: [11, 12.41, 8.79, 26.4, 10.51, 4.48, 4.92, 17.6],
+        rowHeightRanges,
+        styled: true,
+        imageCells
+      },
       withImages,
       '调拨发货'
     )
