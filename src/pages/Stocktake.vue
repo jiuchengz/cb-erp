@@ -389,7 +389,10 @@ async function saveEdit() {
     editVisible.value = false
     await load()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+    const detail =
+      e?.response?.data?.error?.message ||
+      (e?.response ? `请求失败(HTTP ${e.response.status})` : e?.message || '保存失败')
+    ElMessage.error(detail)
   } finally {
     saving.value = false
   }

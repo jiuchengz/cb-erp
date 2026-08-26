@@ -33,16 +33,6 @@ function pathOf(req: VercelRequest): string[] {
   return new URL(req.url || '/', 'http://internal').pathname.replace(/^\/api/, '').split('/').filter(Boolean);
 }
 
-async function getBookQty(supabase: any, productId: string, warehouseId: string): Promise<number> {
-  const { data } = await supabase
-    .from('inventory')
-    .select('quantity')
-    .eq('product_id', productId)
-    .eq('warehouse_id', warehouseId)
-    .maybeSingle();
-  return Number(data?.quantity ?? 0);
-}
-
 async function genStocktakeNo(supabase: any): Promise<string> {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -174,10 +164,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (itErr) throw itErr;
       if (!items || !items.length) throw Errors.badRequest('盘点单没有明细，请先添加盘点商品');
 
-      // 预检：计算与当前账面的差额，盘亏不得超过账面
+      // 预检：计算与当前账面的差额，盘亏不得超过账面（批量查询）
+      const ids = items.map((it: any) => it.product_id);
+      const { data: invList, error: invQErr } = await supabase
+        .from('inventory')
+        .select('product_id, quantity')
+        .in('product_id', ids)
+        .eq('warehouse_id', st.warehouse_id);
+      if (invQErr) throw invQErr;
+      const invMap = new Map((invList ?? []).map((r: any) => [r.product_id, Number(r.quantity ?? 0)]));
       const diffs: { item: any; diff: number }[] = [];
       for (const it of items) {
-        const current = await getBookQty(supabase, it.product_id, st.warehouse_id);
+        const current = invMap.get(it.product_id) ?? 0;
         const diff = Number(it.actual_quantity || 0) - current;
         if (diff < 0 && -diff > current) {
           throw Errors.conflict(`商品 ${it.product_id} 盘亏数量超过账面库存（账面 ${current}）`);
@@ -238,9 +236,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (body.items && body.items.length) {
+        const ids = body.items.map((it: any) => it.product_id);
+        const { data: invList, error: invQErr } = await supabase
+          .from('inventory')
+          .select('product_id, quantity')
+          .in('product_id', ids)
+          .eq('warehouse_id', body.warehouse_id);
+        if (invQErr) throw invQErr;
+        const invMap = new Map((invList ?? []).map((r: any) => [r.product_id, Number(r.quantity ?? 0)]));
         const rows: any[] = [];
         for (const it of body.items) {
-          const book = await getBookQty(supabase, it.product_id, body.warehouse_id);
+          const book = invMap.get(it.product_id) ?? 0;
           rows.push({
             stocktake_id: st.id,
             product_id: it.product_id,
@@ -289,14 +295,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: updated, error: updErr } = await supabase.from('stocktakes').update(update).eq('id', id).select().single();
       if (updErr) throw updErr;
 
-      // 明细整体替换（仓库变化时重新抓账面）
+      // 明细整体替换（仓库变化时重新抓账面，批量查询避免逐条拖慢）
       if (body.items !== undefined) {
         const { error: delErr } = await supabase.from('stocktake_items').delete().eq('stocktake_id', id);
         if (delErr) throw delErr;
         if (body.items.length) {
+          const ids = body.items.map((it: any) => it.product_id);
+          const { data: invList, error: invQErr } = await supabase
+            .from('inventory')
+            .select('product_id, quantity')
+            .in('product_id', ids)
+            .eq('warehouse_id', warehouseId);
+          if (invQErr) throw invQErr;
+          const invMap = new Map((invList ?? []).map((r: any) => [r.product_id, Number(r.quantity ?? 0)]));
           const rows: any[] = [];
           for (const it of body.items) {
-            const book = await getBookQty(supabase, it.product_id, warehouseId);
+            const book = invMap.get(it.product_id) ?? 0;
             rows.push({
               stocktake_id: id,
               product_id: it.product_id,

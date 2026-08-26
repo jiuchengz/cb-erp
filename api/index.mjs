@@ -101750,10 +101750,6 @@ var updateSchema = external_exports.object({
 function pathOf(req) {
   return new URL(req.url || "/", "http://internal").pathname.replace(/^\/api/, "").split("/").filter(Boolean);
 }
-async function getBookQty(supabase, productId, warehouseId) {
-  const { data } = await supabase.from("inventory").select("quantity").eq("product_id", productId).eq("warehouse_id", warehouseId).maybeSingle();
-  return Number(data?.quantity ?? 0);
-}
 async function genStocktakeNo(supabase) {
   const d = /* @__PURE__ */ new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -101846,9 +101842,13 @@ async function handler9(req, res) {
       const { data: items, error: itErr } = await supabase.from("stocktake_items").select("*").eq("stocktake_id", id).order("id", { ascending: true });
       if (itErr) throw itErr;
       if (!items || !items.length) throw Errors.badRequest("\u76D8\u70B9\u5355\u6CA1\u6709\u660E\u7EC6\uFF0C\u8BF7\u5148\u6DFB\u52A0\u76D8\u70B9\u5546\u54C1");
+      const ids = items.map((it) => it.product_id);
+      const { data: invList, error: invQErr } = await supabase.from("inventory").select("product_id, quantity").in("product_id", ids).eq("warehouse_id", st.warehouse_id);
+      if (invQErr) throw invQErr;
+      const invMap = new Map((invList ?? []).map((r) => [r.product_id, Number(r.quantity ?? 0)]));
       const diffs = [];
       for (const it of items) {
-        const current = await getBookQty(supabase, it.product_id, st.warehouse_id);
+        const current = invMap.get(it.product_id) ?? 0;
         const diff = Number(it.actual_quantity || 0) - current;
         if (diff < 0 && -diff > current) {
           throw Errors.conflict(`\u5546\u54C1 ${it.product_id} \u76D8\u4E8F\u6570\u91CF\u8D85\u8FC7\u8D26\u9762\u5E93\u5B58\uFF08\u8D26\u9762 ${current}\uFF09`);
@@ -101895,9 +101895,13 @@ async function handler9(req, res) {
         throw error;
       }
       if (body.items && body.items.length) {
+        const ids = body.items.map((it) => it.product_id);
+        const { data: invList, error: invQErr } = await supabase.from("inventory").select("product_id, quantity").in("product_id", ids).eq("warehouse_id", body.warehouse_id);
+        if (invQErr) throw invQErr;
+        const invMap = new Map((invList ?? []).map((r) => [r.product_id, Number(r.quantity ?? 0)]));
         const rows = [];
         for (const it of body.items) {
-          const book = await getBookQty(supabase, it.product_id, body.warehouse_id);
+          const book = invMap.get(it.product_id) ?? 0;
           rows.push({
             stocktake_id: st.id,
             product_id: it.product_id,
@@ -101939,9 +101943,13 @@ async function handler9(req, res) {
         const { error: delErr } = await supabase.from("stocktake_items").delete().eq("stocktake_id", id);
         if (delErr) throw delErr;
         if (body.items.length) {
+          const ids = body.items.map((it) => it.product_id);
+          const { data: invList, error: invQErr } = await supabase.from("inventory").select("product_id, quantity").in("product_id", ids).eq("warehouse_id", warehouseId);
+          if (invQErr) throw invQErr;
+          const invMap = new Map((invList ?? []).map((r) => [r.product_id, Number(r.quantity ?? 0)]));
           const rows = [];
           for (const it of body.items) {
-            const book = await getBookQty(supabase, it.product_id, warehouseId);
+            const book = invMap.get(it.product_id) ?? 0;
             rows.push({
               stocktake_id: id,
               product_id: it.product_id,
