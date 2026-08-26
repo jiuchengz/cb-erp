@@ -145,6 +145,9 @@
 
       <div v-if="!detailMode && editRow.status !== 'COMPLETED'" class="st-actions">
         <el-button type="primary" plain @click="pickerVisible = true">添加商品</el-button>
+        <el-button @click="downloadTpl">下载导入模板</el-button>
+        <el-button type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
+        <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
         <span class="st-tip">差异 = 实盘 - 账面，审核时将按差异自动修正系统库存</span>
       </div>
 
@@ -206,6 +209,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { formatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('inventory.adjust'))
@@ -489,6 +493,105 @@ function addSelected() {
   for (const row of pickerSelection.value) addProduct(row)
   pickerSelection.value = []
   ElMessage.success('已添加所选商品')
+}
+
+// ===== 批量导入 =====
+const importing = ref(false)
+const importFile = ref<any>(null)
+
+function downloadTpl() {
+  downloadTemplate(
+    [
+      { label: '商品编码', sample: 'SKU-DLB-001' },
+      { label: '商品名称', sample: '示例商品（选填，可不填）' },
+      { label: '实盘数量', sample: 10 },
+      { label: '备注', sample: '示例备注' },
+    ],
+    '盘点导入模板',
+    '盘点批量导入模板.xlsx'
+  )
+}
+
+function triggerImport() {
+  importFile.value?.click()
+}
+
+function calcDifference(it: any) {
+  it.difference = Number(it.actual_quantity || 0) - Number(it.book_quantity || 0)
+}
+
+async function onImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!editRow.value.warehouse_id) {
+    ElMessage.error('请先选择仓库')
+    return
+  }
+  importing.value = true
+  try {
+    const { headers, rows } = await readExcelFile(file)
+    const col = buildColMap(headers, {
+      sku: ['商品编码', '商品SKU', 'SKU', '编码', 'code', 'sku'],
+      name: ['商品名称', '名称', 'name'],
+      quantity: ['实盘数量', '数量', 'quantity', 'qty', 'actual'],
+      note: ['备注', 'note', 'remark'],
+    })
+    if (col.sku === undefined || col.quantity === undefined) {
+      ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品编码"和"实盘数量"列')
+      return
+    }
+    // 商品匹配索引：编码 / SKU / 名称
+    const matchMap: Record<string, any> = {}
+    products.value.forEach((p: any) => {
+      if (p.code) matchMap[p.code] = p
+      if (p.sku) matchMap[p.sku] = p
+      if (p.name) matchMap[p.name] = p
+    })
+    let ok = 0
+    const errLines: string[] = []
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      const lineNo = i + 2
+      const key = cellStr(row, col.sku)
+      const qty = cellNum(row, col.quantity)
+      const note = col.note !== undefined ? cellStr(row, col.note) : ''
+      if (!key) {
+        errLines.push(`第${lineNo}行：商品编码为空`)
+        continue
+      }
+      const product = matchMap[key]
+      if (!product) {
+        errLines.push(`第${lineNo}行：商品「${key}」未匹配到商品`)
+        continue
+      }
+      const existed = editRow.value.items.find((it: any) => it.product_id === product.id)
+      if (existed) {
+        existed.actual_quantity = qty
+        if (note) existed.remark = note
+        calcDifference(existed)
+      } else {
+        addProduct(product)
+        const it = editRow.value.items.find((x: any) => x.product_id === product.id)
+        if (it) {
+          it.actual_quantity = qty
+          if (note) it.remark = note
+          calcDifference(it)
+        }
+      }
+      ok++
+    }
+    if (errLines.length) {
+      ElMessage.warning(`成功 ${ok} 条，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+    } else {
+      ElMessage.success(`成功导入 ${ok} 条`)
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
 }
 
 onMounted(async () => {
