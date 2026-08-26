@@ -42,7 +42,7 @@ const updateSchema = z.object({
   // 调拨发货管理字段
   cargo_code: z.string().max(100).nullable().optional(),
   tracking_no: z.string().max(100).nullable().optional(),
-  items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive() })).min(1).max(200).optional(),
+  items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive(), remark: z.string().max(1000).nullable().optional() })).min(1).max(200).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -127,6 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               shipment_id: id,
               product_id: it.product_id,
               quantity: it.quantity,
+              remark: it.remark || null,
             }))
           );
         if (insErr) throw insErr;

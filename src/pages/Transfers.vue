@@ -141,7 +141,9 @@
                   </div>
                 </el-option>
               </el-select>
-              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 150px" />
+              <span class="item-unit">{{ unitOf(it.product_id) }}</span>
+              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 120px" />
+              <el-input v-model="it.remark" placeholder="备注" clearable style="width: 160px" />
               <el-button link type="danger" @click="removeItem(idx)">删除</el-button>
             </div>
             <el-button size="small" @click="addItem">添加明细</el-button>
@@ -179,6 +181,12 @@
         </el-table-column>
         <el-table-column label="中文名称" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column label="单位" width="90" align="center">
+          <template #default="{ row }">{{ unitOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column label="备注" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
         <el-table-column label="数量" width="100" align="right">
           <template #default="{ row }">{{ row.quantity }}</template>
@@ -249,7 +257,9 @@
                   </div>
                 </el-option>
               </el-select>
-              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 150px" />
+              <span class="item-unit">{{ unitOf(it.product_id) }}</span>
+              <el-input-number v-model="it.quantity" :min="1" :precision="0" placeholder="数量" style="width: 120px" />
+              <el-input v-model="it.remark" placeholder="备注" clearable style="width: 160px" />
               <el-button link type="danger" @click="removeEditItem(idx)">删除</el-button>
             </div>
             <el-button size="small" @click="addEditItem">添加明细</el-button>
@@ -344,6 +354,10 @@ function productNameOf(pid: string) {
   const p = products.value.find((x) => x.id === pid)
   return p ? p.name : '-'
 }
+function unitOf(pid: string) {
+  const p = products.value.find((x) => x.id === pid)
+  return p?.unit || '—'
+}
 function imgOf(pid: string) {
   const p = products.value.find((x) => x.id === pid)
   return p?.image_text || ''
@@ -399,7 +413,7 @@ const form = reactive({
 const totalOfItems = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
 
 function addItem() {
-  form.items.push({ product_id: '', quantity: 1 })
+  form.items.push({ product_id: '', quantity: 1, remark: '' })
 }
 function removeItem(idx: number) {
   form.items.splice(idx, 1)
@@ -453,7 +467,7 @@ async function save() {
       shipping_mode: form.shipping_mode,
       shipping_cartons: form.shipping_cartons ?? 0,
       ship_date: form.ship_date,
-      items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity })),
+      items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
       source: 'transfer',
       cargo_status: '转运中',
     })
@@ -496,7 +510,7 @@ const editForm = reactive({
 const editTotalOfItems = computed(() => editForm.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
 
 function addEditItem() {
-  editForm.items.push({ product_id: '', quantity: 1 })
+  editForm.items.push({ product_id: '', quantity: 1, remark: '' })
 }
 function removeEditItem(idx: number) {
   editForm.items.splice(idx, 1)
@@ -515,6 +529,7 @@ async function openEdit(id: string) {
     editForm.items = (d.shipment_items || []).map((it: any) => ({
       product_id: it.product_id,
       quantity: it.quantity,
+      remark: it.remark || '',
     }))
     if (!editForm.items.length) addEditItem()
     editVisible.value = true
@@ -559,7 +574,7 @@ async function saveEdit() {
       shipping_mode: editForm.shipping_mode,
       shipping_cartons: editForm.shipping_cartons ?? 0,
       ship_date: editForm.ship_date,
-      items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity })),
+      items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
     })
     ElMessage.success('修改成功')
     editVisible.value = false
@@ -595,6 +610,8 @@ async function printWorkOrder(id: string) {
           <td>${p?.name || '-'}</td>
           <td>${p?.sku || '-'}</td>
           <td>${p?.barcode || '-'}</td>
+          <td>${p?.unit || '-'}</td>
+          <td>${it.remark || '-'}</td>
           <td class="num">${it.quantity}</td>
         </tr>`
       })
@@ -678,13 +695,15 @@ async function printWorkOrder(id: string) {
           <th style="min-width:150px">产品中文名称</th>
           <th style="min-width:110px">SKU</th>
           <th style="min-width:160px">条形码</th>
+          <th style="width:60px">单位</th>
+          <th style="min-width:120px">备注</th>
           <th style="width:80px">数量</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
         <tr class="sum-row">
-          <td colspan="6" style="text-align:right">合计数量（总数）</td>
+          <td colspan="8" style="text-align:right">合计数量（总数）</td>
           <td class="num">${totalQtyNum}</td>
         </tr>
       </tbody>
@@ -798,7 +817,7 @@ async function exportRows(withImages = false) {
     r++
   }
   const meta = (label1: string, v1: unknown, label2: string, v2: unknown) => {
-    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', ''])
+    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', '', ''])
     r++
   }
   targets.forEach((ship, idx) => {
@@ -809,11 +828,11 @@ async function exportRows(withImages = false) {
     meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
     meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
     const statusRow = r
-    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', ''])
-    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 5 } })
+    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', '', ''])
+    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 7 } })
     r++
     push([])
-    aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '数量'])
+    aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '单位', '备注', '数量'])
     r++
     const items = ship.shipment_items || []
     items.forEach((it: any, i: number) => {
@@ -821,23 +840,23 @@ async function exportRows(withImages = false) {
       const img = p?.image_text || ''
       if (withImages && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'))) {
         imageCells.push({ r, c: 2, url: img })
-        aoa.push([i + 1, p ? productCode(p) : it.product_id, '', p?.name || '', p?.sku || '', p?.barcode || '', it.quantity])
+        aoa.push([i + 1, p ? productCode(p) : it.product_id, '', p?.name || '', p?.sku || '', p?.barcode || '', p?.unit || '', it.remark || '', it.quantity])
       } else {
-        aoa.push([i + 1, p ? productCode(p) : it.product_id, img, p?.name || '', p?.sku || '', p?.barcode || '', it.quantity])
+        aoa.push([i + 1, p ? productCode(p) : it.product_id, img, p?.name || '', p?.sku || '', p?.barcode || '', p?.unit || '', it.remark || '', it.quantity])
       }
       r++
     })
     const total = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     const sumRow = r
-    aoa.push(['合计数量（总数）', '', '', '', '', '', total])
-    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 5 } })
+    aoa.push(['合计数量（总数）', '', '', '', '', '', '', '', total])
+    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 7 } })
     r++
   })
   exporting.value = true
   try {
     await exportViaServer(
       `调拨发货_${todayStr()}.xlsx`,
-      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 8 }], imageCells },
+      { aoa, merges, cols: [{ wch: 10 }, { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 16 }, { wch: 8 }], imageCells },
       withImages,
       '调拨发货'
     )
@@ -893,6 +912,13 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
+}
+.item-unit {
+  width: 48px;
+  text-align: center;
+  color: #606266;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 .total-hint {
   margin-top: 8px;

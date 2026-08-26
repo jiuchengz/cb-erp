@@ -11,6 +11,7 @@ import { rateLimit } from './_lib/rate-limit';
 const itemSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.coerce.number().positive(),
+  remark: z.string().max(1000).nullable().optional(),
   sales_order_id: z.string().uuid().optional(),
 });
 
@@ -123,6 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               shipment_id: shipment.id,
               product_id: it.product_id,
               quantity: it.quantity,
+              remark: it.remark || null,
               sales_order_id: it.sales_order_id || null,
             }))
           );
