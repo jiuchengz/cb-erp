@@ -14,6 +14,7 @@ import productsTracking from './_handlers/products/tracking';
 import costProfit from './_handlers/cost-profit';
 import productsBatchDelete from './_handlers/products/batch-delete';
 import productsBatchEdit from './_handlers/products/batch-edit';
+import productsBatchStock from './_handlers/products/batch-stock';
 import inventoryAlerts from './_handlers/inventory/alerts';
 import systemBackup from './_handlers/system/backup';
 import systemLogo from './_handlers/system/logo';
@@ -92,6 +93,7 @@ const routes: Route[] = [
   { pattern: /^\/inventory$/, handler: inventory },
   { pattern: /^\/permissions$/, handler: permissions },
   { pattern: /^\/products\/batch-edit$/, handler: productsBatchEdit },
+  { pattern: /^\/products\/batch-stock$/, handler: productsBatchStock },
   { pattern: /^\/products\/batch-delete$/, handler: productsBatchDelete },
   { pattern: /^\/products\/upload-image$/, handler: uploadImage },
   { pattern: /^\/products\/tracking$/, handler: productsTracking },

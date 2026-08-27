@@ -76,12 +76,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 销量时间范围（可选）：sales_from / sales_to，格式 YYYY-MM-DD 或 ISO
       const salesFrom = typeof req.query.sales_from === 'string' && req.query.sales_from.trim() ? req.query.sales_from.trim() : '';
       const salesTo = typeof req.query.sales_to === 'string' && req.query.sales_to.trim() ? req.query.sales_to.trim() : '';
+      // 链接ID精确过滤（可选，逗号分隔，最多500）：销售统计导入按需取商品，避免全量拉取
+      const linkIdsParam = typeof req.query.link_ids === 'string' && req.query.link_ids.trim() ? req.query.link_ids.trim() : '';
+      const linkIds = linkIdsParam ? Array.from(new Set(linkIdsParam.split(',').map((x: string) => x.trim()).filter(Boolean))).slice(0, 500) : [];
 
       const supabase = getAdminClient();
       let query: any = supabase.from('products').select('*', { count: 'exact' }).is('deleted_at', null);
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
+      if (linkIds.length) query = query.in('link_id', linkIds);
       query = query.order('created_at', { ascending: false })
         .range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
 

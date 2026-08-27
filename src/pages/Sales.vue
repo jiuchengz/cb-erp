@@ -413,14 +413,20 @@ async function onImportFile(e: Event) {
       return
     }
     const linkMap: Record<string, any> = {}
-    let page = 1
-    for (;;) {
-      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+    // 按 Excel 涉及的商品ID精确查询（替代全量分页拉取，商品多时明显提速）
+    const allLinkIds = Array.from(
+      new Set(
+        rows
+          .map((row: any) => cellStr(row, col.link_id).replace(/^MLM/i, '').trim())
+          .filter(Boolean)
+      )
+    )
+    for (let i = 0; i < allLinkIds.length; i += 200) {
+      const chunk = allLinkIds.slice(i, i + 200)
+      const { data } = await api.get('/products', { params: { page: 1, pageSize: 200, link_ids: chunk.join(',') } })
       ;(data.data ?? []).forEach((p: any) => {
         if (p.link_id) linkMap[String(p.link_id).trim()] = p
       })
-      if (page * 200 >= (data.total ?? 0)) break
-      page++
     }
     const payloadRows: any[] = []
     const errLines: string[] = []
@@ -466,8 +472,16 @@ async function onImportFile(e: Event) {
         }
       }
     }
+    // 海外库存批量更新（一次请求替代逐条 PATCH，导入明显提速）
+    const stockItems: { id: string; overseas_stock: number }[] = []
     for (const [pid, v] of stockMap) {
-      await api.patch(`/products/${pid}`, { overseas_stock: v.stock })
+      stockItems.push({ id: pid, overseas_stock: v.stock })
+    }
+    if (stockItems.length) {
+      for (let i = 0; i < stockItems.length; i += 500) {
+        const chunk = stockItems.slice(i, i + 500)
+        await api.post('/products/batch-stock', { items: chunk })
+      }
     }
     if (!payloadRows.length) {
       ElMessage.warning('没有可导入的数据')
