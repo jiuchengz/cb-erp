@@ -16,6 +16,7 @@ import productsBatchDelete from './_handlers/products/batch-delete';
 import productsBatchEdit from './_handlers/products/batch-edit';
 import inventoryAlerts from './_handlers/inventory/alerts';
 import systemBackup from './_handlers/system/backup';
+import systemLogo from './_handlers/system/logo';
 import stocktakesSummary from './_handlers/stocktakes/summary';
 import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
@@ -119,6 +120,7 @@ const routes: Route[] = [
   { pattern: /^\/users$/, handler: users },
   { pattern: /^\/export\/xlsx$/, handler: exportXlsx },
   { pattern: /^\/system\/backup$/, handler: systemBackup },
+  { pattern: /^\/system\/logo$/, handler: systemLogo },
   { pattern: /^\/warehouses\/([^/]+)$/, handler: warehousesId, params: ['id'] },
   { pattern: /^\/warehouses$/, handler: warehouses },
 ];

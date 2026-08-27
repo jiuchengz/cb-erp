@@ -6,6 +6,7 @@ import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import router from './router'
+import { useSiteStore } from './stores/site'
 import './style.css'
 
 // 计算颜色相对亮度（0~1），用于判断背景是否偏暗
@@ -100,7 +101,11 @@ window.addEventListener('unhandledrejection', (e) => {
 })
 
 const app = createApp(App)
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 app.mount('#app')
+
+// 加载网站自定义图标（浏览器标签页 favicon / 登录页 / 侧边栏 logo）
+useSiteStore(pinia).init()

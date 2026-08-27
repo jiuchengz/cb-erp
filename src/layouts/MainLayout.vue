@@ -2,7 +2,10 @@
   <div v-if="layoutReady" class="layout">
     <aside class="sidebar glass-panel" :class="{ open: drawerOpen }">
       <div class="brand">
-        <div class="brand-icon">E</div>
+        <div class="brand-icon">
+          <img v-if="site.logo" :src="site.logo" alt="logo" class="brand-logo" />
+          <template v-else>E</template>
+        </div>
         <div class="brand-text">
           <div class="brand-name">跨境电商 ERP</div>
           <div class="brand-sub">v2 · 管理系统</div>
@@ -92,12 +95,14 @@ import { ElMessage } from 'element-plus'
 import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
 import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES, fetchExchangeRates } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
+import { useSiteStore } from '@/stores/site'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
 import { addLog, getLogs, type OpLogEntry } from '@/utils/log'
 import { createIdleWatcher, IDLE_TIMEOUT_MS } from '@/utils/idle-logout'
 
 const auth = useAuthStore()
+const site = useSiteStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -355,7 +360,8 @@ async function onSignOut() {
 .sidebar { width: 200px; display: flex; flex-direction: column; padding: 20px 12px; overflow: hidden; flex-shrink: 0; box-shadow: 0 20px 50px -18px rgba(40, 60, 120, 0.20), inset 0 1px 0 var(--glass-highlight); }
 html.dark .sidebar { box-shadow: 0 20px 50px -18px rgba(0, 0, 0, 0.42), inset 0 1px 0 var(--glass-highlight); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
-.brand-icon { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; }
+.brand-icon { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #38bdf8, #818cf8); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; box-shadow: 0 8px 20px rgba(99,102,241,.4); flex-shrink: 0; overflow: hidden; }
+.brand-logo { width: 100%; height: 100%; object-fit: contain; }
 .brand-name { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
 .brand-sub { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; }

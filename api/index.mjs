@@ -31099,8 +31099,8 @@ var require_saxes = __commonJS({
        *
        * @param handler The handler to set.
        */
-      on(name, handler55) {
-        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler55;
+      on(name, handler56) {
+        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler56;
       }
       /**
        * Unset an event handler.
@@ -31145,11 +31145,11 @@ var require_saxes = __commonJS({
        */
       fail(message) {
         const err = this.makeError(message);
-        const handler55 = this.errorHandler;
-        if (handler55 === void 0) {
+        const handler56 = this.errorHandler;
+        if (handler56 === void 0) {
           throw err;
         } else {
-          handler55(err);
+          handler56(err);
         }
         return this;
       }
@@ -32165,20 +32165,20 @@ var require_saxes = __commonJS({
       // END OF STATE ENGINE METHODS
       handleTextInRoot() {
         let { i: start, forbiddenState } = this;
-        const { chunk, textHandler: handler55 } = this;
+        const { chunk, textHandler: handler56 } = this;
         scanLoop:
           while (true) {
             switch (this.getCode()) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler55(text + slice);
+                    handler56(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler55(slice);
+                    handler56(slice);
                   }
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32187,7 +32187,7 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32213,7 +32213,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case NL_LIKE:
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
@@ -32221,7 +32221,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case EOC:
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break scanLoop;
@@ -32233,7 +32233,7 @@ var require_saxes = __commonJS({
       }
       handleTextOutsideRoot() {
         let { i: start } = this;
-        const { chunk, textHandler: handler55 } = this;
+        const { chunk, textHandler: handler56 } = this;
         let nonSpace = false;
         outRootLoop:
           while (true) {
@@ -32241,14 +32241,14 @@ var require_saxes = __commonJS({
             switch (code) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler55(text + slice);
+                    handler56(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler55(slice);
+                    handler56(slice);
                   }
                 }
                 break outRootLoop;
@@ -32256,20 +32256,20 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 nonSpace = true;
                 break outRootLoop;
               case NL_LIKE:
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
                 start = this.i;
                 break;
               case EOC:
-                if (handler55 !== void 0) {
+                if (handler56 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break outRootLoop;
@@ -32499,12 +32499,12 @@ var require_saxes = __commonJS({
           this.text += "</>";
           return;
         }
-        const handler55 = this.closeTagHandler;
+        const handler56 = this.closeTagHandler;
         let l2 = tags.length;
         while (l2-- > 0) {
           const tag = this.tag = tags.pop();
           this.topNS = tag.ns;
-          handler55 === null || handler55 === void 0 ? void 0 : handler55(tag);
+          handler56 === null || handler56 === void 0 ? void 0 : handler56(tag);
           if (tag.name === name) {
             break;
           }
@@ -48942,23 +48942,23 @@ var require_async = __commonJS({
           unsaturated: [],
           empty: []
         };
-        function on(event, handler55) {
-          events[event].push(handler55);
+        function on(event, handler56) {
+          events[event].push(handler56);
         }
-        function once2(event, handler55) {
+        function once2(event, handler56) {
           const handleAndRemove = (...args) => {
             off(event, handleAndRemove);
-            handler55(...args);
+            handler56(...args);
           };
           events[event].push(handleAndRemove);
         }
-        function off(event, handler55) {
+        function off(event, handler56) {
           if (!event) return Object.keys(events).forEach((ev) => events[ev] = []);
-          if (!handler55) return events[event] = [];
-          events[event] = events[event].filter((ev) => ev !== handler55);
+          if (!handler56) return events[event] = [];
+          events[event] = events[event].filter((ev) => ev !== handler56);
         }
         function trigger(event, ...args) {
-          events[event].forEach((handler55) => handler55(...args));
+          events[event].forEach((handler56) => handler56(...args));
         }
         var processingScheduled = false;
         function _insert(data, insertAtFront, rejectOnError, callback) {
@@ -49027,8 +49027,8 @@ var require_async = __commonJS({
           }
           return false;
         }
-        const eventMethod = (name) => (handler55) => {
-          if (!handler55) {
+        const eventMethod = (name) => (handler56) => {
+          if (!handler56) {
             return new Promise((resolve, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
@@ -49037,7 +49037,7 @@ var require_async = __commonJS({
             });
           }
           off(name);
-          on(name, handler55);
+          on(name, handler56);
         };
         var isProcessing = false;
         var q = {
@@ -78284,7 +78284,7 @@ var require_debuggability = __commonJS({
       };
       Promise2.prototype._onCancel = function() {
       };
-      Promise2.prototype._setOnCancel = function(handler55) {
+      Promise2.prototype._setOnCancel = function(handler56) {
         ;
       };
       Promise2.prototype._attachCancellationCallback = function(onCancel) {
@@ -78839,10 +78839,10 @@ var require_finally = __commonJS({
       var util2 = require_util4();
       var CancellationError = Promise2.CancellationError;
       var errorObj2 = util2.errorObj;
-      function PassThroughHandlerContext(promise, type, handler55) {
+      function PassThroughHandlerContext(promise, type, handler56) {
         this.promise = promise;
         this.type = type;
-        this.handler = handler55;
+        this.handler = handler56;
         this.called = false;
         this.cancelPromise = null;
       }
@@ -78877,10 +78877,10 @@ var require_finally = __commonJS({
       }
       function finallyHandler(reasonOrValue) {
         var promise = this.promise;
-        var handler55 = this.handler;
+        var handler56 = this.handler;
         if (!this.called) {
           this.called = true;
-          var ret2 = this.isFinallyHandler() ? handler55.call(promise._boundValue()) : handler55.call(promise._boundValue(), reasonOrValue);
+          var ret2 = this.isFinallyHandler() ? handler56.call(promise._boundValue()) : handler56.call(promise._boundValue(), reasonOrValue);
           if (ret2 !== void 0) {
             promise._setReturnedNonUndefined();
             var maybePromise = tryConvertToPromise(ret2, promise);
@@ -78916,26 +78916,26 @@ var require_finally = __commonJS({
           return reasonOrValue;
         }
       }
-      Promise2.prototype._passThrough = function(handler55, type, success, fail2) {
-        if (typeof handler55 !== "function") return this.then();
+      Promise2.prototype._passThrough = function(handler56, type, success, fail2) {
+        if (typeof handler56 !== "function") return this.then();
         return this._then(
           success,
           fail2,
           void 0,
-          new PassThroughHandlerContext(this, type, handler55),
+          new PassThroughHandlerContext(this, type, handler56),
           void 0
         );
       };
-      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler55) {
+      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler56) {
         return this._passThrough(
-          handler55,
+          handler56,
           0,
           finallyHandler,
           finallyHandler
         );
       };
-      Promise2.prototype.tap = function(handler55) {
-        return this._passThrough(handler55, 1, finallyHandler);
+      Promise2.prototype.tap = function(handler56) {
+        return this._passThrough(handler56, 1, finallyHandler);
       };
       return PassThroughHandlerContext;
     };
@@ -79336,10 +79336,10 @@ var require_direct_resolve = __commonJS({
           );
         } else {
           var _reason = arguments[1];
-          var handler55 = function() {
+          var handler56 = function() {
             throw _reason;
           };
-          return this.caught(reason, handler55);
+          return this.caught(reason, handler56);
         }
       };
       Promise2.prototype.catchReturn = function(value) {
@@ -79355,10 +79355,10 @@ var require_direct_resolve = __commonJS({
         } else {
           var _value = arguments[1];
           if (_value instanceof Promise2) _value.suppressUnhandledRejections();
-          var handler55 = function() {
+          var handler56 = function() {
             return _value;
           };
-          return this.caught(value, handler55);
+          return this.caught(value, handler56);
         }
       };
     };
@@ -81460,22 +81460,22 @@ var require_promise = __commonJS({
         }
         var domain = getDomain();
         if (!((bitField & 50397184) === 0)) {
-          var handler55, value, settler = target._settlePromiseCtx;
+          var handler56, value, settler = target._settlePromiseCtx;
           if ((bitField & 33554432) !== 0) {
             value = target._rejectionHandler0;
-            handler55 = didFulfill;
+            handler56 = didFulfill;
           } else if ((bitField & 16777216) !== 0) {
             value = target._fulfillmentHandler0;
-            handler55 = didReject;
+            handler56 = didReject;
             target._unsetRejectionIsUnhandled();
           } else {
             settler = target._settlePromiseLateCancellationObserver;
             value = new CancellationError("late cancellation observer");
             target._attachExtraTrace(value);
-            handler55 = didReject;
+            handler56 = didReject;
           }
           async.invoke(settler, target, {
-            handler: domain === null ? handler55 : typeof handler55 === "function" && util2.domainBind(domain, handler55),
+            handler: domain === null ? handler56 : typeof handler56 === "function" && util2.domainBind(domain, handler56),
             promise,
             receiver,
             value
@@ -81656,7 +81656,7 @@ var require_promise = __commonJS({
           promise._rejectCallback(r, true);
         }
       };
-      Promise2.prototype._settlePromiseFromHandler = function(handler55, receiver, value, promise) {
+      Promise2.prototype._settlePromiseFromHandler = function(handler56, receiver, value, promise) {
         var bitField = promise._bitField;
         if ((bitField & 65536) !== 0) return;
         promise._pushContext();
@@ -81666,10 +81666,10 @@ var require_promise = __commonJS({
             x = errorObj2;
             x.e = new TypeError2("cannot .spread() a non-array: " + util2.classString(value));
           } else {
-            x = tryCatch2(handler55).apply(this._boundValue(), value);
+            x = tryCatch2(handler56).apply(this._boundValue(), value);
           }
         } else {
-          x = tryCatch2(handler55).call(receiver, value);
+          x = tryCatch2(handler56).call(receiver, value);
         }
         var promiseCreated = promise._popContext();
         bitField = promise._bitField;
@@ -81694,7 +81694,7 @@ var require_promise = __commonJS({
       Promise2.prototype._setFollowee = function(promise) {
         this._rejectionHandler0 = promise;
       };
-      Promise2.prototype._settlePromise = function(promise, handler55, receiver, value) {
+      Promise2.prototype._settlePromise = function(promise, handler56, receiver, value) {
         var isPromise = promise instanceof Promise2;
         var bitField = this._bitField;
         var asyncGuaranteed = (bitField & 134217728) !== 0;
@@ -81702,10 +81702,10 @@ var require_promise = __commonJS({
           if (isPromise) promise._invokeInternalOnCancel();
           if (receiver instanceof PassThroughHandlerContext && receiver.isFinallyHandler()) {
             receiver.cancelPromise = promise;
-            if (tryCatch2(handler55).call(receiver, value) === errorObj2) {
+            if (tryCatch2(handler56).call(receiver, value) === errorObj2) {
               promise._reject(errorObj2.e);
             }
-          } else if (handler55 === reflectHandler) {
+          } else if (handler56 === reflectHandler) {
             promise._fulfill(reflectHandler.call(receiver));
           } else if (receiver instanceof Proxyable) {
             receiver._promiseCancelled(promise);
@@ -81714,12 +81714,12 @@ var require_promise = __commonJS({
           } else {
             receiver.cancel();
           }
-        } else if (typeof handler55 === "function") {
+        } else if (typeof handler56 === "function") {
           if (!isPromise) {
-            handler55.call(receiver, value, promise);
+            handler56.call(receiver, value, promise);
           } else {
             if (asyncGuaranteed) promise._setAsyncGuaranteed();
-            this._settlePromiseFromHandler(handler55, receiver, value, promise);
+            this._settlePromiseFromHandler(handler56, receiver, value, promise);
           }
         } else if (receiver instanceof Proxyable) {
           if (!receiver._isResolved()) {
@@ -81739,15 +81739,15 @@ var require_promise = __commonJS({
         }
       };
       Promise2.prototype._settlePromiseLateCancellationObserver = function(ctx) {
-        var handler55 = ctx.handler;
+        var handler56 = ctx.handler;
         var promise = ctx.promise;
         var receiver = ctx.receiver;
         var value = ctx.value;
-        if (typeof handler55 === "function") {
+        if (typeof handler56 === "function") {
           if (!(promise instanceof Promise2)) {
-            handler55.call(receiver, value, promise);
+            handler56.call(receiver, value, promise);
           } else {
-            this._settlePromiseFromHandler(handler55, receiver, value, promise);
+            this._settlePromiseFromHandler(handler56, receiver, value, promise);
           }
         } else if (promise instanceof Promise2) {
           promise._reject(value);
@@ -81756,12 +81756,12 @@ var require_promise = __commonJS({
       Promise2.prototype._settlePromiseCtx = function(ctx) {
         this._settlePromise(ctx.promise, ctx.handler, ctx.receiver, ctx.value);
       };
-      Promise2.prototype._settlePromise0 = function(handler55, value, bitField) {
+      Promise2.prototype._settlePromise0 = function(handler56, value, bitField) {
         var promise = this._promise0;
         var receiver = this._receiverAt(0);
         this._promise0 = void 0;
         this._receiver0 = void 0;
-        this._settlePromise(promise, handler55, receiver, value);
+        this._settlePromise(promise, handler56, receiver, value);
       };
       Promise2.prototype._clearCallbackDataAtIndex = function(index) {
         var base = index * 4 - 4;
@@ -81801,20 +81801,20 @@ var require_promise = __commonJS({
       };
       Promise2.prototype._fulfillPromises = function(len, value) {
         for (var i = 1; i < len; i++) {
-          var handler55 = this._fulfillmentHandlerAt(i);
+          var handler56 = this._fulfillmentHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler55, receiver, value);
+          this._settlePromise(promise, handler56, receiver, value);
         }
       };
       Promise2.prototype._rejectPromises = function(len, reason) {
         for (var i = 1; i < len; i++) {
-          var handler55 = this._rejectionHandlerAt(i);
+          var handler56 = this._rejectionHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler55, receiver, reason);
+          this._settlePromise(promise, handler56, receiver, reason);
         }
       };
       Promise2.prototype._settlePromises = function() {
@@ -88420,14 +88420,14 @@ var require_iterate_stream = __commonJS({
     function once(eventEmitter, type) {
       return new Promise((resolve) => {
         let fired = false;
-        const handler55 = () => {
+        const handler56 = () => {
           if (!fired) {
             fired = true;
-            eventEmitter.removeListener(type, handler55);
+            eventEmitter.removeListener(type, handler56);
             resolve();
           }
         };
-        eventEmitter.addListener(type, handler55);
+        eventEmitter.addListener(type, handler56);
       });
     }
   }
@@ -102686,8 +102686,52 @@ async function handler17(req, res) {
   }
 }
 
-// server/_handlers/stocktakes/summary.ts
+// server/_handlers/system/logo.ts
+var LOGO_KEY = "site_logo";
+var MAX_RAW_BYTES = 1024 * 1024;
+var ALLOWED_PREFIX = /^data:image\/(png|jpeg|jpg|webp|svg\+xml|ico|x-icon|vnd\.microsoft\.icon);base64,/i;
 async function handler18(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    if (req.method === "GET") {
+      const supabase = getAdminClient();
+      const { data, error } = await supabase.from("system_settings").select("value").eq("key", LOGO_KEY).maybeSingle();
+      if (error) throw error;
+      const logo = data?.value?.logo || null;
+      return res.status(200).json({ ok: true, data: { logo } });
+    }
+    if (req.method === "POST") {
+      const ctx = await requireAuth(req);
+      requirePermission(ctx, "system.manage");
+      const supabase = getAdminClient();
+      const schema2 = external_exports.object({ logo: external_exports.string().max(25e5) });
+      const { logo } = parse2(schema2, req.body || {});
+      if (logo && logo !== "") {
+        if (!ALLOWED_PREFIX.test(logo)) {
+          return res.status(400).json({ error: { code: "INVALID_LOGO", message: "\u4EC5\u652F\u6301 PNG/JPG/WebP/SVG/ICO \u683C\u5F0F\u56FE\u7247" } });
+        }
+        const rawLen = Math.floor((logo.length - logo.indexOf(",") - 1) * 3 / 4);
+        if (rawLen > MAX_RAW_BYTES) {
+          return res.status(400).json({ error: { code: "LOGO_TOO_LARGE", message: "\u56FE\u7247\u4E0D\u80FD\u8D85\u8FC7 1MB" } });
+        }
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const { error: upErr } = await supabase.from("system_settings").upsert(
+        { key: LOGO_KEY, value: { logo: logo || null }, updated_at: now, updated_by: ctx.userId },
+        { onConflict: "key" }
+      );
+      if (upErr) throw upErr;
+      await writeAudit(ctx, req, "update_site_logo", "system_setting", void 0, void 0, { logo: logo || null });
+      return res.status(200).json({ ok: true, data: { logo: logo || null } });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/stocktakes/summary.ts
+async function handler19(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102798,7 +102842,7 @@ var schema = external_exports.object({
   base64: external_exports.string().min(20).max(6e6),
   sku: external_exports.string().max(200).optional().default("img")
 });
-async function handler19(req, res) {
+async function handler20(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -102869,7 +102913,7 @@ function genOrderNo(d = /* @__PURE__ */ new Date()) {
   const rand = String(Math.floor(Math.random() * 9e3) + 1e3);
   return `CG-${y}${m}${day}-${rand}`;
 }
-async function handler20(req, res) {
+async function handler21(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103017,7 +103061,7 @@ var createSchema5 = external_exports.object({
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   items: external_exports.array(itemSchema3).min(1).max(200)
 });
-async function handler21(req, res) {
+async function handler22(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103117,7 +103161,7 @@ async function handler21(req, res) {
 }
 
 // server/_handlers/roles.ts
-async function handler22(req, res) {
+async function handler23(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103151,7 +103195,7 @@ var createSchema6 = external_exports.object({
   sale_date: external_exports.string().max(20).nullable().optional(),
   items: external_exports.array(itemSchema4).min(1).max(200)
 });
-async function handler23(req, res) {
+async function handler24(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103281,7 +103325,7 @@ var createSchema7 = external_exports.object({
   cargo_code: external_exports.string().max(100).nullable().optional(),
   source: external_exports.enum(["manual", "transfer"]).optional()
 });
-async function handler24(req, res) {
+async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103414,7 +103458,7 @@ var createSchema8 = external_exports.object({
   to_warehouse_id: external_exports.string().uuid(),
   items: external_exports.array(itemSchema6).min(1).max(200)
 }).refine((v) => v.from_warehouse_id !== v.to_warehouse_id, { message: "\u8C03\u51FA\u4E0E\u8C03\u5165\u4ED3\u5E93\u4E0D\u80FD\u76F8\u540C" });
-async function handler25(req, res) {
+async function handler26(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103475,7 +103519,7 @@ async function getProfileWithRoles(supabase, id) {
   }
   return data;
 }
-async function handler26(req, res) {
+async function handler27(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103532,7 +103576,7 @@ var createSchema10 = external_exports.object({
   address: external_exports.string().max(300).nullable().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional().default("domestic")
 });
-async function handler27(req, res) {
+async function handler28(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103574,7 +103618,7 @@ var importRowSchema = external_exports.object({
 var importSchema = external_exports.object({
   rows: external_exports.array(importRowSchema).min(1).max(5e3)
 });
-async function handler28(req, res) {
+async function handler29(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103682,7 +103726,7 @@ async function handler28(req, res) {
 }
 
 // server/_handlers/daily-sales/summary.ts
-async function handler29(req, res) {
+async function handler30(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -103801,7 +103845,7 @@ function num(v) {
 function ceilN(v) {
   return Math.ceil(v);
 }
-async function handler30(req, res) {
+async function handler31(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104126,7 +104170,7 @@ async function handler30(req, res) {
 }
 
 // server/_handlers/dashboard.ts
-async function handler31(req, res) {
+async function handler32(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104208,7 +104252,7 @@ function toItems(rows, type, cfg) {
     deleted_at: r.deleted_at
   }));
 }
-async function handler32(req, res) {
+async function handler33(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104332,7 +104376,7 @@ var CURRENCIES = [
   { code: "ARS", symbol: "AR$", name: "\u963F\u6839\u5EF7\u6BD4\u7D22" },
   { code: "PEN", symbol: "S/", name: "\u79D8\u9C81\u7D22\u5C14" }
 ];
-async function handler33(req, res) {
+async function handler34(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104441,7 +104485,7 @@ async function fetchFromErApi() {
 async function fetchFromExchangeRateApi() {
   return fetchRatesFrom("https://api.exchangerate-api.com/v4/latest/USD");
 }
-async function handler34(req, res) {
+async function handler35(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     await requireAuth(req);
@@ -104484,7 +104528,7 @@ var createSchema11 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler35(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104531,7 +104575,7 @@ var updateSchema2 = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler36(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104579,7 +104623,7 @@ var createSchema12 = external_exports.object({
   color: external_exports.string().max(7).default("#FFFFFF"),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler37(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104613,7 +104657,7 @@ var updateSchema3 = external_exports.object({
   color: external_exports.string().max(7).optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler38(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104662,7 +104706,7 @@ var createSchema13 = external_exports.object({
   need_stock_in: external_exports.boolean().default(false),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler39(req, res) {
+async function handler40(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104696,7 +104740,7 @@ var updateSchema4 = external_exports.object({
   need_stock_in: external_exports.boolean().optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler40(req, res) {
+async function handler41(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104760,7 +104804,7 @@ var updateSchema5 = external_exports.object({
   result: external_exports.string().max(512).optional(),
   items: external_exports.array(itemSchema7).min(1).max(200).optional()
 }).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler41(req, res) {
+async function handler42(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104854,7 +104898,7 @@ async function handler41(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler42(req, res) {
+async function handler43(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104891,7 +104935,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler43(req, res) {
+async function handler44(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104926,7 +104970,7 @@ async function handler43(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler44(req, res) {
+async function handler45(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104980,7 +105024,7 @@ var updateSchema6 = external_exports.object({
   overseas_stock: external_exports.coerce.number().min(0).optional(),
   safety_stock: external_exports.coerce.number().min(0).optional()
 });
-async function handler45(req, res) {
+async function handler46(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105052,7 +105096,7 @@ var updateSchema7 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler46(req, res) {
+async function handler47(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105180,7 +105224,7 @@ var updateSchema8 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler47(req, res) {
+async function handler48(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105281,7 +105325,7 @@ var updateSchema9 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler48(req, res) {
+async function handler49(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105374,7 +105418,7 @@ var updateSchema10 = external_exports.object({
   tracking_no: external_exports.string().max(100).nullable().optional(),
   items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional()
 });
-async function handler49(req, res) {
+async function handler50(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105514,7 +105558,7 @@ async function handler49(req, res) {
 }
 
 // server/_handlers/shipments/confirm-inbound.ts
-async function handler50(req, res) {
+async function handler51(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -105591,7 +105635,7 @@ var TRANSFER_FLOW = {
 var updateSchema11 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler51(req, res) {
+async function handler52(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105700,7 +105744,7 @@ async function getProfileWithRoles2(supabase, id) {
   }
   return data;
 }
-async function handler52(req, res) {
+async function handler53(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105768,7 +105812,7 @@ var updateSchema13 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler53(req, res) {
+async function handler54(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105815,64 +105859,65 @@ var routes = [
   { pattern: /^\/auth\/login$/, handler: handler3 },
   { pattern: /^\/auth\/password$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler31 },
-  { pattern: /^\/recycle-bin\/restore$/, handler: handler32 },
-  { pattern: /^\/recycle-bin\/purge$/, handler: handler32 },
-  { pattern: /^\/recycle-bin$/, handler: handler32 },
-  { pattern: /^\/analysis$/, handler: handler30 },
-  { pattern: /^\/daily-sales\/summary$/, handler: handler29 },
-  { pattern: /^\/daily-sales$/, handler: handler28 },
-  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler38, params: ["id"] },
-  { pattern: /^\/cargo-statuses$/, handler: handler37 },
-  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler40, params: ["id"] },
-  { pattern: /^\/after-sale-types$/, handler: handler39 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler36, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler35 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler41, params: ["id"] },
+  { pattern: /^\/dashboard\/stats$/, handler: handler32 },
+  { pattern: /^\/recycle-bin\/restore$/, handler: handler33 },
+  { pattern: /^\/recycle-bin\/purge$/, handler: handler33 },
+  { pattern: /^\/recycle-bin$/, handler: handler33 },
+  { pattern: /^\/analysis$/, handler: handler31 },
+  { pattern: /^\/daily-sales\/summary$/, handler: handler30 },
+  { pattern: /^\/daily-sales$/, handler: handler29 },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler39, params: ["id"] },
+  { pattern: /^\/cargo-statuses$/, handler: handler38 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler41, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler40 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler37, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler36 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler42, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler5 },
   { pattern: /^\/audit-logs$/, handler: handler6 },
-  { pattern: /^\/system-settings$/, handler: handler33 },
-  { pattern: /^\/exchange-rates$/, handler: handler34 },
+  { pattern: /^\/system-settings$/, handler: handler34 },
+  { pattern: /^\/exchange-rates$/, handler: handler35 },
   { pattern: /^\/db-usage$/, handler: handler7 },
   { pattern: /^\/inventory\/alerts$/, handler: handler16 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler43 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler44 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler42, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler44 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler45 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler43, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler8 },
   { pattern: /^\/permissions$/, handler: handler10 },
   { pattern: /^\/products\/batch-edit$/, handler: handler15 },
   { pattern: /^\/products\/batch-delete$/, handler: handler14 },
-  { pattern: /^\/products\/upload-image$/, handler: handler19 },
+  { pattern: /^\/products\/upload-image$/, handler: handler20 },
   { pattern: /^\/products\/tracking$/, handler: handler12 },
   { pattern: /^\/cost-profit\/settings$/, handler: handler13 },
   { pattern: /^\/cost-profit\/save$/, handler: handler13 },
   { pattern: /^\/cost-profit$/, handler: handler13 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler45, params: ["id"] },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler46, params: ["id"] },
   { pattern: /^\/products$/, handler: handler11 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler46, params: ["id"] },
-  { pattern: /^\/purchase-orders$/, handler: handler20 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler47, params: ["id"] },
-  { pattern: /^\/replenishment$/, handler: handler21 },
-  { pattern: /^\/roles$/, handler: handler22 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler48, params: ["id"] },
-  { pattern: /^\/sales$/, handler: handler23 },
-  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler50, params: ["id"] },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler49, params: ["id"] },
-  { pattern: /^\/shipments$/, handler: handler24 },
-  { pattern: /^\/stocktakes\/summary$/, handler: handler18 },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler47, params: ["id"] },
+  { pattern: /^\/purchase-orders$/, handler: handler21 },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler48, params: ["id"] },
+  { pattern: /^\/replenishment$/, handler: handler22 },
+  { pattern: /^\/roles$/, handler: handler23 },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler49, params: ["id"] },
+  { pattern: /^\/sales$/, handler: handler24 },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler51, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler50, params: ["id"] },
+  { pattern: /^\/shipments$/, handler: handler25 },
+  { pattern: /^\/stocktakes\/summary$/, handler: handler19 },
   { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: handler9, params: ["id"] },
   { pattern: /^\/stocktakes\/([^/]+)$/, handler: handler9, params: ["id"] },
   { pattern: /^\/stocktakes$/, handler: handler9 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler51, params: ["id"] },
-  { pattern: /^\/transfers$/, handler: handler25 },
-  { pattern: /^\/users\/([^/]+)$/, handler: handler52, params: ["id"] },
-  { pattern: /^\/users$/, handler: handler26 },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler52, params: ["id"] },
+  { pattern: /^\/transfers$/, handler: handler26 },
+  { pattern: /^\/users\/([^/]+)$/, handler: handler53, params: ["id"] },
+  { pattern: /^\/users$/, handler: handler27 },
   { pattern: /^\/export\/xlsx$/, handler: handler4 },
   { pattern: /^\/system\/backup$/, handler: handler17 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler53, params: ["id"] },
-  { pattern: /^\/warehouses$/, handler: handler27 }
+  { pattern: /^\/system\/logo$/, handler: handler18 },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler54, params: ["id"] },
+  { pattern: /^\/warehouses$/, handler: handler28 }
 ];
-async function handler54(req, res) {
+async function handler55(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -105895,7 +105940,7 @@ async function handler54(req, res) {
   }
 }
 export {
-  handler54 as default
+  handler55 as default
 };
 /*! Bundled license information:
 

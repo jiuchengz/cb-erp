@@ -1,6 +1,7 @@
 <template>
   <div class="login">
     <form class="card" @submit.prevent="onSubmit">
+      <img v-if="site.logo" :src="site.logo" alt="logo" class="login-logo" />
       <h1>跨境电商管理系统</h1>
       <input v-model="email" type="email" placeholder="邮箱" required autocomplete="username" />
       <input v-model="password" type="password" placeholder="密码" required autocomplete="current-password" />
@@ -24,9 +25,11 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { useSiteStore } from '@/stores/site'
 import { addLog } from '@/utils/log'
 
 const auth = useAuthStore()
+const site = useSiteStore()
 const router = useRouter()
 const email = ref('')
 const password = ref('')
@@ -189,6 +192,12 @@ async function onSubmit() {
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
   border-radius: var(--radius-lg);
   display: flex; flex-direction: column; gap: 16px;
+}
+.login-logo {
+  width: 56px; height: 56px;
+  object-fit: contain;
+  margin: 0 auto;
+  border-radius: 16px;
 }
 h1 { font-size: 20px; text-align: center; color: var(--ink); }
 input { padding: 11px 14px; border: 1px solid rgba(255,255,255,0.45); border-radius: var(--radius-sm); font-size: 14px; background: rgba(255,255,255,.55); color: var(--ink); outline: none; transition: box-shadow .2s ease; }

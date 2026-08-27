@@ -19,7 +19,30 @@
           </div>
         </div>
       </el-tab-pane>
-            <el-tab-pane label="系统设置" name="system">
+            <el-tab-pane label="网站图标" name="logo">
+        <div class="page-header">
+          <h2>网站图标</h2>
+        </div>
+        <div class="appearance-card">
+          <div class="appearance-row">
+            <div class="appearance-info">
+              <div class="appearance-title">浏览器标签页 / 侧边栏 / 登录页图标</div>
+              <div class="appearance-desc">上传后系统全局生效：浏览器标签页 favicon、侧边栏品牌图标、登录页标题图标；支持 PNG/JPG/WebP/SVG/ICO，大小不超过 1MB</div>
+            </div>
+            <div class="logo-preview">
+              <img v-if="logoPreview || site.logo" :src="logoPreview || site.logo" class="logo-preview-img" alt="网站图标预览" />
+              <div v-else class="logo-preview-empty">默认图标</div>
+            </div>
+          </div>
+          <div class="appearance-row logo-actions">
+            <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon" class="hidden-input" @change="onLogoFile" />
+            <el-button type="primary" :disabled="logoSaving" @click="chooseLogo">选择图片</el-button>
+            <el-button :disabled="!logoDirty" :loading="logoSaving" @click="saveLogo">保存</el-button>
+            <el-button v-if="site.logo" :disabled="logoSaving" @click="clearLogo">恢复默认</el-button>
+          </div>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="系统设置" name="system">
         <div class="page-header">
           <h2>系统设置</h2>
           <el-button v-if="canManage" type="primary" :loading="sysSaving" @click="saveSystemSettings">保存设置</el-button>
@@ -406,6 +429,65 @@ function formatDate(v: string) {
 const activeTab = ref('system')
 const backupLoading = ref(false)
 const backupResult = ref<any>(null)
+
+// ===== 网站图标 =====
+const logoInput = ref<HTMLInputElement | null>(null)
+const logoPreview = ref<string | null>(null)
+const logoDirty = ref(false)
+const logoSaving = ref(false)
+function chooseLogo() {
+  logoInput.value?.click()
+}
+function onLogoFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const okType = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon'].includes(file.type)
+  if (!okType) {
+    ElMessage.error('仅支持 PNG/JPG/WebP/SVG/ICO 格式')
+    input.value = ''
+    return
+  }
+  if (file.size > 1024 * 1024) {
+    ElMessage.error('图片不能超过 1MB')
+    input.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    logoPreview.value = reader.result as string
+    logoDirty.value = true
+  }
+  reader.readAsDataURL(file)
+  input.value = ''
+}
+async function saveLogo() {
+  if (!logoPreview.value) return
+  logoSaving.value = true
+  try {
+    await site.saveLogo(logoPreview.value)
+    ElMessage.success('网站图标已保存')
+    logoDirty.value = false
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '保存失败')
+  } finally {
+    logoSaving.value = false
+  }
+}
+async function clearLogo() {
+  logoSaving.value = true
+  try {
+    await site.saveLogo(null)
+    logoPreview.value = null
+    logoDirty.value = false
+    ElMessage.success('已恢复默认图标')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '操作失败')
+  } finally {
+    logoSaving.value = false
+  }
+}
+
 async function doBackup() {
   backupLoading.value = true
   try {
@@ -1157,12 +1239,38 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+/* 网站图标 */
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  background: rgba(127, 127, 127, 0.12);
+  overflow: hidden;
+}
+.logo-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.logo-preview-empty {
+  color: var(--text-2, #888);
+  font-size: 12px;
+}
+.logo-actions {
+  margin-top: 4px;
+}
+.hidden-input {
+  display: none;
+}
+
 /* 界面外观 */
 .appearance-card {
   max-width: 760px;
   padding: 26px;
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  background: var(--glass-bg);  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   border: none;
   box-shadow: var(--shadow), inset 0 1px 0 var(--glass-highlight);
