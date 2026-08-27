@@ -17,6 +17,27 @@ const updateSchema = z.object({
   role_ids: z.array(z.string().uuid()).optional(),
 });
 
+// 与后端管理入口相关、不允许自我移除的权限
+const MANAGE_CODES = ['user.manage', 'system.manage'];
+
+async function collectRoleCodes(supabase: any, roleIds: string[]) {
+  if (!roleIds || roleIds.length === 0) return [] as string[];
+  const { data, error } = await supabase
+    .from('role_permissions')
+    .select('permissions(code)')
+    .in('role_id', roleIds);
+  if (error) throw error;
+  return (data || []).map((rp: any) => rp.permissions?.code).filter(Boolean) as string[];
+}
+
+// 前后端字段归一：user_roles(role_id, roles) -> 顶层 roles: [{id, name}]（前端读 row.roles）
+function normalizeUserRoles<T extends { user_roles?: Array<{ roles: { id: string; name: string } | null } | null> }>(row: T) {
+  return {
+    ...row,
+    roles: (row.user_roles || []).map((ur: any) => ur?.roles).filter(Boolean),
+  };
+}
+
 async function getProfileWithRoles(supabase: any, id: string) {
   const { data, error } = await supabase
     .from('profiles')
@@ -27,7 +48,7 @@ async function getProfileWithRoles(supabase: any, id: string) {
     if (error.code === 'PGRST116') throw Errors.notFound('用户不存在');
     throw error;
   }
-  return data;
+  return normalizeUserRoles(data);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -41,8 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'user.manage');
       const body = parse(updateSchema, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest('无更新字段');
-      // 目标用户必须存在
-      await getProfileWithRoles(supabase, id);
+      // 目标用户必须存在（并取当前角色供自我保护判断）
+      const before = await getProfileWithRoles(supabase, id);
 
       // 1) Auth 层更新：邮箱 / 密码
       if (body.email !== undefined || body.password !== undefined) {
@@ -69,6 +90,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 3) 角色更新：整表替换 user_roles
       if (body.role_ids !== undefined) {
+        // 自我保护：编辑自己账号时，禁止移除自己的 user.manage / system.manage，防止锁死管理入口
+        if (id === ctx.userId && before.roles && before.roles.length > 0) {
+          const beforeCodes = await collectRoleCodes(supabase, before.roles.map((r: any) => r.id));
+          const afterCodes = await collectRoleCodes(supabase, body.role_ids);
+          const beforeManage = beforeCodes.some((c) => MANAGE_CODES.includes(c));
+          const afterManage = afterCodes.some((c) => MANAGE_CODES.includes(c));
+          if (beforeManage && !afterManage) {
+            throw Errors.badRequest('不能移除自己账号的管理权限（user.manage/system.manage），否则将失去管理入口');
+          }
+        }
         const { error: delErr } = await supabase.from('user_roles').delete().eq('user_id', id);
         if (delErr) throw delErr;
         if (body.role_ids.length > 0) {

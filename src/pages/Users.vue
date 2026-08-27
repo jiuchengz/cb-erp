@@ -172,6 +172,18 @@ async function save() {
     ElMessage.warning('请填写邮箱和姓名')
     return
   }
+  // 空角色明确提示：保存后将清空该账号全部角色权限
+  if (editing.value && form.role_ids.length === 0) {
+    try {
+      await ElMessageBox.confirm(
+        '当前未选择任何角色，保存后将清空该账号全部角色权限，可能导致该账号无法访问系统。是否继续？',
+        '清空角色确认',
+        { type: 'warning', confirmButtonText: '继续清空', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
   saving.value = true
   try {
     if (editing.value) {

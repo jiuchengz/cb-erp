@@ -106,6 +106,7 @@ const routes: Route[] = [
   { pattern: /^\/purchase-orders$/, handler: purchaseOrders },
   { pattern: /^\/replenishment\/([^/]+)$/, handler: replenishmentId, params: ['id'] },
   { pattern: /^\/replenishment$/, handler: replenishment },
+  { pattern: /^\/roles\/([^/]+)$/, handler: rolesId, params: ['id'] },
   { pattern: /^\/roles$/, handler: roles },
   { pattern: /^\/sales\/([^/]+)$/, handler: salesId, params: ['id'] },
   { pattern: /^\/sales$/, handler: sales },

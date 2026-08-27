@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
-      return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
+      return res.status(200).json({ data: (data || []).map(normalizeUserRoles), total: count ?? 0, page: q.page, pageSize: q.pageSize });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
