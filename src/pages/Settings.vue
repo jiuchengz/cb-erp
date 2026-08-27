@@ -34,11 +34,23 @@
               <div v-else class="logo-preview-empty">默认图标</div>
             </div>
           </div>
+          <div v-if="logoDirty" class="logo-edit-wrap">
+            <div class="logo-edit" @pointerdown="onEditPointerDown" @pointermove="onEditPointerMove" @pointerup="onEditPointerUp" @pointercancel="onEditPointerUp">
+              <img :src="logoPreview" :style="editStyle" class="logo-edit-img" draggable="false" />
+            </div>
+            <div class="logo-edit-tools">
+              <span class="logo-edit-label">大小</span>
+              <el-slider v-model="editScale" :min="50" :max="300" :step="5" class="logo-edit-slider" />
+              <span class="logo-edit-val">{{ editScale }}%</span>
+            </div>
+            <div class="logo-edit-hint">拖动图片调整位置，拖动滑块调整大小，保存后全局生效</div>
+          </div>
           <div class="appearance-row logo-actions">
             <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon" class="hidden-input" @change="onLogoFile" />
             <el-button type="primary" :disabled="logoSaving" @click="chooseLogo">选择图片</el-button>
             <el-button :disabled="!logoDirty" :loading="logoSaving" @click="saveLogo">保存</el-button>
-            <el-button v-if="site.logo" :disabled="logoSaving" @click="clearLogo">恢复默认</el-button>
+            <el-button v-if="logoDirty" :disabled="logoSaving" @click="cancelEdit">取消调整</el-button>
+            <el-button v-if="site.logo && !logoDirty" :disabled="logoSaving" @click="clearLogo">恢复默认</el-button>
           </div>
         </div>
       </el-tab-pane>
@@ -437,8 +449,80 @@ const logoInput = ref<HTMLInputElement | null>(null)
 const logoPreview = ref<string | null>(null)
 const logoDirty = ref(false)
 const logoSaving = ref(false)
+const EDIT_SIZE = 128
+const editImg = ref<HTMLImageElement | null>(null)
+const editScale = ref(100)
+const editOffset = ref({ x: 0, y: 0 })
+const dragState = ref<{ sx: number; sy: number; ox: number; oy: number } | null>(null)
+const editStyle = computed(() => {
+  const img = editImg.value
+  if (!img) return {}
+  const w = img.naturalWidth || 100
+  const h = img.naturalHeight || 100
+  const scale0 = Math.min(EDIT_SIZE / w, EDIT_SIZE / h)
+  const s = scale0 * (editScale.value / 100)
+  return {
+    width: Math.round(w * s) + 'px',
+    height: Math.round(h * s) + 'px',
+    transform: `translate(calc(-50% + ${editOffset.value.x}px), calc(-50% + ${editOffset.value.y}px))`,
+  }
+})
 function chooseLogo() {
   logoInput.value?.click()
+}
+function loadEditImage(src: string) {
+  editImg.value = null
+  editScale.value = 100
+  editOffset.value = { x: 0, y: 0 }
+  const img = new Image()
+  img.onload = () => {
+    if (img.naturalWidth && img.naturalHeight) editImg.value = img
+  }
+  img.onerror = () => {
+    ElMessage.warning('该图片格式无法预览编辑，将按原图保存')
+  }
+  img.src = src
+}
+function onEditPointerDown(e: PointerEvent) {
+  dragState.value = { sx: e.clientX, sy: e.clientY, ox: editOffset.value.x, oy: editOffset.value.y }
+  ;(e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId)
+}
+function onEditPointerMove(e: PointerEvent) {
+  if (!dragState.value) return
+  editOffset.value = {
+    x: dragState.value.ox + (e.clientX - dragState.value.sx),
+    y: dragState.value.oy + (e.clientY - dragState.value.sy),
+  }
+}
+function onEditPointerUp() {
+  dragState.value = null
+}
+function renderEdited(): string {
+  const fallback = logoPreview.value || ''
+  const img = editImg.value
+  if (!img) return fallback
+  const w = img.naturalWidth || 100
+  const h = img.naturalHeight || 100
+  const scale0 = Math.min(EDIT_SIZE / w, EDIT_SIZE / h)
+  const s = scale0 * (editScale.value / 100)
+  const canvas = document.createElement('canvas')
+  canvas.width = EDIT_SIZE
+  canvas.height = EDIT_SIZE
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return fallback
+  ctx.save()
+  ctx.translate(EDIT_SIZE / 2 + editOffset.value.x, EDIT_SIZE / 2 + editOffset.value.y)
+  ctx.scale(s, s)
+  ctx.drawImage(img, -w / 2, -h / 2)
+  ctx.restore()
+  return canvas.toDataURL('image/png')
+}
+function cancelEdit() {
+  logoPreview.value = null
+  logoDirty.value = false
+  editImg.value = null
+  editScale.value = 100
+  editOffset.value = { x: 0, y: 0 }
 }
 function onLogoFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -457,8 +541,10 @@ function onLogoFile(e: Event) {
   }
   const reader = new FileReader()
   reader.onload = () => {
-    logoPreview.value = reader.result as string
+    const src = reader.result as string
+    logoPreview.value = src
     logoDirty.value = true
+    loadEditImage(src)
   }
   reader.readAsDataURL(file)
   input.value = ''
@@ -467,9 +553,13 @@ async function saveLogo() {
   if (!logoPreview.value) return
   logoSaving.value = true
   try {
-    await site.saveLogo(logoPreview.value)
+    await site.saveLogo(renderEdited())
     ElMessage.success('网站图标已保存')
     logoDirty.value = false
+    logoPreview.value = null
+    editImg.value = null
+    editScale.value = 100
+    editOffset.value = { x: 0, y: 0 }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '保存失败')
   } finally {
@@ -482,6 +572,9 @@ async function clearLogo() {
     await site.saveLogo(null)
     logoPreview.value = null
     logoDirty.value = false
+    editImg.value = null
+    editScale.value = 100
+    editOffset.value = { x: 0, y: 0 }
     ElMessage.success('已恢复默认图标')
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '操作失败')
@@ -1263,6 +1356,57 @@ onMounted(() => {
 }
 .logo-actions {
   margin-top: 4px;
+}
+.logo-edit-wrap {
+  margin-top: 14px;
+}
+.logo-edit {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  border-radius: 16px;
+  background: rgba(127, 127, 127, 0.12);
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.logo-edit:active {
+  cursor: grabbing;
+}
+.logo-edit-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  pointer-events: none;
+  will-change: transform;
+}
+.logo-edit-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  max-width: 320px;
+}
+.logo-edit-slider {
+  flex: 1;
+}
+.logo-edit-label {
+  font-size: 13px;
+  color: var(--text-2, #888);
+  white-space: nowrap;
+}
+.logo-edit-val {
+  font-size: 12px;
+  color: var(--text-2, #888);
+  width: 44px;
+  text-align: right;
+}
+.logo-edit-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3, #aaa);
 }
 .hidden-input {
   display: none;
