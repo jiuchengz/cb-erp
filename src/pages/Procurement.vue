@@ -8,6 +8,9 @@
         <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
+        <el-button v-if="canWrite" type="primary" :disabled="!selected.length" :loading="receiving" @click="batchReceive">
+          批量入库{{ selected.length ? `(${selected.length})` : '' }}
+        </el-button>
         <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增拿货</el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
@@ -490,6 +493,51 @@ async function removeRow(row: any) {
 const selected = ref<any[]>([])
 function onSelectionChange(rows: any[]) {
   selected.value = rows
+}
+
+const receiving = ref(false)
+async function batchReceive() {
+  const targets = selected.value.filter((r) => r.status === 'ARRIVED')
+  if (!targets.length) {
+    ElMessage.warning('选中的记录中没有「已到货」状态，无需入库')
+    return
+  }
+  const skip = selected.value.length - targets.length
+  try {
+    await ElMessageBox.confirm(
+      `确定将选中的 ${targets.length} 条「已到货」记录批量入库吗？入库后拿货数量将自动计入对应产品的国内库存，并在库存流水（采购入库）中留痕。` +
+        (skip ? `\n另有 ${skip} 条已入库记录将跳过。` : ''),
+      '批量入库确认',
+      { type: 'warning', confirmButtonText: '入库', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  receiving.value = true
+  let ok = 0
+  const failures: string[] = []
+  for (const row of targets) {
+    try {
+      await api.patch(`/purchase-orders/${row.id}`, { status: 'RECEIVED' })
+      ok++
+    } catch (err: any) {
+      failures.push(
+        `${firstItem(row)?.products?.name || row.order_no}: ${err?.response?.data?.error?.message || '入库失败'}`
+      )
+    }
+  }
+  receiving.value = false
+  if (failures.length) {
+    ElMessage.warning(
+      `入库成功 ${ok} 条，失败 ${failures.length} 条：` +
+        failures.slice(0, 3).join('；') +
+        (failures.length > 3 ? ' 等' : '')
+    )
+  } else {
+    ElMessage.success(`批量入库完成：成功 ${ok} 条`)
+  }
+  selected.value = []
+  load()
 }
 
 const importing = ref(false)
