@@ -23,6 +23,7 @@ import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
 import replenishment from './_handlers/replenishment';
 import roles from './_handlers/roles';
+import rolesId from './_handlers/roles/[id]';
 import sales from './_handlers/sales';
 import shipments from './_handlers/shipments';
 import transfers from './_handlers/transfers';
