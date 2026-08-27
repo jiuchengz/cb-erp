@@ -418,8 +418,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENCIES, fetchExchangeRates } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
+import { useSiteStore } from '../stores/site'
 
 const auth = useAuthStore()
+const site = useSiteStore()
 const canManage = computed(() => auth.hasPermission('system.manage'))
 
 function formatDate(v: string) {
