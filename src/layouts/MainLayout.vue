@@ -117,7 +117,7 @@ auth.init().finally(() => {
 })
 
 const soloMenus = [
-  { path: '/dashboard', label: '概况', icon: HomeFilled },
+  { path: '/dashboard', label: '首页概览', icon: HomeFilled },
   { path: '/analysis', label: '经营分析', icon: TrendCharts }
 ]
 
@@ -127,10 +127,19 @@ const menuGroups = reactive([
     icon: Goods,
     open: true,
     children: [
-      { path: '/products', label: '商品', icon: Goods },
-      { path: '/inventory', label: '库存', icon: Box },
-      { path: '/stocktakes', label: '库存盘点', icon: Box },
+      { path: '/products', label: '商品管理', icon: Goods },
       { path: '/cost-profit', label: '成本利润', icon: Goods }
+    ]
+  },
+  {
+    title: '仓储物流',
+    icon: Switch,
+    open: true,
+    children: [
+      { path: '/inventory', label: '库存查询', icon: Box },
+      { path: '/stocktakes', label: '库存盘点', icon: Box },
+      { path: '/procurement', label: '拿货管理', icon: ShoppingCart },
+      { path: '/transfers', label: '海外调拨', icon: Switch }
     ]
   },
   {
@@ -138,19 +147,10 @@ const menuGroups = reactive([
     icon: Sell,
     open: true,
     children: [
-      { path: '/sales', label: '销售', icon: Sell },
-      { path: '/shipments', label: '发货', icon: Van },
-      { path: '/after-sales', label: '售后', icon: Service },
-      { path: '/replenishment', label: '补货', icon: TrendCharts }
-    ]
-  },
-  {
-    title: '供应链',
-    icon: Switch,
-    open: true,
-    children: [
-      { path: '/procurement', label: '采购', icon: ShoppingCart },
-      { path: '/transfers', label: '调拨发货', icon: Switch }
+      { path: '/sales', label: '销售订单', icon: Sell },
+      { path: '/shipments', label: '物流发货', icon: Van },
+      { path: '/after-sales', label: '售后管理', icon: Service },
+      { path: '/replenishment', label: '补货管理', icon: TrendCharts }
     ]
   },
   {
@@ -158,9 +158,9 @@ const menuGroups = reactive([
     icon: Setting,
     open: true,
     children: [
-      { path: '/users', label: '用户', icon: User },
-      { path: '/logs', label: '日志', icon: Notebook },
-      { path: '/settings', label: '设置', icon: Setting },
+      { path: '/users', label: '成员管理', icon: User },
+      { path: '/logs', label: '操作日志', icon: Notebook },
+      { path: '/settings', label: '系统设置', icon: Setting },
       { path: '/recycle-bin', label: '回收站', icon: Delete }
     ]
   }
