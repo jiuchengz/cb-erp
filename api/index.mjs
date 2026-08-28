@@ -102613,10 +102613,10 @@ async function handler17(req, res) {
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const updates = items.filter((it) => foundIds.has(it.id)).map((it) => ({ id: it.id, overseas_stock: it.overseas_stock, updated_at: now }));
     let updatedCount = 0;
-    if (updates.length) {
-      const { error: upErr } = await supabase.from("products").upsert(updates, { onConflict: "id" });
+    for (const u of updates) {
+      const { data: upd, error: upErr } = await supabase.from("products").update({ overseas_stock: u.overseas_stock, updated_at: now }).eq("id", u.id).is("deleted_at", null).select("id");
       if (upErr) throw upErr;
-      updatedCount = updates.length;
+      if (upd && upd.length) updatedCount += 1;
     }
     await writeAudit(ctx, req, "batch_stock", "product", void 0, null, {
       updated: updatedCount,
@@ -104107,6 +104107,7 @@ async function handler34(req, res) {
     }
     const map = /* @__PURE__ */ new Map();
     const dateSet = /* @__PURE__ */ new Set();
+    const dailyMap = /* @__PURE__ */ new Map();
     let totalSellQty = 0;
     let totalRefundQty = 0;
     let totalRefundAmount = 0;
@@ -104120,6 +104121,13 @@ async function handler34(req, res) {
       totalSellQty += sellQty;
       totalRefundQty += refundQty;
       totalRefundAmount += refundAmount;
+      if (d) {
+        const dd = dailyMap.get(d) || { sale_date: d, sell_qty: 0, refund_qty: 0, refund_amount: 0 };
+        dd.sell_qty += sellQty;
+        dd.refund_qty += refundQty;
+        dd.refund_amount += refundAmount;
+        dailyMap.set(d, dd);
+      }
       const cur = map.get(key) || {
         link_id: key,
         product_name: r.product_name || "",
@@ -104158,6 +104166,12 @@ async function handler34(req, res) {
       });
       delete v.days;
     }
+    const dailyTotals = Array.from(dailyMap.values()).map((d) => ({
+      sale_date: d.sale_date,
+      sell_qty: d.sell_qty,
+      refund_qty: d.refund_qty,
+      net_qty: d.sell_qty - d.refund_qty
+    })).sort((a, b) => a.sale_date < b.sale_date ? -1 : 1);
     return res.status(200).json({
       aggRows,
       totals: {
@@ -104168,7 +104182,8 @@ async function handler34(req, res) {
         netAmount: totalNetAmount,
         days: dateSet.size
       },
-      dateSet: Array.from(dateSet)
+      dateSet: Array.from(dateSet),
+      dailyTotals
     });
   } catch (e) {
     return handleError2(res, e);

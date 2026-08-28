@@ -13,7 +13,8 @@ import { getAdminClient } from '../_lib/db';
  *   aggRows: [{ link_id, product_name, platform, quantity, refund_qty, refund_amount,
  *               netQty, netAmount, avg_price, days, latest_date, overseas_stock }],
  *   totals: { sellQty, refundQty, refundAmount, netQty, netAmount, days },
- *   dateSet: string[]
+ *   dateSet: string[],
+ *   dailyTotals: [{ sale_date, sell_qty, refund_qty, net_qty }]
  * }
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -55,6 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 与前端一致：按 link_id 聚合
     const map = new Map<string, any>();
     const dateSet = new Set<string>();
+    const dailyMap = new Map<string, any>();
     let totalSellQty = 0;
     let totalRefundQty = 0;
     let totalRefundAmount = 0;
@@ -68,6 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalSellQty += sellQty;
       totalRefundQty += refundQty;
       totalRefundAmount += refundAmount;
+      // 按日期聚合每日实际销量（日历展示用）
+      if (d) {
+        const dd = dailyMap.get(d) || { sale_date: d, sell_qty: 0, refund_qty: 0, refund_amount: 0 };
+        dd.sell_qty += sellQty;
+        dd.refund_qty += refundQty;
+        dd.refund_amount += refundAmount;
+        dailyMap.set(d, dd);
+      }
       const cur = map.get(key) || {
         link_id: key,
         product_name: r.product_name || '',
@@ -109,6 +119,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       delete v.days;
     }
 
+    const dailyTotals = Array.from(dailyMap.values())
+      .map((d: any) => ({
+        sale_date: d.sale_date,
+        sell_qty: d.sell_qty,
+        refund_qty: d.refund_qty,
+        net_qty: d.sell_qty - d.refund_qty,
+      }))
+      .sort((a: any, b: any) => (a.sale_date < b.sale_date ? -1 : 1));
+
     return res.status(200).json({
       aggRows,
       totals: {
@@ -120,6 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         days: dateSet.size,
       },
       dateSet: Array.from(dateSet),
+      dailyTotals,
     });
   } catch (e) {
     return handleError(res, e);

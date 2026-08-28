@@ -42,6 +42,29 @@
       <el-button type="primary" @click="load">查询</el-button>
     </div>
 
+    <!-- 销售日历：每日实际销量 -->
+    <div class="cal-card" v-loading="loading">
+      <div class="cal-head">
+        <span class="cal-title">销售日历</span>
+        <span class="cal-legend"><i class="cal-legend-dot"></i>当日实际销量</span>
+        <div class="cal-nav">
+          <el-button size="small" text @click="calShift(-1)">‹</el-button>
+          <span class="cal-month">{{ calYear }}年{{ calMonth + 1 }}月</span>
+          <el-button size="small" text @click="calShift(1)">›</el-button>
+          <el-button size="small" text @click="calBackToday">今天</el-button>
+        </div>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-week" v-for="w in weekHeaders" :key="w">{{ w }}</div>
+        <template v-for="cell in calCells" :key="cell.key">
+          <div class="cal-cell" :class="{ 'is-today': cell.isToday, 'is-out': cell.out }">
+            <div class="cal-day">{{ cell.day || '' }}</div>
+            <div class="cal-qty" :class="{ has: cell.hasQty }">{{ cell.qtyText }}</div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- 指标卡 -->
     <el-row :gutter="14" class="kpi-row" v-loading="loading">
       <el-col v-for="k in kpiCards" :key="k.label" :xs="12" :sm="4">
@@ -139,6 +162,12 @@ const total = ref(0)
 const summary = ref<any>(null)
 const loading = ref(false)
 
+// 销售日历：每日实际销量
+const weekHeaders = ['日', '一', '二', '三', '四', '五', '六']
+const dailyMap = ref<Record<string, number>>({})
+const calYear = ref(new Date().getFullYear())
+const calMonth = ref(new Date().getMonth())
+
 const quickRanges = [
   { label: '今天', days: 0 },
   { label: '近7天', days: 7 },
@@ -214,6 +243,7 @@ async function fetchSummary(saleFrom: string, saleTo: string, keyword: string) {
     aggRows: data.aggRows ?? [],
     totals: data.totals ?? {},
     dateSet: new Set<string>(data.dateSet ?? []),
+    dailyTotals: data.dailyTotals ?? [],
   }
 }
 
@@ -246,10 +276,20 @@ async function load() {
       fetchSummary(from, to, query.keyword),
       prevFrom && prevTo
         ? fetchSummary(prevFrom, prevTo, query.keyword)
-        : Promise.resolve({ aggRows: [], totals: {}, dateSet: new Set<string>() }),
+        : Promise.resolve({ aggRows: [], totals: {}, dateSet: new Set<string>(), dailyTotals: [] }),
       fetchImageMap(),
     ])
-    const prevMap = new Map(prev.aggRows.map((r: any) => [String(r.link_id), r]))
+    const prevMap = new Map<string, any>(prev.aggRows.map((r: any) => [String(r.link_id), r]))
+
+    // 日历数据：按日期 -> 实际销量
+    const daily: Record<string, number> = {}
+    ;(cur.dailyTotals ?? []).forEach((d: any) => {
+      if (d.sale_date != null) daily[d.sale_date] = Number(d.net_qty || 0)
+    })
+    dailyMap.value = daily
+    const calEnd = dateRange.value?.[1] ? new Date(dateRange.value[1]) : new Date()
+    calYear.value = calEnd.getFullYear()
+    calMonth.value = calEnd.getMonth()
 
     // 合并环比数据（基于实际销量 netQty）
     aggRows.value = cur.aggRows.map((r: any) => {
@@ -299,6 +339,48 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+const calCells = computed(() => {
+  const first = new Date(calYear.value, calMonth.value, 1)
+  const startWeek = first.getDay()
+  const daysInMonth = new Date(calYear.value, calMonth.value + 1, 0).getDate()
+  const todayStr = fmtDate(new Date())
+  const cells: any[] = []
+  for (let i = 0; i < startWeek; i++) cells.push({ key: 'blank-' + i, out: true })
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = fmtDate(new Date(calYear.value, calMonth.value, d))
+    const qty = dailyMap.value[ds]
+    const hasQty = qty != null && qty !== 0
+    cells.push({
+      key: ds,
+      day: d,
+      isToday: ds === todayStr,
+      hasQty,
+      qtyText: hasQty ? String(qty) : '',
+    })
+  }
+  return cells
+})
+
+function calShift(delta: number) {
+  let m = calMonth.value + delta
+  let y = calYear.value
+  if (m < 0) {
+    m = 11
+    y--
+  } else if (m > 11) {
+    m = 0
+    y++
+  }
+  calMonth.value = m
+  calYear.value = y
+}
+
+function calBackToday() {
+  const t = new Date()
+  calYear.value = t.getFullYear()
+  calMonth.value = t.getMonth()
 }
 
 const kpiCards = computed(() => {
@@ -593,6 +675,96 @@ onMounted(() => {
   margin-bottom: 12px;
   flex-wrap: wrap;
   align-items: center;
+}
+.cal-card {
+  margin-bottom: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.cal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+.cal-legend {
+  font-size: 12px;
+  color: #909399;
+}
+.cal-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #409eff;
+  margin-right: 4px;
+}
+.cal-nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-month {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  min-width: 90px;
+  text-align: center;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-week {
+  text-align: center;
+  font-size: 12px;
+  color: #909399;
+  padding: 4px 0;
+}
+.cal-cell {
+  border: 1px solid #f0f2f5;
+  border-radius: 6px;
+  min-height: 62px;
+  padding: 6px 8px;
+  background: #fafbfc;
+  display: flex;
+  flex-direction: column;
+}
+.cal-cell.is-today {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+.cal-cell.is-out {
+  background: transparent;
+  border-color: transparent;
+}
+.cal-day {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+}
+.cal-cell.is-today .cal-day {
+  color: #409eff;
+  font-weight: 700;
+}
+.cal-qty {
+  font-size: 14px;
+  font-weight: 700;
+  color: #c0c4cc;
+  margin-top: 6px;
+}
+.cal-qty.has {
+  color: #409eff;
 }
 .kpi-row {
   margin-bottom: 12px;
