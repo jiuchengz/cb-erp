@@ -202,6 +202,38 @@
       </template>
     </el-dialog>
 
+    <!-- 未盘到商品处理：导入表格未覆盖但系统有库存的商品，加入后按实盘0处理 -->
+    <el-dialog v-model="unpickedVisible" title="未盘到商品处理" width="720px" destroy-on-close append-to-body>
+      <div class="unpicked-tip">
+        以下 {{ unpickedList.length }} 个商品在系统中有库存，但未出现在导入表格中（未盘到）。
+        加入盘点单后将按 <b>实盘 0</b> 处理，审核时自动清零系统库存并写入盘亏流水。
+      </div>
+      <el-table
+        v-loading="unpickedLoading"
+        :data="unpickedList"
+        border
+        stripe
+        height="360"
+        @selection-change="(v: any[]) => (unpickedSelection = v)"
+      >
+        <el-table-column type="selection" width="46" />
+        <el-table-column label="商品编码" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column label="商品名称" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column prop="book_quantity" label="账面库存" width="110" align="right">
+          <template #default="{ row }">{{ fmtQty(row.book_quantity) }}</template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="unpickedVisible = false">跳过</el-button>
+        <el-button :disabled="!unpickedList.length" @click="addUnpickedAll">全部加入（实盘0）</el-button>
+        <el-button type="primary" :disabled="!unpickedSelection.length" @click="addUnpickedSelected">加入选中 ({{ unpickedSelection.length }})</el-button>
+      </template>
+    </el-dialog>
+
     <el-drawer v-model="summaryVisible" title="盘点差异复盘" size="640px" destroy-on-close>
       <div v-loading="summaryLoading">
         <template v-if="summary">
@@ -687,11 +719,81 @@ async function onImportFile(e: Event) {
     } else {
       ElMessage.success(`成功导入 ${ok} 条`)
     }
+    // 导入完成后检测：该仓库下系统有库存但表格未盘到的商品，弹出选择窗口
+    if (ok > 0) {
+      await loadUnpickedGoods()
+      if (unpickedList.value.length) unpickedVisible.value = true
+    }
   } catch (err: any) {
     ElMessage.error(err?.message || '导入失败')
   } finally {
     importing.value = false
   }
+}
+
+// ===== 未盘到商品处理 =====
+const unpickedVisible = ref(false)
+const unpickedLoading = ref(false)
+const unpickedList = ref<any[]>([])
+const unpickedSelection = ref<any[]>([])
+
+// 拉取该仓库下「系统有库存且未出现在盘点单」的商品列表
+async function loadUnpickedGoods() {
+  unpickedList.value = []
+  unpickedSelection.value = []
+  const wid = editRow.value.warehouse_id
+  if (!wid) return
+  unpickedLoading.value = true
+  try {
+    const all: any[] = []
+    const pageSize = 200
+    for (let page = 1; page <= 10; page++) {
+      const { data } = await api.get('/inventory', { params: { warehouse_id: wid, page, pageSize } })
+      const rows = data.data ?? []
+      all.push(...rows)
+      if (rows.length < pageSize || all.length >= (data.total ?? 0)) break
+    }
+    const inItems = new Set(editRow.value.items.map((it: any) => it.product_id))
+    unpickedList.value = all
+      .filter((r: any) => Number(r.quantity || 0) > 0 && !inItems.has(r.product_id))
+      .map((r: any) => ({ product_id: r.product_id, book_quantity: Number(r.quantity || 0) }))
+      .sort((a: any, b: any) => b.book_quantity - a.book_quantity)
+  } catch (err: any) {
+    console.error('[stocktake] loadUnpickedGoods failed:', err)
+    ElMessage.error('获取未盘到商品失败：' + (err?.message || ''))
+  } finally {
+    unpickedLoading.value = false
+  }
+}
+
+// 加入盘点单：实盘=0，差异=-账面，审核时自动清零
+function addUnpickedToItems(list: any[]) {
+  let added = 0
+  for (const it of list) {
+    if (editRow.value.items.some((x: any) => x.product_id === it.product_id)) continue
+    editRow.value.items.push({
+      product_id: it.product_id,
+      book_quantity: it.book_quantity,
+      actual_quantity: 0,
+      difference: -it.book_quantity,
+      remark: '未盘到，按0处理',
+    })
+    added++
+  }
+  unpickedVisible.value = false
+  unpickedSelection.value = []
+  if (added) ElMessage.success(`已加入 ${added} 个商品，实盘按 0 处理，审核后自动清零库存`)
+}
+function addUnpickedSelected() {
+  if (!unpickedSelection.value.length) {
+    ElMessage.warning('请先勾选要处理的商品')
+    return
+  }
+  addUnpickedToItems(unpickedSelection.value)
+}
+function addUnpickedAll() {
+  if (!unpickedList.value.length) return
+  addUnpickedToItems(unpickedList.value)
 }
 
 onMounted(async () => {
@@ -725,6 +827,19 @@ onMounted(async () => {
 .st-tip {
   font-size: 12px;
   color: #909399;
+}
+.unpicked-tip {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #606266;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.unpicked-tip b {
+  color: #d97706;
 }
 .diff-pos {
   color: #e6a23c;
