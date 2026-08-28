@@ -47,10 +47,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((it: any) => ({ id: it.id, overseas_stock: it.overseas_stock, updated_at: now }));
 
     let updatedCount = 0;
-    if (updates.length) {
-      const { error: upErr } = await supabase.from('products').upsert(updates, { onConflict: 'id' });
+    // 批量更新库存语义：只更新已存在的商品，绝不 INSERT 新行。
+    // 使用 update 而非 upsert，避免因目标 id 不存在（如外部写入的临时商品已被删除）触发
+    // name not-null 的 23502 错误。
+    for (const u of updates) {
+      const { data: upd, error: upErr } = await supabase
+        .from('products')
+        .update({ overseas_stock: u.overseas_stock, updated_at: now })
+        .eq('id', u.id)
+        .is('deleted_at', null)
+        .select('id');
       if (upErr) throw upErr;
-      updatedCount = updates.length;
+      if (upd && upd.length) updatedCount += 1;
     }
 
     await writeAudit(ctx, req, 'batch_stock', 'product', undefined, null, {
