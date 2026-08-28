@@ -126,7 +126,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
-import { convertMoney, getCurrencyCode } from '../utils/system'
+import { convertMoney, getCurrencyCode, getRate, BASE_CURRENCY, isRatesLoaded, fetchExchangeRates } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
@@ -399,6 +399,7 @@ async function onImportFile(e: Event) {
   if (!file) return
   importing.value = true
   try {
+    if (!isRatesLoaded()) await fetchExchangeRates()
     const { headers, rows } = await readExcelFile(file)
     const col = buildColMap(headers, {
       sale_date: ['日期', 'date', 'sale_date'],
@@ -408,6 +409,16 @@ async function onImportFile(e: Event) {
       unit_price: ['平均售价(' + getCurrencyCode() + ')', '平均售价', '单价', 'price', 'unit_price'],
       overseas_stock: ['可用库存', '海外库存', 'overseas_stock', 'stock'],
     })
+    // 兼容任意币种后缀的平均售价列（如"平均售价(USD)"），并识别其币种用于换算
+    let unitPriceCurrency = BASE_CURRENCY
+    if (col.unit_price === undefined) {
+      const priceIdx = headers.findIndex((h) => h.startsWith('平均售价'))
+      if (priceIdx >= 0) {
+        col.unit_price = priceIdx
+        const m = headers[priceIdx].match(/\(([A-Za-z]{3})\)/)
+        if (m) unitPriceCurrency = m[1].toUpperCase()
+      }
+    }
     if (col.link_id === undefined || col.quantity === undefined) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品ID"和"实际销量"列')
       return
@@ -447,10 +458,17 @@ async function onImportFile(e: Event) {
       }
       // 允许负销量：代表退款/退货，导入时扣减
       const product = linkMap[linkId]
+      // 平均售价：读取后按列币种换算为记账币种（BASE_CURRENCY）存储
+      const rawPrice = col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0
+      let unitPrice = rawPrice
+      if (rawPrice && unitPriceCurrency !== BASE_CURRENCY) {
+        const rate = getRate(unitPriceCurrency, BASE_CURRENCY)
+        if (rate != null) unitPrice = rawPrice * rate
+      }
       const item: any = {
         link_id: linkId,
         quantity: qty,
-        unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
+        unit_price: unitPrice,
         overseas_stock: col.overseas_stock !== undefined ? cellNum(row, col.overseas_stock) : 0,
       }
       if (col.sale_date !== undefined) {
