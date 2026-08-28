@@ -31,9 +31,11 @@ async function collectRoleCodes(supabase: any, roleIds: string[]) {
 }
 
 // 前后端字段归一：user_roles(role_id, roles) -> 顶层 roles: [{id, name}]（前端读 row.roles）
+// display_name -> name（前端读 row.name 渲染姓名列/编辑回填）
 export function normalizeUserRoles<T extends { user_roles?: Array<{ roles: { id: string; name: string } | null } | null> }>(row: T) {
   return {
     ...row,
+    name: (row as any).display_name ?? '',
     roles: (row.user_roles || []).map((ur: any) => ur?.roles).filter(Boolean),
   };
 }
