@@ -251,7 +251,7 @@
               <span>净差异</span>
             </div>
           </div>
-          <div class="summary-note">共复盘 {{ summary.stocktake_count }} 张已完成盘点单，金额按商品售价估算（MXN）</div>
+          <div class="summary-note">共复盘 {{ summary.stocktake_count }} 张已完成盘点单，金额按商品售价估算（{{ getCurrencyCode() }}）</div>
 
           <h3 class="summary-title">按商品（Top 20）</h3>
           <el-table :data="summary.by_product.slice(0, 20)" size="small" border max-height="320">
@@ -313,7 +313,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
-import { formatDateTime } from '../utils/system'
+import { formatDateTime, formatMoneyFrom, getCurrencyCode } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
@@ -333,8 +333,7 @@ function fmtDiff(v: any) {
   return n > 0 ? `+${s}` : s
 }
 function fmtAmount(v: any) {
-  const n = Number(v || 0)
-  return Number.isInteger(n) ? String(n) : n.toFixed(2)
+  return formatMoneyFrom(v)
 }
 function diffClass(v: any) {
   const n = Number(v || 0)

@@ -123,9 +123,15 @@
       <el-table-column label="售价" width="120" align="right">
         <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
       </el-table-column>
-      <el-table-column prop="purchase_cost" label="不含税采购成本" width="130" align="right" />
-      <el-table-column prop="first_leg_freight" label="头程运费" width="100" align="right" />
-      <el-table-column prop="last_mile_delivery_peso" label="尾程派送(比索)" width="130" align="right" />
+      <el-table-column :label="'不含税采购成本(' + getCurrencyCode() + ')'" width="130" align="right">
+        <template #default="{ row }">{{ formatMoneyFrom(row.purchase_cost, row.currency || 'MXN') }}</template>
+      </el-table-column>
+      <el-table-column :label="'头程运费(' + getCurrencyCode() + ')'" width="100" align="right">
+        <template #default="{ row }">{{ formatMoneyFrom(row.first_leg_freight, row.currency || 'MXN') }}</template>
+      </el-table-column>
+      <el-table-column :label="'尾程派送(' + getCurrencyCode() + ')'" width="130" align="right">
+        <template #default="{ row }">{{ formatMoney(row.last_mile_delivery_peso) }}</template>
+      </el-table-column>
       <el-table-column label="ML佣金比例" width="110" align="right">
         <template #default="{ row }">{{ pct(row.ml_commission_rate) }}</template>
       </el-table-column>
@@ -220,7 +226,9 @@
             <el-table-column label="实际销量" width="100" align="right">
               <template #default="{ row }">{{ Number(row.quantity || 0) - Number(row.refund_qty || 0) }}</template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价(比索)" width="110" align="right" />
+            <el-table-column :label="'单价(' + getCurrencyCode() + ')'" width="110" align="right">
+              <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
+            </el-table-column>
           </el-table>
           <div v-if="!trackSales.length" class="track-empty">所选时间范围内暂无销量数据</div>
         </template>
@@ -396,7 +404,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/api'
-import { formatDateTime as sysFormatDateTime, formatMoney } from '../utils/system'
+import { formatDateTime as sysFormatDateTime, formatMoney, formatMoneyFrom, getCurrencyCode } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import type { Product } from '../types'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
@@ -857,9 +865,9 @@ async function exportRows(withImages = false) {
     { key: 'in_transit_qty', label: '在途数量' },
     { key: 'sales_qty', label: '销量' },
     { key: 'unit_price', label: '售价', value: (r: Product) => formatMoney(r.unit_price) },
-    { key: 'purchase_cost', label: '不含税采购成本' },
-    { key: 'first_leg_freight', label: '头程运费' },
-    { key: 'last_mile_delivery_peso', label: '尾程派送(比索)' },
+    { key: 'purchase_cost', label: '不含税采购成本', value: (r: Product) => formatMoneyFrom(r.purchase_cost, r.currency || 'MXN') },
+    { key: 'first_leg_freight', label: '头程运费', value: (r: Product) => formatMoneyFrom(r.first_leg_freight, r.currency || 'MXN') },
+    { key: 'last_mile_delivery_peso', label: '尾程派送(比索)', value: (r: Product) => formatMoney(r.last_mile_delivery_peso) },
     { key: 'ml_commission_rate', label: 'ML佣金比例', value: (r: Product) => pct(r.ml_commission_rate) },
     {
       key: 'image_text',
