@@ -28,9 +28,17 @@
         end-placeholder="结束日期"
         value-format="YYYY-MM-DD"
         :clearable="false"
+        popper-class="sales-dp-popper"
         style="width: 260px"
         @change="onDateChange"
-      />
+      >
+        <template #date-cell="{ data }">
+          <div class="sales-dp-cell" :class="{ 'is-today': data.isToday, 'is-selected': data.isSelected }">
+            <span class="sales-dp-day">{{ data.text }}</span>
+            <span class="sales-dp-qty">{{ dpQty(data.date) }}</span>
+          </div>
+        </template>
+      </el-date-picker>
       <el-input
         v-model="query.keyword"
         placeholder="链接ID/产品名"
@@ -40,29 +48,6 @@
         @clear="load"
       />
       <el-button type="primary" @click="load">查询</el-button>
-    </div>
-
-    <!-- 销售日历：每日实际销量 -->
-    <div class="cal-card" v-loading="loading">
-      <div class="cal-head">
-        <span class="cal-title">销售日历</span>
-        <span class="cal-legend"><i class="cal-legend-dot"></i>当日实际销量</span>
-        <div class="cal-nav">
-          <el-button size="small" text @click="calShift(-1)">‹</el-button>
-          <span class="cal-month">{{ calYear }}年{{ calMonth + 1 }}月</span>
-          <el-button size="small" text @click="calShift(1)">›</el-button>
-          <el-button size="small" text @click="calBackToday">今天</el-button>
-        </div>
-      </div>
-      <div class="cal-grid">
-        <div class="cal-week" v-for="w in weekHeaders" :key="w">{{ w }}</div>
-        <template v-for="cell in calCells" :key="cell.key">
-          <div class="cal-cell" :class="{ 'is-today': cell.isToday, 'is-out': cell.out }">
-            <div class="cal-day">{{ cell.day || '' }}</div>
-            <div class="cal-qty" :class="{ has: cell.hasQty }">{{ cell.qtyText }}</div>
-          </div>
-        </template>
-      </div>
     </div>
 
     <!-- 指标卡 -->
@@ -162,11 +147,13 @@ const total = ref(0)
 const summary = ref<any>(null)
 const loading = ref(false)
 
-// 销售日历：每日实际销量
-const weekHeaders = ['日', '一', '二', '三', '四', '五', '六']
+// 日期选择器日历面板：每日实际销量（日期 -> netQty）
 const dailyMap = ref<Record<string, number>>({})
-const calYear = ref(new Date().getFullYear())
-const calMonth = ref(new Date().getMonth())
+function dpQty(d: Date | null | undefined) {
+  if (!d || isNaN(d.getTime())) return ''
+  const qty = dailyMap.value[fmtDate(d)]
+  return qty != null && qty !== 0 ? String(qty) : ''
+}
 
 const quickRanges = [
   { label: '今天', days: 0 },
@@ -281,15 +268,12 @@ async function load() {
     ])
     const prevMap = new Map<string, any>(prev.aggRows.map((r: any) => [String(r.link_id), r]))
 
-    // 日历数据：按日期 -> 实际销量
+    // 日历面板数据：按日期 -> 实际销量
     const daily: Record<string, number> = {}
     ;(cur.dailyTotals ?? []).forEach((d: any) => {
       if (d.sale_date != null) daily[d.sale_date] = Number(d.net_qty || 0)
     })
     dailyMap.value = daily
-    const calEnd = dateRange.value?.[1] ? new Date(dateRange.value[1]) : new Date()
-    calYear.value = calEnd.getFullYear()
-    calMonth.value = calEnd.getMonth()
 
     // 合并环比数据（基于实际销量 netQty）
     aggRows.value = cur.aggRows.map((r: any) => {
@@ -339,48 +323,6 @@ async function load() {
   } finally {
     loading.value = false
   }
-}
-
-const calCells = computed(() => {
-  const first = new Date(calYear.value, calMonth.value, 1)
-  const startWeek = first.getDay()
-  const daysInMonth = new Date(calYear.value, calMonth.value + 1, 0).getDate()
-  const todayStr = fmtDate(new Date())
-  const cells: any[] = []
-  for (let i = 0; i < startWeek; i++) cells.push({ key: 'blank-' + i, out: true })
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ds = fmtDate(new Date(calYear.value, calMonth.value, d))
-    const qty = dailyMap.value[ds]
-    const hasQty = qty != null && qty !== 0
-    cells.push({
-      key: ds,
-      day: d,
-      isToday: ds === todayStr,
-      hasQty,
-      qtyText: hasQty ? String(qty) : '',
-    })
-  }
-  return cells
-})
-
-function calShift(delta: number) {
-  let m = calMonth.value + delta
-  let y = calYear.value
-  if (m < 0) {
-    m = 11
-    y--
-  } else if (m > 11) {
-    m = 0
-    y++
-  }
-  calMonth.value = m
-  calYear.value = y
-}
-
-function calBackToday() {
-  const t = new Date()
-  calYear.value = t.getFullYear()
-  calMonth.value = t.getMonth()
 }
 
 const kpiCards = computed(() => {
@@ -676,95 +618,45 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
 }
-.cal-card {
-  margin-bottom: 12px;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: #fff;
-}
-.cal-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-.cal-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-}
-.cal-legend {
-  font-size: 12px;
-  color: #909399;
-}
-.cal-legend-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #409eff;
-  margin-right: 4px;
-}
-.cal-nav {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.cal-month {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  min-width: 90px;
-  text-align: center;
-}
-.cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
-.cal-week {
-  text-align: center;
-  font-size: 12px;
-  color: #909399;
-  padding: 4px 0;
-}
-.cal-cell {
-  border: 1px solid #f0f2f5;
-  border-radius: 6px;
-  min-height: 62px;
-  padding: 6px 8px;
-  background: #fafbfc;
+
+/* 日期选择器弹出日历面板：日期下方显示当日实际销量 */
+:global(.sales-dp-popper .el-date-table td .sales-dp-cell) {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
-.cal-cell.is-today {
-  border-color: #409eff;
+:global(.sales-dp-popper .sales-dp-day) {
+  font-size: 13px;
+  line-height: 1.2;
+  color: #606266;
+}
+:global(.sales-dp-popper .sales-dp-qty) {
+  font-size: 11px;
+  font-weight: 700;
+  color: #409eff;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+:global(.sales-dp-popper .el-date-table td.today .sales-dp-day) {
+  color: #409eff;
+  font-weight: 700;
+}
+:global(.sales-dp-popper .el-date-table td.available:hover .sales-dp-cell) {
   background: #ecf5ff;
 }
-.cal-cell.is-out {
-  background: transparent;
-  border-color: transparent;
+:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-cell),
+:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-cell) {
+  background: #409eff;
 }
-.cal-day {
-  font-size: 13px;
-  color: #606266;
-  font-weight: 500;
-}
-.cal-cell.is-today .cal-day {
-  color: #409eff;
-  font-weight: 700;
-}
-.cal-qty {
-  font-size: 14px;
-  font-weight: 700;
-  color: #c0c4cc;
-  margin-top: 6px;
-}
-.cal-qty.has {
-  color: #409eff;
+:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-day),
+:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-day),
+:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-qty),
+:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-qty) {
+  color: #fff;
 }
 .kpi-row {
   margin-bottom: 12px;

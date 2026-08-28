@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalSellQty += sellQty;
       totalRefundQty += refundQty;
       totalRefundAmount += refundAmount;
-      // 按日期聚合每日实际销量（日历展示用）
+      // 按日期聚合每日实际销量（日历面板展示用）
       if (d) {
         const dd = dailyMap.get(d) || { sale_date: d, sell_qty: 0, refund_qty: 0, refund_amount: 0 };
         dd.sell_qty += sellQty;
