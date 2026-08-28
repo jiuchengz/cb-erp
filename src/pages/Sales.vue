@@ -32,10 +32,10 @@
         style="width: 260px"
         @change="onDateChange"
       >
-        <template #date-cell="{ data }">
-          <div class="sales-dp-cell" :class="{ 'is-today': data.isToday, 'is-selected': data.isSelected }">
-            <span class="sales-dp-day">{{ data.text }}</span>
-            <span class="sales-dp-qty">{{ dpQty(data.date) }}</span>
+        <template #default="{ text, dayjs: cellDayjs }">
+          <div class="cell-wrap">
+            <div class="cell-date">{{ text }}</div>
+            <div class="cell-qty">{{ dpQty(cellDayjs) }}</div>
           </div>
         </template>
       </el-date-picker>
@@ -149,10 +149,25 @@ const loading = ref(false)
 
 // 日期选择器日历面板：每日实际销量（日期 -> netQty）
 const dailyMap = ref<Record<string, number>>({})
-function dpQty(d: Date | null | undefined) {
-  if (!d || isNaN(d.getTime())) return ''
-  const qty = dailyMap.value[fmtDate(d)]
+function dpQty(d: any) {
+  if (!d || typeof d.format !== 'function') return ''
+  const qty = dailyMap.value[d.format('YYYY-MM-DD')]
   return qty != null && qty !== 0 ? String(qty) : ''
+}
+
+// 日期选择记忆：手动选择日期/点击快捷周期后持久化，刷新页面不丢失
+const RANGE_KEY = 'cb-erp-sales-range'
+const QUICK_KEY = 'cb-erp-sales-quick'
+
+function initialQuick(): number {
+  try {
+    const quickRaw = localStorage.getItem(QUICK_KEY)
+    const quick = quickRaw != null ? Number(quickRaw) : NaN
+    if (!isNaN(quick) && [0, 7, 30, 60, -1].includes(quick)) return quick
+  } catch {
+    /* 存储异常时回退默认 */
+  }
+  return 0
 }
 
 const quickRanges = [
@@ -161,7 +176,7 @@ const quickRanges = [
   { label: '近30天', days: 30 },
   { label: '近60天', days: 60 },
 ]
-const quickDays = ref<number>(0)
+const quickDays = ref<number>(initialQuick())
 
 function fmtDate(d: Date) {
   const y = d.getFullYear()
@@ -176,7 +191,41 @@ function todayRange(): [string, string] {
   return [t, t]
 }
 
-const dateRange = ref<any[]>(todayRange())
+function initialRange(): [string, string] {
+  try {
+    const quickRaw = localStorage.getItem(QUICK_KEY)
+    const quick = quickRaw != null ? Number(quickRaw) : NaN
+    // 上次是快捷周期（今天/近7天/近30天/近60天）：按当前日期重新推算
+    if (!isNaN(quick) && quick >= 0) {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - quick)
+      return [fmtDate(start), fmtDate(end)]
+    }
+    // 上次是手动选择的具体日期：原样恢复
+    const raw = localStorage.getItem(RANGE_KEY)
+    if (raw) {
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr) && arr.length === 2 && arr[0] && arr[1]) return [String(arr[0]), String(arr[1])]
+    }
+  } catch {
+    /* 存储异常时回退当天 */
+  }
+  return todayRange()
+}
+
+function saveRange(quickDaysVal: number) {
+  try {
+    if (dateRange.value?.[0] && dateRange.value?.[1]) {
+      localStorage.setItem(RANGE_KEY, JSON.stringify([dateRange.value[0], dateRange.value[1]]))
+      localStorage.setItem(QUICK_KEY, String(quickDaysVal))
+    }
+  } catch {
+    /* 忽略存储失败 */
+  }
+}
+
+const dateRange = ref<any[]>(initialRange())
 const query = reactive({ page: 1, pageSize: 20, keyword: '' })
 
 const sortState = reactive<{ prop: string; order: 'ascending' | 'descending' | null }>({
@@ -191,6 +240,7 @@ function applyQuick(days: number) {
   start.setDate(start.getDate() - days)
   dateRange.value = [fmtDate(start), fmtDate(end)]
   query.page = 1
+  saveRange(days)
   load()
 }
 
@@ -205,6 +255,8 @@ function onDateChange() {
   else if (len === 60) quickDays.value = 60
   else quickDays.value = -1
   query.page = 1
+  // 手动选择的具体日期需持久化（刷新不丢）；快捷档位记 -1，避免次日被"按今天重算"覆盖
+  saveRange(-1)
   load()
 }
 
@@ -544,6 +596,7 @@ async function onImportFile(e: Event) {
     dateRange.value = todayRange()
     quickDays.value = 0
     query.page = 1
+    saveRange(0)
     load()
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.error?.message || err?.message || '导入失败')
@@ -619,44 +672,37 @@ onMounted(() => {
   align-items: center;
 }
 
-/* 日期选择器弹出日历面板：日期下方显示当日实际销量 */
-:global(.sales-dp-popper .el-date-table td .sales-dp-cell) {
+/* 日期选择器弹出日历面板：日期下方显示当日实际销量（上一版方案1样式） */
+:global(.sales-dp-popper .el-date-table td .cell) {
+  height: 46px !important;
+  line-height: 1.1 !important;
+  padding: 4px 0 2px !important;
+}
+:global(.sales-dp-popper .cell-wrap) {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 100%;
   height: 100%;
-  border-radius: 50%;
 }
-:global(.sales-dp-popper .sales-dp-day) {
-  font-size: 13px;
-  line-height: 1.2;
+:global(.sales-dp-popper .cell-date) {
+  font-size: 14px;
   color: #606266;
-}
-:global(.sales-dp-popper .sales-dp-qty) {
-  font-size: 11px;
-  font-weight: 700;
-  color: #409eff;
   line-height: 1.2;
-  margin-top: 2px;
 }
-:global(.sales-dp-popper .el-date-table td.today .sales-dp-day) {
+:global(.sales-dp-popper .cell-qty) {
+  font-size: 10px;
   color: #409eff;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1px;
+  min-height: 12px;
 }
-:global(.sales-dp-popper .el-date-table td.available:hover .sales-dp-cell) {
-  background: #ecf5ff;
+:global(.sales-dp-popper .el-date-table td.current:not(.disabled) .cell) {
+  color: #409eff;
 }
-:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-cell),
-:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-cell) {
-  background: #409eff;
-}
-:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-day),
-:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-day),
-:global(.sales-dp-popper .el-date-table td.start-date .sales-dp-qty),
-:global(.sales-dp-popper .el-date-table td.end-date .sales-dp-qty) {
-  color: #fff;
+:global(.sales-dp-popper .el-date-table td.in-range .cell) {
+  background-color: #f2f6fc;
 }
 .kpi-row {
   margin-bottom: 12px;
