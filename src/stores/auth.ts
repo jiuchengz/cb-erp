@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const roles = ref<string[]>([])
   const permissions = ref<string[]>([])
+  const profile = ref<any>(null)
   async function init() {
     console.log('[auth:init] 开始, ts=' + new Date().toISOString())
     // 诊断：init 前 localStorage 中 session 键是否存在
@@ -62,8 +63,9 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await api.get('/auth/me')
       roles.value = data.roles ?? []
       permissions.value = data.permissions ?? []
+      profile.value = data.profile ?? null
       console.log('[auth:loadProfile] /auth/me 返回: roles=' + (data.roles ?? []).length + ' perms=' + (data.permissions ?? []).length)
-      user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
+      user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } }
     } catch (e: any) {
       console.error('[auth] loadProfile 失败:', e)
       try {
@@ -83,7 +85,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.session?.user ?? null
     roles.value = data.roles ?? []
     permissions.value = data.permissions ?? []
-    user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name } }
+    profile.value = data.profile ?? null
+    user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } }
   }
 
   async function signOut() {
@@ -96,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     roles.value = []
     permissions.value = []
+    profile.value = null
     // 退出时清理本地业务日志，避免敏感信息残留在浏览器
     try {
       const { clearLogs } = await import('@/utils/log')
@@ -109,5 +113,19 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(perm)
   }
 
-  return { session, user, roles, permissions, init, signIn, signOut, hasPermission }
+  // 个人中心保存后同步本地用户信息（姓名/头像），右上角即时生效
+  function applyProfile(p: { name?: string; avatar?: string | null }) {
+    const meta = { ...(user.value?.user_metadata ?? {}) }
+    if (p.name !== undefined) meta.name = p.name
+    if (p.avatar !== undefined) meta.avatar = p.avatar || ''
+    if (user.value) {
+      user.value = { ...user.value, user_metadata: meta }
+    }
+    if (profile.value) {
+      if (p.name !== undefined) profile.value.display_name = p.name
+      if (p.avatar !== undefined) profile.value.avatar_url = p.avatar || null
+    }
+  }
+
+  return { session, user, roles, permissions, profile, init, signIn, signOut, hasPermission, applyProfile }
 })

@@ -50,11 +50,14 @@
           </button>
           <el-dropdown trigger="click" @command="onUserCommand">
             <span class="user-trigger">
-              <span class="user">{{ auth.user?.email }}</span>
+              <span v-if="userAvatar" class="user-avatar"><img :src="userAvatar" alt="头像" /></span>
+              <span v-else class="user-avatar user-avatar-fallback">{{ userInitial }}</span>
+              <span class="user">{{ userDisplayName }}</span>
               <el-icon class="arrow"><arrow-down /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item command="password">修改密码</el-dropdown-item>
                 <el-dropdown-item command="signout" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -292,8 +295,15 @@ const pwdDialogVisible = ref(false)
 const pwdSaving = ref(false)
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
+// 右上角显示姓名（优先 display_name，缺省回退邮箱）+ 头像
+const userDisplayName = computed(() => auth.user?.user_metadata?.name || auth.user?.email || '')
+const userAvatar = computed(() => auth.user?.user_metadata?.avatar || '')
+const userInitial = computed(() => (userDisplayName.value || '?').trim().charAt(0).toUpperCase())
+
 function onUserCommand(cmd: string) {
-  if (cmd === 'password') {
+  if (cmd === 'profile') {
+    router.push('/profile')
+  } else if (cmd === 'password') {
     pwdForm.oldPassword = ''
     pwdForm.newPassword = ''
     pwdForm.confirmPassword = ''
@@ -405,10 +415,13 @@ html.dark .topbar-btn { background: rgba(255,255,255,.08); border-color: rgba(25
 html.dark .topbar-btn:hover { background: rgba(255,255,255,.14); color: var(--accent); }
 .log-badge { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; line-height: 16px; text-align: center; font-size: 11px; color: #fff; background: #e5484d; border-radius: 8px; }
 
-.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 7px 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
+.user-trigger { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 5px 12px 5px 6px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; background: rgba(255,255,255,.55); outline: none; transition: background .2s ease; }
 .user-trigger:hover { background: rgba(255,255,255,.85); }
 html.dark .user-trigger { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.16); }
 html.dark .user-trigger:hover { background: rgba(255,255,255,.14); }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-avatar-fallback { background: linear-gradient(135deg, #38bdf8, #818cf8); color: #fff; font-size: 14px; font-weight: 700; }
 .user { font-size: 14px; color: var(--ink); }
 .arrow { font-size: 12px; color: var(--ink-3); }
 .content { flex: 1; overflow: auto; padding: 2px 2px 2px 0; }

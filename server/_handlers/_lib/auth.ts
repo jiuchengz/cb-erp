@@ -6,6 +6,7 @@ export interface AuthContext {
   userId: string;
   email: string;
   displayName: string;
+  avatarUrl: string;
   roles: string[];
   permissions: string[];
 }
@@ -115,7 +116,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
   // 加载 profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, email, display_name')
+    .select('id, email, display_name, avatar_url')
     .eq('id', userId)
     .maybeSingle();
 
@@ -126,6 +127,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     userId,
     email: authData.user.email || profile?.email || '',
     displayName: (profile as any)?.display_name || '',
+    avatarUrl: (profile as any)?.avatar_url || '',
     roles,
     permissions: Array.from(permissions),
   };

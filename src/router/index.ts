@@ -90,6 +90,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/Settings.vue')
       },
       {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('@/pages/Profile.vue')
+      },
+      {
         path: 'recycle-bin',
         name: 'recycle-bin',
         component: () => import('@/pages/RecycleBin.vue')

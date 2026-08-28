@@ -1,5 +1,6 @@
 ﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import authMe from './_handlers/auth';
+import authProfile from './_handlers/auth/profile';
 import authPassword from './_handlers/auth/password';
 import authLogin from './_handlers/auth/login';
 import exportXlsx from './_handlers/export-xlsx';
@@ -67,6 +68,7 @@ interface Route {
 const routes: Route[] = [
   { pattern: /^\/auth\/login$/, handler: authLogin },
   { pattern: /^\/auth\/password$/, handler: authPassword },
+  { pattern: /^\/auth\/profile$/, handler: authProfile },
   { pattern: /^\/auth\/me$/, handler: authMe },
   { pattern: /^\/dashboard\/stats$/, handler: dashboard },
   { pattern: /^\/recycle-bin\/restore$/, handler: recycleBin },
