@@ -272,6 +272,13 @@ function shiftDate(d: string, offsetDays: number) {
   return fmtDate(dt)
 }
 
+// 计算日期所在月的最后一天（用于日历面板整月销量数据范围）
+function monthLastDay(dateStr: string) {
+  const [y, m] = dateStr.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  return `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`
+}
+
 // 聚合明细为按链接ID的数据（指定区间），拆分销售数量/退款数量/实际销量
 // 调用后端聚合接口，替代全量翻页 + 前端聚合
 async function fetchSummary(saleFrom: string, saleTo: string, keyword: string) {
@@ -308,21 +315,27 @@ async function load() {
     const from = dateRange.value?.[0] || ''
     const to = dateRange.value?.[1] || ''
 
-    // 当前周期 + 上一等长周期（用于环比）+ 商品图片映射，并行拉取
+    // 当前周期 + 上一等长周期（用于环比）+ 日历整月销量 + 商品图片映射，并行拉取
     const prevFrom = from ? shiftDate(from, -(dayDiff(from, to) + 1)) : ''
     const prevTo = from ? shiftDate(from, -1) : ''
-    const [cur, prev, imageMap] = await Promise.all([
+    // 日历面板数据范围：覆盖选择范围所在整月，未选中日期也能显示销量
+    const calFrom = from ? from.slice(0, 7) + '-01' : ''
+    const calTo = to ? monthLastDay(to) : ''
+    const [cur, prev, cal, imageMap] = await Promise.all([
       fetchSummary(from, to, query.keyword),
       prevFrom && prevTo
         ? fetchSummary(prevFrom, prevTo, query.keyword)
+        : Promise.resolve({ aggRows: [], totals: {}, dateSet: new Set<string>(), dailyTotals: [] }),
+      calFrom && calTo
+        ? fetchSummary(calFrom, calTo, query.keyword)
         : Promise.resolve({ aggRows: [], totals: {}, dateSet: new Set<string>(), dailyTotals: [] }),
       fetchImageMap(),
     ])
     const prevMap = new Map<string, any>(prev.aggRows.map((r: any) => [String(r.link_id), r]))
 
-    // 日历面板数据：按日期 -> 实际销量
+    // 日历面板数据：按日期 -> 实际销量（整月覆盖，未选中时也全部显示）
     const daily: Record<string, number> = {}
-    ;(cur.dailyTotals ?? []).forEach((d: any) => {
+    ;(cal.dailyTotals ?? []).forEach((d: any) => {
       if (d.sale_date != null) daily[d.sale_date] = Number(d.net_qty || 0)
     })
     dailyMap.value = daily
@@ -672,18 +685,20 @@ onMounted(() => {
   align-items: center;
 }
 
-/* 日期选择器弹出日历面板：日期下方显示当日实际销量（上一版方案1样式） */
-:global(.sales-dp-popper .el-date-table td .cell) {
+/* 日期选择器弹出日历面板：日期下方显示当日实际销量
+   适配新版 Element Plus：#default 插槽内容整体替换 .el-date-table-cell，
+   选中/悬停/今天等状态样式需基于 td 状态类（available/today/in-range/start-date/end-date）自行补齐 */
+:global(.sales-dp-popper .el-date-table td) {
   height: 46px !important;
-  line-height: 1.1 !important;
-  padding: 4px 0 2px !important;
 }
 :global(.sales-dp-popper .cell-wrap) {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 100%;
+  border-radius: 4px;
 }
 :global(.sales-dp-popper .cell-date) {
   font-size: 14px;
@@ -698,11 +713,32 @@ onMounted(() => {
   margin-top: 1px;
   min-height: 12px;
 }
-:global(.sales-dp-popper .el-date-table td.current:not(.disabled) .cell) {
-  color: #409eff;
+/* 悬停反馈 */
+:global(.sales-dp-popper .el-date-table td.available:hover .cell-wrap) {
+  background: #ecf5ff;
 }
-:global(.sales-dp-popper .el-date-table td.in-range .cell) {
-  background-color: #f2f6fc;
+/* 今天 */
+:global(.sales-dp-popper .el-date-table td.today .cell-date) {
+  color: #409eff;
+  font-weight: 700;
+}
+/* 选中范围内 */
+:global(.sales-dp-popper .el-date-table td.in-range .cell-wrap) {
+  background: #f2f6fc;
+}
+:global(.sales-dp-popper .el-date-table td.in-range.available:hover .cell-wrap) {
+  background: #e4edfa;
+}
+/* 起止日期：蓝底白字（明确选中反馈） */
+:global(.sales-dp-popper .el-date-table td.start-date .cell-wrap),
+:global(.sales-dp-popper .el-date-table td.end-date .cell-wrap) {
+  background: #409eff;
+}
+:global(.sales-dp-popper .el-date-table td.start-date .cell-date),
+:global(.sales-dp-popper .el-date-table td.start-date .cell-qty),
+:global(.sales-dp-popper .el-date-table td.end-date .cell-date),
+:global(.sales-dp-popper .el-date-table td.end-date .cell-qty) {
+  color: #fff;
 }
 .kpi-row {
   margin-bottom: 12px;
