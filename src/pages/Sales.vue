@@ -504,7 +504,7 @@ async function onImportFile(e: Event) {
     query.page = 1
     load()
   } catch (err: any) {
-    ElMessage.error(err?.message || '导入失败')
+    ElMessage.error(err?.response?.data?.error?.message || err?.message || '导入失败')
   } finally {
     importing.value = false
   }

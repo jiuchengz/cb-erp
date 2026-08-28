@@ -7,6 +7,7 @@ import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
 import { handleError, Errors } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
+import { normalizeUserRoles } from './users/[id]';
 
 const createSchema = z.object({
   email: z.string().email(),
