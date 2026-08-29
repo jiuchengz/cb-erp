@@ -83,6 +83,41 @@
       </div>
     </div>
 
+    <el-card shadow="never" class="stock-card">
+      <template #header>
+        <div class="card-header">
+          <span>库存统计</span>
+          <el-button link type="primary" @click="loadRecent">刷新</el-button>
+        </div>
+      </template>
+      <div class="stock-stats" v-loading="loadingRecent">
+        <div class="stock-item">
+          <div class="stock-icon domestic">🏭</div>
+          <div class="stock-info">
+            <div class="stock-label">国内库存</div>
+            <div class="stock-value">{{ fmtKpi(stats.domestic_stock) }} <small>件</small></div>
+            <div class="stock-sub">{{ stats.domestic_product_count }} 种产品</div>
+          </div>
+        </div>
+        <div class="stock-item">
+          <div class="stock-icon overseas">🌍</div>
+          <div class="stock-info">
+            <div class="stock-label">国外库存</div>
+            <div class="stock-value">{{ fmtKpi(stats.overseas_stock) }} <small>件</small></div>
+            <div class="stock-sub">{{ stats.overseas_product_count }} 种产品</div>
+          </div>
+        </div>
+        <div class="stock-item">
+          <div class="stock-icon transit">🚢</div>
+          <div class="stock-info">
+            <div class="stock-label">在途库存</div>
+            <div class="stock-value">{{ fmtKpi(stats.in_transit_stock) }} <small>件</small></div>
+            <div class="stock-sub">国内 → 海外仓</div>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
     <div class="grid-2">
       <div class="card">
         <h2>销售 / 发货 / 售后趋势 <span class="more">{{ periodText }}</span></h2>
@@ -147,7 +182,7 @@
           <b>{{ alerts.summary.safe }}</b> 正常
         </div>
       </div>
-      <el-table v-loading="alertsLoading" :data="alerts.items" size="small" empty-text="暂无预警商品">
+      <el-table v-loading="alertsLoading" :data="alertsDisplay" size="small" empty-text="暂无预警商品">
         <el-table-column label="预警" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.alert_type === 'out_of_stock' ? 'danger' : 'warning'" effect="dark" size="small">
@@ -179,8 +214,13 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="alerts.items.length" class="alert-more">
-        <router-link to="/inventory">前往库存页查看全部 →</router-link>
+      <div class="alert-footer">
+        <el-button v-if="alerts.items.length > ALERT_PAGE_SIZE" link type="primary" class="alert-toggle" @click="alertsExpanded = !alertsExpanded">
+          {{ alertsExpanded ? '收起' : '展开全部' }}（{{ alerts.items.length }} 条）
+          <span class="toggle-arrow" :class="{ expanded: alertsExpanded }">▾</span>
+        </el-button>
+        <span v-if="!alertsExpanded && alerts.items.length > ALERT_PAGE_SIZE" class="alert-collapsed-tip">已显示前 {{ ALERT_PAGE_SIZE }} 条，其余 {{ alerts.items.length - ALERT_PAGE_SIZE }} 条已折叠</span>
+        <router-link v-if="alerts.items.length" to="/inventory" class="alert-more">前往库存页查看全部 →</router-link>
       </div>
     </el-card>
 
@@ -253,8 +293,23 @@ const d = reactive({
   safety_rate: { total: 0, pass: 0, rate: null as number | null }
 })
 
-const stats = ref<any>({ recent_shipments: [] })
+const stats = ref<any>({
+  recent_shipments: [],
+  domestic_stock: 0,
+  domestic_product_count: 0,
+  overseas_stock: 0,
+  overseas_product_count: 0,
+  in_transit_stock: 0,
+})
 const recentShipments = computed(() => stats.value.recent_shipments || [])
+
+// 库存预警：默认只显示前 10 条，多余折叠可展开/收起
+const ALERT_PAGE_SIZE = 10
+const alertsExpanded = ref(false)
+const alertsDisplay = computed(() => {
+  const items = alerts.value.items || []
+  return alertsExpanded.value ? items : items.slice(0, ALERT_PAGE_SIZE)
+})
 
 async function loadAnalysis() {
   loading.value = true
@@ -468,11 +523,30 @@ onMounted(() => {
 .alert-chip.success b { color: #67c23a; }
 .alert-sku { font-size: 12px; color: var(--ink-3); }
 .alert-gap { color: #f56c6c; font-weight: 600; }
-.alert-more { margin-top: 10px; text-align: right; font-size: 13px; }
+.alert-more { font-size: 13px; }
 .alert-more a { color: var(--brand); text-decoration: none; }
+.alert-footer { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.alert-toggle { font-size: 13px; }
+.toggle-arrow { display: inline-block; transition: transform .2s; margin-left: 2px; }
+.toggle-arrow.expanded { transform: rotate(180deg); }
+.alert-collapsed-tip { font-size: 12px; color: var(--ink-3); }
+
+.stock-card { margin-top: 8px; }
+.stock-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.stock-item { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #f7f9fc; border-radius: 10px; }
+.stock-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.stock-icon.domestic { background: #ecf5ff; }
+.stock-icon.overseas { background: #fdf6ec; }
+.stock-icon.transit { background: #f0f9eb; }
+.stock-info { min-width: 0; }
+.stock-label { font-size: 13px; color: var(--ink-3); margin-bottom: 4px; }
+.stock-value { font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stock-value small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 2px; }
+.stock-sub { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 
 @media (max-width: 1100px) {
+  .stock-stats { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
 }

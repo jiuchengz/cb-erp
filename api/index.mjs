@@ -104599,23 +104599,63 @@ async function handler36(req, res) {
       if (error) throw error;
       return count ?? 0;
     };
-    const [productsCount, inventoryRows, shipmentsCount, salesCount, afterSalesCount, recentShipments] = await Promise.all([
+    const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] = await Promise.all([
       countAll("products"),
-      supabase.from("inventory").select("quantity"),
+      // 全部库存（含仓库类型，区分国内/海外仓）
+      supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)"),
+      // 产品海外库存快照（用于国外库存统计）
+      supabase.from("products").select("id, overseas_stock").is("deleted_at", null),
+      // 在途库存：调拨发货（国内→海外）且未入仓的明细数量
+      supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at)"),
       countAll("shipments"),
       countAll("sales_orders"),
       countAll("after_sales"),
       supabase.from("shipments").select("id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)").is("deleted_at", null).order("created_at", { ascending: false }).limit(5)
     ]);
     if (inventoryRows.error) throw inventoryRows.error;
+    if (productsRows.error) throw productsRows.error;
+    if (inTransitItems.error) throw inTransitItems.error;
     if (recentShipments.error) throw recentShipments.error;
-    const totalStock = (inventoryRows.data || []).reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+    let domesticStock = 0;
+    let overseasInvStock = 0;
+    const domesticProducts = /* @__PURE__ */ new Set();
+    const overseasInvProducts = /* @__PURE__ */ new Set();
+    for (const r of inventoryRows.data || []) {
+      const qty = Number(r.quantity || 0);
+      if (qty <= 0) continue;
+      const whType = r.warehouses?.wh_type;
+      if (whType === "domestic") {
+        domesticStock += qty;
+        domesticProducts.add(r.product_id);
+      } else if (whType === "overseas") {
+        overseasInvStock += qty;
+        overseasInvProducts.add(r.product_id);
+      }
+    }
+    let overseasSnapshotStock = 0;
+    const overseasSnapshotProducts = /* @__PURE__ */ new Set();
+    for (const p of productsRows.data || []) {
+      const ovs = Number(p.overseas_stock ?? 0);
+      if (ovs > 0) {
+        overseasSnapshotStock += ovs;
+        overseasSnapshotProducts.add(p.id);
+      }
+    }
+    let inTransitStock = 0;
+    for (const r of inTransitItems.data || []) {
+      const sh = r.shipments;
+      if (!sh || sh.source !== "transfer" || sh.deleted_at) continue;
+      if (sh.cargo_status && sh.cargo_status === "\u5DF2\u5165\u4ED3") continue;
+      inTransitStock += Number(r.quantity || 0);
+    }
     return res.status(200).json({
       data: {
         products_count: productsCount,
-        domestic_stock: totalStock,
-        overseas_stock: 0,
-        in_transit_stock: 0,
+        domestic_stock: Math.round(domesticStock),
+        domestic_product_count: domesticProducts.size,
+        overseas_stock: Math.round(overseasSnapshotStock + overseasInvStock),
+        overseas_product_count: (/* @__PURE__ */ new Set([...overseasSnapshotProducts, ...overseasInvProducts])).size,
+        in_transit_stock: Math.round(inTransitStock),
         shipments_count: shipmentsCount,
         sales_count: salesCount,
         after_sales_count: afterSalesCount,
