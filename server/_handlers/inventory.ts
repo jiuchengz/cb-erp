@@ -26,15 +26,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 海外库存统一来自 products.overseas_stock（平台可用库存快照，销售统计导入写入）。
     // wh_type=overseas 时直接查产品快照列表，返回结构与库存列表兼容（仓库显示"海外仓"占位）。
     if (whType === 'overseas') {
-      let q: any = supabase.from('products')
+      let pq: any = supabase.from('products')
         .select('id, sku, name, safety_stock, overseas_stock, updated_at', { count: 'exact' })
         .gt('overseas_stock', 0)
         .is('deleted_at', null);
-      if (productId) q = q.eq('id', productId);
-      if (sku) q = q.ilike('sku', `%${sku}%`);
-      q = q.order('updated_at', { ascending: false })
+      if (productId) pq = pq.eq('id', productId);
+      if (sku) pq = pq.ilike('sku', `%${sku}%`);
+      pq = pq.order('updated_at', { ascending: false })
         .range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
-      const { data, error, count } = await q;
+      const { data, error, count } = await pq;
       if (error) throw error;
       return res.status(200).json({
         data: (data || []).map((p: any) => ({
