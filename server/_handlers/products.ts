@@ -37,6 +37,11 @@ const createSchema = z.object({
   image_base64: z.string().max(6_000_000).optional(),
 });
 
+// 商品列表分页：pageSize 支持 100/200/500，0 表示不分页返回全部（供"全部"下拉使用）
+const productsListSchema = paginationSchema.extend({
+  pageSize: z.coerce.number().int().min(0).max(500).default(200),
+});
+
 // 上传图片到 Supabase Storage（public bucket: product-images），返回公开 URL
 async function uploadProductImage(supabase: any, base64: string, sku: string | null): Promise<string> {
   const bucket = 'product-images';
@@ -69,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'products.read');
-      const q = parse(paginationSchema, req.query);
+      const q = parse(productsListSchema, req.query);
       const s = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
@@ -86,8 +91,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
       if (linkIds.length) query = query.in('link_id', linkIds);
-      query = query.order('created_at', { ascending: false })
-        .range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      query = query.order('created_at', { ascending: false });
+      if (q.pageSize > 0) {
+        query = query.range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      }
 
       const { data, error, count } = await query;
       if (error) throw error;

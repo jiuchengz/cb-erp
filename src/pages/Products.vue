@@ -145,16 +145,24 @@
     </el-table>
     </div>
 
-    <el-pagination
-      background
-      layout="total, sizes, prev, pager, next"
-      :total="total"
-      v-model:current-page="query.page"
-      v-model:page-size="query.pageSize"
-      :page-sizes="[20, 50, 100]"
-      @current-change="load"
-      @size-change="onSizeChange"
-    />
+    <div class="pagination-bar">
+      <el-pagination
+        v-if="query.pageSize > 0"
+        background
+        layout="total, prev, pager, next"
+        :total="total"
+        v-model:current-page="query.page"
+        :page-size="query.pageSize"
+        @current-change="load"
+      />
+      <span v-else class="pagination-total">共 {{ total }} 条</span>
+      <el-select v-model="query.pageSize" class="page-size-select" @change="onSizeChange">
+        <el-option label="100条/页" :value="100" />
+        <el-option label="200条/页" :value="200" />
+        <el-option label="500条/页" :value="500" />
+        <el-option label="全部" :value="0" />
+      </el-select>
+    </div>
 
     <el-drawer v-model="trackVisible" :title="trackTitle" size="720px" destroy-on-close>
       <div v-loading="trackLoading">
@@ -1206,6 +1214,23 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
+}
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
 }
 .product-thumb {
   width: 56px;

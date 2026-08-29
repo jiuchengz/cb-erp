@@ -102104,6 +102104,9 @@ var createSchema3 = external_exports.object({
   // 批量导入内联图片：前端压缩后的 base64，由后端上传 Storage 并写入 image_text
   image_base64: external_exports.string().max(6e6).optional()
 });
+var productsListSchema = paginationSchema.extend({
+  pageSize: external_exports.coerce.number().int().min(0).max(500).default(200)
+});
 async function uploadProductImage(supabase, base64, sku) {
   const bucket = "product-images";
   const { data: buckets2 } = await supabase.storage.listBuckets();
@@ -102133,7 +102136,7 @@ async function handler12(req, res) {
     const ctx = await requireAuth(req);
     if (req.method === "GET") {
       requirePermission(ctx, "products.read");
-      const q = parse(paginationSchema, req.query);
+      const q = parse(productsListSchema, req.query);
       const s = typeof req.query.search === "string" ? req.query.search.trim() : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
       const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -102147,7 +102150,10 @@ async function handler12(req, res) {
       if (category) query = query.eq("category", category);
       if (status) query = query.eq("status", status);
       if (linkIds.length) query = query.in("link_id", linkIds);
-      query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      query = query.order("created_at", { ascending: false });
+      if (q.pageSize > 0) {
+        query = query.range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      }
       const { data, error, count } = await query;
       if (error) throw error;
       const rows = data || [];
