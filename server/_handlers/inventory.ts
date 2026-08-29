@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         data: (data || []).map((p: any) => ({
           product_id: p.id,
-          products: { id: p.id, sku: p.sku, name: p.name, safety_stock: p.safety_stock },
+          products: { id: p.id, sku: p.sku, name: p.name, code: p.code, image_text: p.image_text, safety_stock: p.safety_stock },
           warehouse_id: 'overseas',
           warehouses: { id: 'overseas', name: '海外仓', wh_type: 'overseas' },
           quantity: Number(p.overseas_stock ?? 0),
@@ -54,7 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let query: any = supabase.from('inventory')
-      .select('*, products!inner(id, sku, name, safety_stock), warehouses!inner(id, name, wh_type)', { count: 'exact' });
+      .select('*, products!inner(id, sku, name, code, image_text, safety_stock), warehouses!inner(id, name, wh_type)', { count: 'exact' })
+      .gt('quantity', 0); // 隐藏库存数量为 0 的记录（仅按库存数量过滤，不涉及锁定数量）
 
     if (productId) query = query.eq('product_id', productId);
     if (whType === 'domestic') query = query.eq('warehouses.wh_type', whType);

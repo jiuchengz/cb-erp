@@ -35,6 +35,21 @@
 
         <div class="table-wrap">
         <el-table v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName" height="100%">
+          <el-table-column label="产品编号" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.products?.code || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="图片" width="90">
+            <template #default="{ row }">
+              <el-tooltip v-if="isImageUrl(row.products?.image_text)" :show-after="200" :offset="10">
+                <template #content>
+                  <img :src="row.products.image_text" class="img-preview" referrerpolicy="no-referrer" @error="onImgError($event)" />
+                </template>
+                <img :src="row.products.image_text" class="product-thumb" referrerpolicy="no-referrer" @error="onImgError($event)" @click="onPreviewImage(row.products.image_text)" />
+              </el-tooltip>
+              <div v-else-if="row.products?.image_text" class="img-text-cell" :title="row.products.image_text">{{ row.products.image_text }}</div>
+              <div v-else class="img-fallback">无图片</div>
+            </template>
+          </el-table-column>
           <el-table-column label="SKU" min-width="140">
             <template #default="{ row }">{{ row.products?.sku }}</template>
           </el-table-column>
@@ -210,6 +225,12 @@
       </el-tab-pane>
     </el-tabs>
 
+    <el-dialog v-model="previewVisible" title="图片预览" width="auto" align-center>
+      <div class="preview-box">
+        <img :src="previewUrl" class="preview-img" referrerpolicy="no-referrer" @error="onImgError($event)" />
+      </div>
+    </el-dialog>
+
     <el-dialog v-model="adjustVisible" title="调整库存" width="520px" destroy-on-close>
       <el-form :model="adjustForm" label-width="110px">
         <el-form-item label="商品" required>
@@ -256,6 +277,25 @@ import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '
 const auth = useAuthStore()
 const canAdjust = computed(() => auth.hasPermission('inventory.adjust'))
 
+function isImageUrl(v: unknown): v is string {
+  if (typeof v !== 'string' || !v) return false
+  return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:image/')
+}
+
+function onImgError(e: Event) {
+  const img = e.target as HTMLImageElement
+  img.src =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="#F5F7FA" width="40" height="40"/><text x="20" y="24" text-anchor="middle" font-size="12" fill="#C0C4CC">?</text></svg>'
+    )
+}
+
+function onPreviewImage(url: string) {
+  previewUrl.value = url
+  previewVisible.value = true
+}
+
 const typeLabels: Record<string, string> = {
   purchase_in: '采购入库',
   sales_out: '销售出库',
@@ -274,6 +314,8 @@ function formatDate(v: string) {
 const activeTab = ref('list')
 const warehouses = ref<any[]>([])
 const products = ref<any[]>([])
+const previewVisible = ref(false)
+const previewUrl = ref('')
 
 async function loadAllProducts(): Promise<any[]> {
   const all: any[] = []
@@ -641,6 +683,71 @@ onMounted(() => {
 .table-wrap :deep(.el-table) {
   flex: 1;
   min-height: 0;
+}
+/* tabs 纵向撑满，使列表分页栏固定在底部（与其它页面布局一致） */
+.page :deep(.el-tabs) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.page :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.page :deep(.el-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.product-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.img-preview {
+  max-width: 280px;
+  max-height: 280px;
+  display: block;
+}
+.preview-box {
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.preview-img {
+  max-width: 100px;
+  max-height: 100px;
+  object-fit: contain;
+  display: block;
+}
+.img-text-cell {
+  font-size: 12px;
+  color: var(--color-muted);
+  max-width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.img-fallback {
+  width: 56px;
+  height: 56px;
+  line-height: 56px;
+  text-align: center;
+  color: var(--color-muted);
+  background: var(--color-fill);
+  border-radius: 4px;
+  font-size: 12px;
 }
 .page-header {
   display: flex;
