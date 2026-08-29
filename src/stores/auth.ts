@@ -90,8 +90,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signOut() {
+    // 1. 同步清除本地会话缓存与内存状态（不依赖网络，立即退出登录态）。
+    //    原先先 await supabase.auth.signOut()：其内部会向服务端发起 /logout 网络请求，
+    //    网络慢/断开时 Promise 长时间 pending，导致调用方（如空闲自动退出）后续跳转登录页永不执行。
     try {
-      await supabase.auth.signOut()
+      localStorage.removeItem(supabaseStorageKey)
     } catch {
       /* ignore */
     }
@@ -100,7 +103,11 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = []
     permissions.value = []
     profile.value = null
-    // 退出时清理本地业务日志，避免敏感信息残留在浏览器
+    // 2. 通知 Supabase 服务端销毁会话（fire-and-forget，失败不影响本地登出与页面跳转）
+    supabase.auth.signOut().catch(() => {
+      /* ignore */
+    })
+    // 3. 退出时清理本地业务日志，避免敏感信息残留在浏览器
     try {
       const { clearLogs } = await import('@/utils/log')
       clearLogs()

@@ -101,6 +101,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSiteStore } from '@/stores/site'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
+import { supabaseStorageKey } from '@/services/supabase'
 import { addLog, getLogs, type OpLogEntry } from '@/utils/log'
 import { createIdleWatcher, IDLE_TIMEOUT_MS } from '@/utils/idle-logout'
 
@@ -247,6 +248,12 @@ function toggleDarkMode() {
 const idleWatcher = createIdleWatcher(IDLE_TIMEOUT_MS, async () => {
   addLog('info', '自动退出', auth.user?.email || '')
   ElMessage.warning('长时间无操作，已自动退出登录')
+  // 先强制清除本地会话缓存，确保路由守卫放行到 /login（避免残留 refresh_token 触发会话恢复被重定向回首页）
+  try {
+    localStorage.removeItem(supabaseStorageKey)
+  } catch {
+    /* ignore */
+  }
   await auth.signOut()
   router.replace('/login')
 })
