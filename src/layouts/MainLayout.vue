@@ -269,9 +269,12 @@ onBeforeUnmount(() => {
 async function loadSystemSettings() {
   try {
     const { data } = await api.get('/system-settings')
-    const s = data?.data || data || {}
-    if (s.default_timezone?.tz && s.default_currency?.code && s.default_currency?.symbol) {
-      setSystemSettings(s.default_timezone.tz, s.default_currency.code, s.default_currency.symbol)
+    const d = data?.data || data || {}
+    const s = d.settings || {}
+    const tz = s.default_timezone
+    const cur = s.default_currency
+    if (tz?.tz && cur?.code && cur?.symbol) {
+      setSystemSettings(tz.tz, cur.code, cur.symbol)
     }
     updateClock() // 系统设置加载完成后立即按新时区刷新顶栏时钟
     fetchExchangeRates() // 拉取实时汇率缓存，金额展示按汇率换算
