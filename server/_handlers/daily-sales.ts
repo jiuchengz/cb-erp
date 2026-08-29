@@ -16,7 +16,13 @@ const importRowSchema = z.object({
   quantity: z.coerce.number().refine((v) => v !== 0, { message: 'quantity must not be 0' }),
   unit_price: z.coerce.number().min(0).optional().default(0),
   overseas_stock: z.coerce.number().min(0).optional().default(0),
+  ad_group: z.string().max(100).optional().default(''),
 });
+
+/** 规范化业务文本字段：去首尾空白，防止平台/链接因前后空格产生重复 key */
+function normText(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
 
 const importSchema = z.object({
   rows: z.array(importRowSchema).min(1).max(5000),
@@ -34,10 +40,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const saleFrom = typeof req.query.sale_from === 'string' ? req.query.sale_from.trim() : '';
       const saleTo = typeof req.query.sale_to === 'string' ? req.query.sale_to.trim() : '';
       const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+      const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+      const adGroup = typeof req.query.ad_group === 'string' ? req.query.ad_group.trim() : '';
+      const linkId = typeof req.query.link_id === 'string' ? req.query.link_id.trim() : '';
 
       let query: any = supabase.from('daily_sales').select('*', { count: 'exact' });
       if (saleFrom) query = query.gte('sale_date', saleFrom);
       if (saleTo) query = query.lte('sale_date', saleTo);
+      if (platform) query = query.eq('platform', platform);
+      if (adGroup) query = query.eq('ad_group', adGroup);
+      if (linkId) query = query.eq('link_id', linkId);
       if (keyword) {
         query = query.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
@@ -53,6 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let sumQuery: any = supabase.from('daily_sales').select('quantity');
       if (saleFrom) sumQuery = sumQuery.gte('sale_date', saleFrom);
       if (saleTo) sumQuery = sumQuery.lte('sale_date', saleTo);
+      if (platform) sumQuery = sumQuery.eq('platform', platform);
+      if (adGroup) sumQuery = sumQuery.eq('ad_group', adGroup);
+      if (linkId) sumQuery = sumQuery.eq('link_id', linkId);
       if (keyword) {
         sumQuery = sumQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
@@ -72,8 +87,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'sales.write');
       const body = parse(importSchema, req.body || {});
 
+      // 规范化文本字段（去首尾空白），避免同义不同值的脏 key（如 platform/link_id 前后空格）
+      const cleanRows = body.rows.map((r: any) => ({
+        ...r,
+        sale_date: normText(r.sale_date),
+        platform: normText(r.platform),
+        link_id: normText(r.link_id),
+        product_name: normText(r.product_name),
+        ad_group: normText(r.ad_group),
+      }));
+
       // 预取涉及链接的产品售价（MXN），用于退款行无单价时兜底
-      const linkIds = Array.from(new Set(body.rows.map((r: any) => r.link_id || '').filter(Boolean)));
+      const linkIds = Array.from(new Set(cleanRows.map((r: any) => r.link_id).filter(Boolean)));
       let linkPriceMap = new Map<string, number>();
       if (linkIds.length > 0) {
         try {
@@ -93,13 +118,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 按 (sale_date, platform, link_id) 聚合：正数=销售数量，负数=退款数量
       const keyMap = new Map<string, any>();
-      for (const r of body.rows) {
+      for (const r of cleanRows) {
         const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
         const cur = keyMap.get(key) || {
           sale_date: r.sale_date,
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name,
+          ad_group: r.ad_group,
           quantity: 0,
           refund_qty: 0,
           refund_amount: 0,
@@ -118,6 +144,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           cur.refund_amount += rq * price;
           if (price > 0 && cur.unit_price === 0) cur.unit_price = price;
         }
+        // 广告组取本次导入的非空值（后续行覆盖）
+        if (r.ad_group) cur.ad_group = r.ad_group;
         keyMap.set(key, cur);
       }
       const rows = Array.from(keyMap.values()).map((r) => ({
@@ -125,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         platform: r.platform,
         link_id: r.link_id,
         product_name: r.product_name,
+        ad_group: r.ad_group || '',
         quantity: r.quantity,
         refund_qty: r.refund_qty,
         refund_amount: r.refund_amount,
@@ -146,7 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .in('sale_date', dateBatch);
         if (exErr) throw exErr;
         for (const e of existingRows || []) {
-          existingMap.set(`${e.sale_date}|${e.platform}|${e.link_id}`, e);
+          // 历史库值可能含前后空格，按清理后的 key 匹配，避免增量累加错位
+          existingMap.set(`${e.sale_date}|${normText(e.platform)}|${normText(e.link_id)}`, e);
         }
       }
 
@@ -160,6 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name || ex.product_name || '',
+          ad_group: r.ad_group || ex.ad_group || '',
           quantity: (Number(ex.quantity) || 0) + (Number(r.quantity) || 0),
           refund_qty: (Number(ex.refund_qty) || 0) + (Number(r.refund_qty) || 0),
           refund_amount: (Number(ex.refund_amount) || 0) + (Number(r.refund_amount) || 0),
@@ -176,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
       if (error) throw error;
 
-      await writeAudit(ctx, req, 'create', 'daily_sales', null, null, {
+      await writeAudit(ctx, req, 'create', 'daily_sales', undefined, null, {
         rows: mergedRows.length,
         sale_date: body.rows[0].sale_date,
       });

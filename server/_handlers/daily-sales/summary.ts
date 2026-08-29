@@ -30,6 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const saleFrom = typeof req.query.sale_from === 'string' ? req.query.sale_from.trim() : '';
     const saleTo = typeof req.query.sale_to === 'string' ? req.query.sale_to.trim() : '';
     const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
+    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+    const adGroup = typeof req.query.ad_group === 'string' ? req.query.ad_group.trim() : '';
 
     // 循环翻页取全量（服务端取回，网络仅一次 HTTP 往返）
     const PAGE = 1000;
@@ -40,6 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('sale_date, link_id, product_name, platform, quantity, refund_qty, refund_amount, unit_price, overseas_stock');
       if (saleFrom) query = query.gte('sale_date', saleFrom);
       if (saleTo) query = query.lte('sale_date', saleTo);
+      if (platform) query = query.eq('platform', platform);
+      if (adGroup) query = query.eq('ad_group', adGroup);
       if (keyword) {
         query = query.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }

@@ -67,10 +67,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
     const from = typeof req.query.from === 'string' ? req.query.from.trim() : '';
     const to = typeof req.query.to === 'string' ? req.query.to.trim() : '';
+    // P2 参数化：店铺 / 广告组筛选（仅作用于 daily_sales 相关统计；发货/售后/库存无平台维度）
+    const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
+    const adGroup = typeof req.query.ad_group === 'string' ? req.query.ad_group.trim() : '';
 
-    // 全量聚合结果短期缓存，key 按请求参数区分（days/from/to），避免不同口径串缓存。
+    // 全量聚合结果短期缓存，key 按请求参数区分（days/from/to/platform/ad_group），避免不同口径串缓存。
     // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
-    const CACHE_KEY = `analysis:v1:${days}:${from || '-'}:${to || '-'}`;
+    const CACHE_KEY = `analysis:v1:${days}:${from || '-'}:${to || '-'}:${platform || '-'}:${adGroup || '-'}`;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) {
       return res.status(200).json({ data: cached, fromCache: true });
@@ -91,9 +94,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- 1. daily_sales：本期 + 上期 ----------
     const salesSelect = 'sale_date, platform, link_id, product_name, quantity, refund_qty, refund_amount, unit_price';
+    const salesScope = (q: any) => {
+      if (platform) q = q.eq('platform', platform);
+      if (adGroup) q = q.eq('ad_group', adGroup);
+      return q;
+    };
     const [curSales, prevSales] = await Promise.all([
-      supabase.from('daily_sales').select(salesSelect).gte('sale_date', start).lte('sale_date', end),
-      supabase.from('daily_sales').select(salesSelect).gte('sale_date', prevStart).lte('sale_date', prevEnd),
+      salesScope(supabase.from('daily_sales').select(salesSelect)).gte('sale_date', start).lte('sale_date', end),
+      salesScope(supabase.from('daily_sales').select(salesSelect)).gte('sale_date', prevStart).lte('sale_date', prevEnd),
     ]);
     if (curSales.error) throw curSales.error;
     if (prevSales.error) throw prevSales.error;

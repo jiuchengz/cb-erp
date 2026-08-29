@@ -221,6 +221,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'products.write');
       const body: any = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+      // P2 数据规范：字符串字段去首尾空白；可空字段空串归一为 null（避免空格/空串脏数据）
+      const textKeys = ['sku', 'code', 'link_id', 'name', 'barcode', 'category', 'unit', 'remark', 'competitor_id', 'shipping_mode', 'listing_time', 'image_text', 'currency'];
+      const nullableKeys = ['code', 'link_id', 'barcode', 'category', 'remark', 'competitor_id', 'listing_time', 'image_text'];
+      for (const k of textKeys) {
+        if (typeof body[k] === 'string') {
+          const v = body[k].trim();
+          body[k] = v === '' && nullableKeys.includes(k) ? null : v;
+        }
+      }
       // 产品编码唯一性兜底（前端已去重，此处防止并发/绕过前端直连）
       if (body.code) {
         const { data: dup } = await supabase

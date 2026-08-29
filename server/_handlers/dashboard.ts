@@ -29,9 +29,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
 
-    // 全量聚合结果短期缓存（无请求参数，key 固定）。
+    // P2 参数化：days(7|30|60|0=今天，默认30) 或 from/to(自定义 YYYY-MM-DD)
+    // 时间范围作用于销售/售后/发货计数（created_at）；库存概览无时间维度不受影响。
+    const daysRaw = typeof req.query.days === 'string' ? parseInt(req.query.days, 10) : 30;
+    const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
+    const from = typeof req.query.from === 'string' ? req.query.from.trim() : '';
+    const to = typeof req.query.to === 'string' ? req.query.to.trim() : '';
+    const today = new Date();
+    const fmtD = (d: Date) => {
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${dd}`;
+    };
+    const start = from || (() => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (days - 1));
+      return fmtD(d);
+    })();
+    const end = to || fmtD(today);
+    const createdAtFrom = `${start}T00:00:00`;
+    const createdAtTo = `${end}T23:59:59`;
+
+    // 全量聚合结果短期缓存（key 含时间参数，避免不同口径串缓存）。
     // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
-    const CACHE_KEY = 'dashboard:v1';
+    const CACHE_KEY = `dashboard:v1:${start}:${end}`;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) {
       return res.status(200).json({ data: cached, fromCache: true });
@@ -41,6 +62,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const countAll = async (table: string) => {
       const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true }).is('deleted_at', null);
+      if (error) throw error;
+      return count ?? 0;
+    };
+    const countSince = async (table: string) => {
+      const { count, error } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .gte('created_at', createdAtFrom)
+        .lte('created_at', createdAtTo);
       if (error) throw error;
       return count ?? 0;
     };
@@ -56,9 +87,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         supabase
           .from('shipment_items')
           .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at)'),
-        countAll('shipments'),
-        countAll('sales_orders'),
-        countAll('after_sales'),
+        countSince('shipments'),
+        countSince('sales_orders'),
+        countSince('after_sales'),
         supabase
           .from('shipments')
           .select('id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)')
@@ -111,6 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const result = {
+      period: { start, end },
       products_count: productsCount,
       domestic_stock: Math.round(domesticStock),
       domestic_product_count: domesticProducts.size,

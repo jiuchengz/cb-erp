@@ -54,6 +54,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'products.write');
       const body = parse(updateSchema, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest('无更新字段');
+      // P2 数据规范：字符串字段去首尾空白；可空字段空串归一为 null
+      const textKeys = ['sku', 'code', 'link_id', 'name', 'barcode', 'category', 'unit', 'remark', 'competitor_id', 'shipping_mode', 'listing_time', 'image_text', 'currency'];
+      const nullableKeys = ['code', 'link_id', 'barcode', 'category', 'remark', 'competitor_id', 'listing_time', 'image_text'];
+      const normalized = body as Record<string, unknown>;
+      for (const k of textKeys) {
+        const val = normalized[k];
+        if (typeof val === 'string') {
+          const v = val.trim();
+          normalized[k] = v === '' && nullableKeys.includes(k) ? null : v;
+        }
+      }
       const { data: before } = await supabase.from('products').select('*').eq('id', id).is('deleted_at', null).single();
       const { data, error } = await supabase.from('products').update(body).eq('id', id).select().single();
       if (error) {

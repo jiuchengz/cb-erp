@@ -102328,6 +102328,14 @@ async function handler12(req, res) {
       requirePermission(ctx, "products.write");
       const body = parse(createSchema3, req.body || {});
       const supabase = getAdminClient();
+      const textKeys = ["sku", "code", "link_id", "name", "barcode", "category", "unit", "remark", "competitor_id", "shipping_mode", "listing_time", "image_text", "currency"];
+      const nullableKeys = ["code", "link_id", "barcode", "category", "remark", "competitor_id", "listing_time", "image_text"];
+      for (const k of textKeys) {
+        if (typeof body[k] === "string") {
+          const v = body[k].trim();
+          body[k] = v === "" && nullableKeys.includes(k) ? null : v;
+        }
+      }
       if (body.code) {
         const { data: dup } = await supabase.from("products").select("id").eq("code", body.code).is("deleted_at", null).limit(1);
         if (dup && dup.length) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${body.code}`);
@@ -104089,8 +104097,12 @@ var importRowSchema = external_exports.object({
   product_name: external_exports.string().max(200).optional().default(""),
   quantity: external_exports.coerce.number().refine((v) => v !== 0, { message: "quantity must not be 0" }),
   unit_price: external_exports.coerce.number().min(0).optional().default(0),
-  overseas_stock: external_exports.coerce.number().min(0).optional().default(0)
+  overseas_stock: external_exports.coerce.number().min(0).optional().default(0),
+  ad_group: external_exports.string().max(100).optional().default("")
 });
+function normText(v) {
+  return typeof v === "string" ? v.trim() : "";
+}
 var importSchema = external_exports.object({
   rows: external_exports.array(importRowSchema).min(1).max(5e3)
 });
@@ -104105,9 +104117,15 @@ async function handler33(req, res) {
       const saleFrom = typeof req.query.sale_from === "string" ? req.query.sale_from.trim() : "";
       const saleTo = typeof req.query.sale_to === "string" ? req.query.sale_to.trim() : "";
       const keyword = typeof req.query.keyword === "string" ? req.query.keyword.trim() : "";
+      const platform = typeof req.query.platform === "string" ? req.query.platform.trim() : "";
+      const adGroup = typeof req.query.ad_group === "string" ? req.query.ad_group.trim() : "";
+      const linkId = typeof req.query.link_id === "string" ? req.query.link_id.trim() : "";
       let query = supabase.from("daily_sales").select("*", { count: "exact" });
       if (saleFrom) query = query.gte("sale_date", saleFrom);
       if (saleTo) query = query.lte("sale_date", saleTo);
+      if (platform) query = query.eq("platform", platform);
+      if (adGroup) query = query.eq("ad_group", adGroup);
+      if (linkId) query = query.eq("link_id", linkId);
       if (keyword) {
         query = query.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
@@ -104117,6 +104135,9 @@ async function handler33(req, res) {
       let sumQuery = supabase.from("daily_sales").select("quantity");
       if (saleFrom) sumQuery = sumQuery.gte("sale_date", saleFrom);
       if (saleTo) sumQuery = sumQuery.lte("sale_date", saleTo);
+      if (platform) sumQuery = sumQuery.eq("platform", platform);
+      if (adGroup) sumQuery = sumQuery.eq("ad_group", adGroup);
+      if (linkId) sumQuery = sumQuery.eq("link_id", linkId);
       if (keyword) {
         sumQuery = sumQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
@@ -104133,7 +104154,15 @@ async function handler33(req, res) {
     if (req.method === "POST") {
       requirePermission(ctx, "sales.write");
       const body = parse(importSchema, req.body || {});
-      const linkIds = Array.from(new Set(body.rows.map((r) => r.link_id || "").filter(Boolean)));
+      const cleanRows = body.rows.map((r) => ({
+        ...r,
+        sale_date: normText(r.sale_date),
+        platform: normText(r.platform),
+        link_id: normText(r.link_id),
+        product_name: normText(r.product_name),
+        ad_group: normText(r.ad_group)
+      }));
+      const linkIds = Array.from(new Set(cleanRows.map((r) => r.link_id).filter(Boolean)));
       let linkPriceMap = /* @__PURE__ */ new Map();
       if (linkIds.length > 0) {
         try {
@@ -104146,13 +104175,14 @@ async function handler33(req, res) {
         }
       }
       const keyMap = /* @__PURE__ */ new Map();
-      for (const r of body.rows) {
+      for (const r of cleanRows) {
         const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
         const cur = keyMap.get(key) || {
           sale_date: r.sale_date,
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name,
+          ad_group: r.ad_group,
           quantity: 0,
           refund_qty: 0,
           refund_amount: 0,
@@ -104170,6 +104200,7 @@ async function handler33(req, res) {
           cur.refund_amount += rq * price;
           if (price > 0 && cur.unit_price === 0) cur.unit_price = price;
         }
+        if (r.ad_group) cur.ad_group = r.ad_group;
         keyMap.set(key, cur);
       }
       const rows = Array.from(keyMap.values()).map((r) => ({
@@ -104177,6 +104208,7 @@ async function handler33(req, res) {
         platform: r.platform,
         link_id: r.link_id,
         product_name: r.product_name,
+        ad_group: r.ad_group || "",
         quantity: r.quantity,
         refund_qty: r.refund_qty,
         refund_amount: r.refund_amount,
@@ -104191,7 +104223,7 @@ async function handler33(req, res) {
         const { data: existingRows, error: exErr } = await supabase.from("daily_sales").select("*").in("sale_date", dateBatch);
         if (exErr) throw exErr;
         for (const e of existingRows || []) {
-          existingMap.set(`${e.sale_date}|${e.platform}|${e.link_id}`, e);
+          existingMap.set(`${e.sale_date}|${normText(e.platform)}|${normText(e.link_id)}`, e);
         }
       }
       const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -104204,6 +104236,7 @@ async function handler33(req, res) {
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name || ex.product_name || "",
+          ad_group: r.ad_group || ex.ad_group || "",
           quantity: (Number(ex.quantity) || 0) + (Number(r.quantity) || 0),
           refund_qty: (Number(ex.refund_qty) || 0) + (Number(r.refund_qty) || 0),
           refund_amount: (Number(ex.refund_amount) || 0) + (Number(r.refund_amount) || 0),
@@ -104243,12 +104276,16 @@ async function handler34(req, res) {
     const saleFrom = typeof req.query.sale_from === "string" ? req.query.sale_from.trim() : "";
     const saleTo = typeof req.query.sale_to === "string" ? req.query.sale_to.trim() : "";
     const keyword = typeof req.query.keyword === "string" ? req.query.keyword.trim() : "";
+    const platform = typeof req.query.platform === "string" ? req.query.platform.trim() : "";
+    const adGroup = typeof req.query.ad_group === "string" ? req.query.ad_group.trim() : "";
     const PAGE = 1e3;
     const all = [];
     for (let page = 0; ; page++) {
       let query = supabase.from("daily_sales").select("sale_date, link_id, product_name, platform, quantity, refund_qty, refund_amount, unit_price, overseas_stock");
       if (saleFrom) query = query.gte("sale_date", saleFrom);
       if (saleTo) query = query.lte("sale_date", saleTo);
+      if (platform) query = query.eq("platform", platform);
+      if (adGroup) query = query.eq("ad_group", adGroup);
       if (keyword) {
         query = query.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
@@ -104413,7 +104450,9 @@ async function handler35(req, res) {
     const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
     const from = typeof req.query.from === "string" ? req.query.from.trim() : "";
     const to = typeof req.query.to === "string" ? req.query.to.trim() : "";
-    const CACHE_KEY = `analysis:v1:${days}:${from || "-"}:${to || "-"}`;
+    const platform = typeof req.query.platform === "string" ? req.query.platform.trim() : "";
+    const adGroup = typeof req.query.ad_group === "string" ? req.query.ad_group.trim() : "";
+    const CACHE_KEY = `analysis:v1:${days}:${from || "-"}:${to || "-"}:${platform || "-"}:${adGroup || "-"}`;
     const cached2 = cacheGet(CACHE_KEY);
     if (cached2) {
       return res.status(200).json({ data: cached2, fromCache: true });
@@ -104430,9 +104469,14 @@ async function handler35(req, res) {
     const prevEnd = addDays(start, -1);
     const prevStart = addDays(prevEnd, -(n - 1));
     const salesSelect = "sale_date, platform, link_id, product_name, quantity, refund_qty, refund_amount, unit_price";
+    const salesScope = (q) => {
+      if (platform) q = q.eq("platform", platform);
+      if (adGroup) q = q.eq("ad_group", adGroup);
+      return q;
+    };
     const [curSales, prevSales] = await Promise.all([
-      supabase.from("daily_sales").select(salesSelect).gte("sale_date", start).lte("sale_date", end),
-      supabase.from("daily_sales").select(salesSelect).gte("sale_date", prevStart).lte("sale_date", prevEnd)
+      salesScope(supabase.from("daily_sales").select(salesSelect)).gte("sale_date", start).lte("sale_date", end),
+      salesScope(supabase.from("daily_sales").select(salesSelect)).gte("sale_date", prevStart).lte("sale_date", prevEnd)
     ]);
     if (curSales.error) throw curSales.error;
     if (prevSales.error) throw prevSales.error;
@@ -104738,7 +104782,25 @@ async function handler36(req, res) {
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
-    const CACHE_KEY = "dashboard:v1";
+    const daysRaw = typeof req.query.days === "string" ? parseInt(req.query.days, 10) : 30;
+    const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
+    const from = typeof req.query.from === "string" ? req.query.from.trim() : "";
+    const to = typeof req.query.to === "string" ? req.query.to.trim() : "";
+    const today = /* @__PURE__ */ new Date();
+    const fmtD = (d) => {
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${d.getFullYear()}-${m}-${dd}`;
+    };
+    const start = from || (() => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (days - 1));
+      return fmtD(d);
+    })();
+    const end = to || fmtD(today);
+    const createdAtFrom = `${start}T00:00:00`;
+    const createdAtTo = `${end}T23:59:59`;
+    const CACHE_KEY = `dashboard:v1:${start}:${end}`;
     const cached2 = cacheGet(CACHE_KEY);
     if (cached2) {
       return res.status(200).json({ data: cached2, fromCache: true });
@@ -104746,6 +104808,11 @@ async function handler36(req, res) {
     const supabase = getAdminClient();
     const countAll = async (table) => {
       const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true }).is("deleted_at", null);
+      if (error) throw error;
+      return count ?? 0;
+    };
+    const countSince = async (table) => {
+      const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true }).is("deleted_at", null).gte("created_at", createdAtFrom).lte("created_at", createdAtTo);
       if (error) throw error;
       return count ?? 0;
     };
@@ -104757,9 +104824,9 @@ async function handler36(req, res) {
       supabase.from("products").select("id, overseas_stock").is("deleted_at", null),
       // 在途库存：调拨发货（国内→海外）且未入仓的明细数量
       supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at)"),
-      countAll("shipments"),
-      countAll("sales_orders"),
-      countAll("after_sales"),
+      countSince("shipments"),
+      countSince("sales_orders"),
+      countSince("after_sales"),
       supabase.from("shipments").select("id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)").is("deleted_at", null).order("created_at", { ascending: false }).limit(5)
     ]);
     if (inventoryRows.error) throw inventoryRows.error;
@@ -104799,6 +104866,7 @@ async function handler36(req, res) {
       inTransitStock += Number(r.quantity || 0);
     }
     const result = {
+      period: { start, end },
       products_count: productsCount,
       domestic_stock: Math.round(domesticStock),
       domestic_product_count: domesticProducts.size,
@@ -105066,6 +105134,19 @@ async function handler38(req, res) {
 // server/_handlers/exchange-rates.ts
 var cached = null;
 var CACHE_MS = 10 * 60 * 1e3;
+function todayUTC() {
+  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+}
+function pickCurrencies(rates, currencies) {
+  if (!currencies) return rates;
+  const list = currencies.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
+  if (list.length === 0) return rates;
+  const out = {};
+  for (const c of list) {
+    if (rates[c] !== void 0) out[c] = Number(rates[c]);
+  }
+  return out;
+}
 async function fetchRatesFrom(url) {
   try {
     const resp = await fetch(url, { signal: AbortSignal.timeout(8e3) });
@@ -105089,6 +105170,58 @@ async function fetchFromErApi() {
 async function fetchFromExchangeRateApi() {
   return fetchRatesFrom("https://api.exchangerate-api.com/v4/latest/USD");
 }
+async function loadFromDb(dateStr) {
+  try {
+    const supabase = getAdminClient();
+    const { data, error } = await supabase.from("exchange_rate_history").select("currency, rate, source").eq("date", dateStr);
+    if (error) return null;
+    if (!data || data.length === 0) return null;
+    const rates = {};
+    let source = "";
+    for (const row of data) {
+      const v = Number(row?.rate);
+      const c = (row?.currency || "").toUpperCase();
+      if (c && Number.isFinite(v) && v > 0) {
+        rates[c] = v;
+        if (row?.source) source = row.source;
+      }
+    }
+    if (Object.keys(rates).length === 0) return null;
+    return { rates, source };
+  } catch {
+    return null;
+  }
+}
+async function saveToDb(dateStr, rates, source) {
+  try {
+    const supabase = getAdminClient();
+    const rows = Object.entries(rates).map(([currency, rate]) => ({
+      currency,
+      rate,
+      date: dateStr,
+      source,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }));
+    await supabase.from("exchange_rate_history").upsert(rows, { onConflict: "currency,date" });
+  } catch {
+  }
+}
+async function loadRangeFromDb(from, to) {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase.from("exchange_rate_history").select("currency, rate, date, source").gte("date", from).lte("date", to).order("date", { ascending: true });
+  if (error) return [];
+  const byDate = /* @__PURE__ */ new Map();
+  for (const row of data || []) {
+    const d = String(row?.date || "").slice(0, 10);
+    const c = (row?.currency || "").toUpperCase();
+    const v = Number(row?.rate);
+    if (!d || !c || !Number.isFinite(v) || v <= 0) continue;
+    if (!byDate.has(d)) byDate.set(d, { rates: {}, source: row?.source || "" });
+    byDate.get(d).rates[c] = v;
+    if (row?.source) byDate.get(d).source = row.source;
+  }
+  return Array.from(byDate.entries()).map(([date, v]) => ({ date, rates: v.rates, source: v.source })).sort((a, b) => a.date < b.date ? -1 : 1);
+}
 async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -105096,10 +105229,48 @@ async function handler39(req, res) {
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
-    const now = Date.now();
-    if (cached && now - cached.ts < CACHE_MS) {
+    const from = typeof req.query.from === "string" ? req.query.from.trim() : "";
+    const to = typeof req.query.to === "string" ? req.query.to.trim() : "";
+    const date = typeof req.query.date === "string" ? req.query.date.trim() : "";
+    const currencies = typeof req.query.currencies === "string" ? req.query.currencies.trim() : "";
+    if (from && to) {
+      const range = await loadRangeFromDb(from, to);
       return res.status(200).json({
-        data: { base: "USD", rates: cached.rates, updatedAt: cached.updatedAt }
+        data: {
+          base: "USD",
+          from,
+          to,
+          days: range.map((d) => ({
+            date: d.date,
+            rates: pickCurrencies(d.rates, currencies),
+            source: d.source
+          })),
+          total: range.length
+        }
+      });
+    }
+    const targetDate = date || todayUTC();
+    const now = Date.now();
+    if (!date && cached && now - cached.ts < CACHE_MS) {
+      return res.status(200).json({
+        data: {
+          base: "USD",
+          rates: pickCurrencies(cached.rates, currencies),
+          updatedAt: cached.updatedAt,
+          source: cached.source
+        }
+      });
+    }
+    const dbHit = await loadFromDb(targetDate);
+    if (dbHit) {
+      return res.status(200).json({
+        data: {
+          base: "USD",
+          rates: pickCurrencies(dbHit.rates, currencies),
+          updatedAt: `${targetDate}T00:00:00.000Z`,
+          source: dbHit.source || "exchange_rate_history",
+          fromDb: true
+        }
       });
     }
     let rates = await fetchFromErApi();
@@ -105108,18 +105279,44 @@ async function handler39(req, res) {
       rates = await fetchFromExchangeRateApi();
       source = "exchangerate-api.com";
     }
-    if (!rates) {
-      if (cached) {
-        return res.status(200).json({
-          data: { base: "USD", rates: cached.rates, updatedAt: cached.updatedAt, stale: true }
-        });
-      }
-      return res.status(502).json({ error: { code: "RATES_UNAVAILABLE", message: "\u6C47\u7387\u670D\u52A1\u6682\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" } });
+    if (rates) {
+      await saveToDb(targetDate, rates, source);
+      if (!date) cached = { rates, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), source, ts: now };
+      return res.status(200).json({
+        data: {
+          base: "USD",
+          rates: pickCurrencies(rates, currencies),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          source,
+          fromDb: false
+        }
+      });
     }
-    cached = { rates, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), ts: now };
-    return res.status(200).json({
-      data: { base: "USD", rates, updatedAt: cached.updatedAt, source }
-    });
+    const staleDb = await loadFromDb(targetDate);
+    if (staleDb) {
+      return res.status(200).json({
+        data: {
+          base: "USD",
+          rates: pickCurrencies(staleDb.rates, currencies),
+          updatedAt: `${targetDate}T00:00:00.000Z`,
+          source: staleDb.source || "exchange_rate_history",
+          fromDb: true,
+          stale: true
+        }
+      });
+    }
+    if (cached) {
+      return res.status(200).json({
+        data: {
+          base: "USD",
+          rates: pickCurrencies(cached.rates, currencies),
+          updatedAt: cached.updatedAt,
+          source: cached.source,
+          stale: true
+        }
+      });
+    }
+    return res.status(502).json({ error: { code: "RATES_UNAVAILABLE", message: "\u6C47\u7387\u670D\u52A1\u6682\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" } });
   } catch (e) {
     handleError2(e, req, res);
   }
@@ -105647,6 +105844,14 @@ async function handler50(req, res) {
       requirePermission(ctx, "products.write");
       const body = parse(updateSchema8, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
+      const textKeys = ["sku", "code", "link_id", "name", "barcode", "category", "unit", "remark", "competitor_id", "shipping_mode", "listing_time", "image_text", "currency"];
+      const nullableKeys = ["code", "link_id", "barcode", "category", "remark", "competitor_id", "listing_time", "image_text"];
+      for (const k of textKeys) {
+        if (typeof body[k] === "string") {
+          const v = body[k].trim();
+          body[k] = v === "" && nullableKeys.includes(k) ? null : v;
+        }
+      }
       const { data: before } = await supabase.from("products").select("*").eq("id", id).is("deleted_at", null).single();
       const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
       if (error) {
