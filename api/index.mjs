@@ -101782,7 +101782,7 @@ async function handler9(req, res) {
     const whType = typeof req.query.wh_type === "string" ? req.query.wh_type.trim() : "";
     const supabase = getAdminClient();
     if (whType === "overseas") {
-      let pq = supabase.from("products").select("id, sku, name, safety_stock, overseas_stock, updated_at", { count: "exact" }).gt("overseas_stock", 0).is("deleted_at", null);
+      let pq = supabase.from("products").select("id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at", { count: "exact" }).gt("overseas_stock", 0).is("deleted_at", null);
       if (productId) pq = pq.eq("id", productId);
       if (sku) pq = pq.ilike("sku", `%${sku}%`);
       pq = pq.order("updated_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);

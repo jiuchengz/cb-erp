@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // wh_type=overseas 时直接查产品快照列表，返回结构与库存列表兼容（仓库显示"海外仓"占位）。
     if (whType === 'overseas') {
       let pq: any = supabase.from('products')
-        .select('id, sku, name, safety_stock, overseas_stock, updated_at', { count: 'exact' })
+        .select('id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at', { count: 'exact' })
         .gt('overseas_stock', 0)
         .is('deleted_at', null);
       if (productId) pq = pq.eq('id', productId);
