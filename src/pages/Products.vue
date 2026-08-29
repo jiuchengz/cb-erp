@@ -146,6 +146,7 @@
     </div>
 
     <div class="pagination-bar">
+      <span class="pagination-total">当前页共 {{ rows.length }} 条</span>
       <el-pagination
         v-if="query.pageSize > 0"
         background
@@ -429,7 +430,7 @@ const total = ref(0)
 const loading = ref(false)
 const previewVisible = ref(false)
 const previewUrl = ref('')
-const query = reactive({ page: 1, pageSize: 20, search: '', status: '' })
+const query = reactive({ page: 1, pageSize: 200, search: '', status: '' })
 const rate = ref(0.38)
 
 // 销量时间范围下拉
