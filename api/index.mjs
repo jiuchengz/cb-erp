@@ -101781,9 +101781,32 @@ async function handler9(req, res) {
     const productId = typeof req.query.product_id === "string" ? req.query.product_id.trim() : "";
     const whType = typeof req.query.wh_type === "string" ? req.query.wh_type.trim() : "";
     const supabase = getAdminClient();
+    if (whType === "overseas") {
+      let q2 = supabase.from("products").select("id, sku, name, safety_stock, overseas_stock, updated_at", { count: "exact" }).gt("overseas_stock", 0).is("deleted_at", null);
+      if (productId) q2 = q2.eq("id", productId);
+      if (sku) q2 = q2.ilike("sku", `%${sku}%`);
+      q2 = q2.order("updated_at", { ascending: false }).range((q2.page - 1) * q2.pageSize, q2.page * q2.pageSize - 1);
+      const { data: data2, error: error2, count: count2 } = await q2;
+      if (error2) throw error2;
+      return res.status(200).json({
+        data: (data2 || []).map((p) => ({
+          product_id: p.id,
+          products: { id: p.id, sku: p.sku, name: p.name, safety_stock: p.safety_stock },
+          warehouse_id: "overseas",
+          warehouses: { id: "overseas", name: "\u6D77\u5916\u4ED3", wh_type: "overseas" },
+          quantity: Number(p.overseas_stock ?? 0),
+          reserved_quantity: 0,
+          updated_at: p.updated_at,
+          _snapshot: true
+        })),
+        total: count2 ?? 0,
+        page: q2.page,
+        pageSize: q2.pageSize
+      });
+    }
     let query = supabase.from("inventory").select("*, products!inner(id, sku, name, safety_stock), warehouses!inner(id, name, wh_type)", { count: "exact" });
     if (productId) query = query.eq("product_id", productId);
-    if (whType === "domestic" || whType === "overseas") query = query.eq("warehouses.wh_type", whType);
+    if (whType === "domestic") query = query.eq("warehouses.wh_type", whType);
     if (sku) {
       const { data: prods } = await supabase.from("products").select("id").eq("sku", sku).is("deleted_at", null);
       const ids = (prods || []).map((p) => p.id);

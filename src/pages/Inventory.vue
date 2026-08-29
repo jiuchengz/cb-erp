@@ -26,11 +26,12 @@
             <el-option label="国内仓" value="domestic" />
             <el-option label="海外仓" value="overseas" />
           </el-select>
-          <el-select v-model="query.warehouse_id" placeholder="仓库" clearable style="width: 180px" @change="load">
+          <el-select v-model="query.warehouse_id" placeholder="仓库" clearable style="width: 180px" :disabled="query.wh_type === 'overseas'" @change="load">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
           <el-button type="primary" @click="load">查询</el-button>
         </div>
+        <div v-if="query.wh_type === 'overseas'" class="overseas-tip">海外仓库存为平台可用库存快照（overseas_stock），不区分具体仓库</div>
 
         <div class="table-wrap">
         <el-table v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName" height="100%">
@@ -651,6 +652,15 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+}
+.overseas-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin: -8px 0 12px;
+  padding: 6px 10px;
+  background: var(--el-color-primary-light-9, #ecf5ff);
+  border-radius: 4px;
 }
 .el-pagination {
   margin-top: 16px;
