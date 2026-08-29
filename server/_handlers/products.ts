@@ -67,6 +67,30 @@ async function uploadProductImage(supabase: any, base64: string, sku: string | n
   return data.publicUrl;
 }
 
+// 分批执行 in() 查询：Supabase 网关对 URL 长度有限制，
+// in() 超过约 650 个值即触发 400 Bad Request（实测 600 正常 / 700 失败）。
+// 每批 500 个，规避超长 URL 导致商品页全量拉取时 500。
+const IN_CHUNK_SIZE = 500;
+async function queryInChunks(
+  supabase: any,
+  table: string,
+  column: string,
+  ids: string[],
+  selectStr: string,
+  extra?: (q: any) => any
+): Promise<{ data: any[] | null; error: any }> {
+  const out: any[] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE);
+    let q: any = supabase.from(table).select(selectStr).in(column, chunk);
+    if (extra) q = extra(q);
+    const { data, error } = await q;
+    if (error) return { data: null, error };
+    out.push(...(data || []));
+  }
+  return { data: out, error: null };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
@@ -115,11 +139,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const salesMap = new Map<string, number>();
 
       if (pageIds.length) {
-        // 库存：inventory join warehouses(wh_type)
-        const { data: invRows, error: invErr } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, warehouses!inner(wh_type)')
-          .in('product_id', pageIds);
+        // 库存：inventory join warehouses(wh_type)（分批查询，避免超长 URL）
+        const { data: invRows, error: invErr } = await queryInChunks(
+          supabase,
+          'inventory',
+          'product_id',
+          pageIds,
+          'product_id, quantity, warehouses!inner(wh_type)'
+        );
         if (invErr) throw invErr;
         for (const r of invRows || []) {
           const pid = r.product_id as string;
@@ -129,11 +156,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           else if (whType === 'overseas') ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
 
-        // 在途（仅调拨发货）：shipments(source=transfer) 货物状态非「已入仓」的货件数量
-        const { data: transitShipRows, error: transitShipErr } = await supabase
-          .from('shipment_items')
-          .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at)')
-          .in('product_id', pageIds);
+        // 在途（仅调拨发货）：shipments(source=transfer) 货物状态非「已入仓」的货件数量（分批查询）
+        const { data: transitShipRows, error: transitShipErr } = await queryInChunks(
+          supabase,
+          'shipment_items',
+          'product_id',
+          pageIds,
+          'product_id, quantity, shipments!inner(source, cargo_status, deleted_at)'
+        );
         if (transitShipErr) throw transitShipErr;
         for (const r of transitShipRows || []) {
           const sh = r.shipments as any;
@@ -144,15 +174,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // 销量：从 daily_sales 按 link_id 聚合（销售数量-退款数量=实际销量）；
-        // sales_from/sales_to 传了则按 sale_date 过滤
+        // sales_from/sales_to 传了则按 sale_date 过滤（分批查询）
         if (pageLinkIds.length) {
-          let salesQuery: any = supabase
-            .from('daily_sales')
-            .select('link_id, quantity, refund_qty')
-            .in('link_id', pageLinkIds);
-          if (salesFrom) salesQuery = salesQuery.gte('sale_date', salesFrom);
-          if (salesTo) salesQuery = salesQuery.lte('sale_date', salesTo);
-          const { data: salesRows, error: salesErr } = await salesQuery;
+          const { data: salesRows, error: salesErr } = await queryInChunks(
+            supabase,
+            'daily_sales',
+            'link_id',
+            pageLinkIds,
+            'link_id, quantity, refund_qty',
+            (q: any) => {
+              let x: any = q;
+              if (salesFrom) x = x.gte('sale_date', salesFrom);
+              if (salesTo) x = x.lte('sale_date', salesTo);
+              return x;
+            }
+          );
           if (salesErr) throw salesErr;
           for (const r of salesRows || []) {
             const pid = linkToProduct.get(r.link_id as string);

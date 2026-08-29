@@ -102130,6 +102130,19 @@ async function uploadProductImage(supabase, base64, sku) {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;
 }
+var IN_CHUNK_SIZE = 500;
+async function queryInChunks(supabase, table, column, ids, selectStr, extra) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_CHUNK_SIZE);
+    let q = supabase.from(table).select(selectStr).in(column, chunk);
+    if (extra) q = extra(q);
+    const { data, error } = await q;
+    if (error) return { data: null, error };
+    out.push(...data || []);
+  }
+  return { data: out, error: null };
+}
 async function handler12(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -102169,7 +102182,13 @@ async function handler12(req, res) {
       const transitMap = /* @__PURE__ */ new Map();
       const salesMap = /* @__PURE__ */ new Map();
       if (pageIds.length) {
-        const { data: invRows, error: invErr } = await supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)").in("product_id", pageIds);
+        const { data: invRows, error: invErr } = await queryInChunks(
+          supabase,
+          "inventory",
+          "product_id",
+          pageIds,
+          "product_id, quantity, warehouses!inner(wh_type)"
+        );
         if (invErr) throw invErr;
         for (const r of invRows || []) {
           const pid = r.product_id;
@@ -102178,7 +102197,13 @@ async function handler12(req, res) {
           if (whType === "domestic") domMap.set(pid, (domMap.get(pid) || 0) + qty);
           else if (whType === "overseas") ovsMap.set(pid, (ovsMap.get(pid) || 0) + qty);
         }
-        const { data: transitShipRows, error: transitShipErr } = await supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at)").in("product_id", pageIds);
+        const { data: transitShipRows, error: transitShipErr } = await queryInChunks(
+          supabase,
+          "shipment_items",
+          "product_id",
+          pageIds,
+          "product_id, quantity, shipments!inner(source, cargo_status, deleted_at)"
+        );
         if (transitShipErr) throw transitShipErr;
         for (const r of transitShipRows || []) {
           const sh = r.shipments;
@@ -102188,10 +102213,19 @@ async function handler12(req, res) {
           transitMap.set(pid, (transitMap.get(pid) || 0) + Number(r.quantity || 0));
         }
         if (pageLinkIds.length) {
-          let salesQuery = supabase.from("daily_sales").select("link_id, quantity, refund_qty").in("link_id", pageLinkIds);
-          if (salesFrom) salesQuery = salesQuery.gte("sale_date", salesFrom);
-          if (salesTo) salesQuery = salesQuery.lte("sale_date", salesTo);
-          const { data: salesRows, error: salesErr } = await salesQuery;
+          const { data: salesRows, error: salesErr } = await queryInChunks(
+            supabase,
+            "daily_sales",
+            "link_id",
+            pageLinkIds,
+            "link_id, quantity, refund_qty",
+            (q2) => {
+              let x = q2;
+              if (salesFrom) x = x.gte("sale_date", salesFrom);
+              if (salesTo) x = x.lte("sale_date", salesTo);
+              return x;
+            }
+          );
           if (salesErr) throw salesErr;
           for (const r of salesRows || []) {
             const pid = linkToProduct.get(r.link_id);
