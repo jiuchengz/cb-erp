@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth';
-import { requireAnyPermission } from '../_lib/rbac';
+import { requirePermission } from '../_lib/rbac';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
 import { handleError } from '../_lib/error';
@@ -41,30 +41,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
-    requireAnyPermission(ctx, [
-      'products.read',
-      'inventory.read',
-      'sales.read',
-      'shipment.read',
-      'procurement.read',
-      'transfer.read',
-      'after_sales.read',
-    ]);
+    // 备份导出全部核心业务表，属于系统级敏感操作：仅限 system.manage 管理员
+    requirePermission(ctx, 'system.manage');
     const supabase = getAdminClient();
 
     const tables: Record<string, any[]> = {};
     const failed: string[] = [];
+    // 分页分批拉取，避免大表 select('*') 一次返回超限 / 响应超时
+    const PAGE_SIZE = 500;
     for (const name of CORE_TABLES) {
+      const allRows: any[] = [];
+      let ok = true;
       try {
-        const { data, error } = await supabase.from(name).select('*');
-        if (error) {
-          failed.push(name);
-          continue;
+        let from = 0;
+        for (;;) {
+          const { data, error } = await supabase.from(name).select('*').range(from, from + PAGE_SIZE - 1);
+          if (error) {
+            ok = false;
+            break;
+          }
+          allRows.push(...(data || []));
+          if (!data || data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
         }
-        tables[name] = data || [];
       } catch (e) {
-        failed.push(name);
+        ok = false;
       }
+      if (!ok) {
+        failed.push(name);
+        continue;
+      }
+      tables[name] = allRows;
     }
 
     const payload = {

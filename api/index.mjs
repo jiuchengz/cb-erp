@@ -49208,10 +49208,10 @@ var require_async = __commonJS({
       function compose(...args) {
         return seq(...args.reverse());
       }
-      function mapLimit(coll, limit, iteratee, callback) {
+      function mapLimit2(coll, limit, iteratee, callback) {
         return _asyncMap(eachOfLimit$2(limit), coll, iteratee, callback);
       }
-      var mapLimit$1 = awaitify(mapLimit, 4);
+      var mapLimit$1 = awaitify(mapLimit2, 4);
       function concatLimit(coll, limit, iteratee, callback) {
         var _iteratee = wrapAsync(iteratee);
         return mapLimit$1(coll, limit, (val, iterCb) => {
@@ -101513,6 +101513,47 @@ async function handler4(req, res) {
 
 // server/_handlers/export-xlsx.ts
 var import_exceljs = __toESM(require_excel(), 1);
+
+// server/_handlers/_lib/rbac.ts
+function requirePermission(ctx, permission) {
+  if (ctx.roles.includes("super_admin")) return;
+  if (!ctx.permissions.includes(permission)) {
+    throw Errors.forbidden(`\u65E0\u6743\u9650\uFF1A${permission}`);
+  }
+}
+function requireAnyPermission(ctx, permissions) {
+  if (ctx.roles.includes("super_admin")) return;
+  if (!permissions.some((p) => ctx.permissions.includes(p))) {
+    throw Errors.forbidden(`\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}`);
+  }
+}
+
+// server/_handlers/export-xlsx.ts
+var READ_PERMISSIONS = [
+  "products.read",
+  "inventory.read",
+  "sales.read",
+  "shipment.read",
+  "procurement.read",
+  "transfer.read",
+  "after_sales.read",
+  "replenishment.read"
+];
+var MAX_ROWS = 5e4;
+var IMAGE_CONCURRENCY = 5;
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (; ; ) {
+      const i = idx++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 async function loadImageBuffer(url) {
   try {
     if (url.startsWith("data:image/")) {
@@ -101540,14 +101581,18 @@ function extOf(url) {
 }
 async function handler5(req, res) {
   try {
-    await requireAuth(req);
+    const ctx = await requireAuth(req);
     if (req.method !== "POST") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
+    requireAnyPermission(ctx, READ_PERMISSIONS);
     const body = req.body || {};
     const fileName = body.fileName || "export.xlsx";
     const sheetName = body.sheetName || "Sheet1";
     const aoa = Array.isArray(body.aoa) ? body.aoa : [];
+    if (aoa.length > MAX_ROWS) {
+      throw Errors.badRequest("\u5355\u6B21\u5BFC\u51FA\u884C\u6570\u4E0D\u80FD\u8D85\u8FC7 " + MAX_ROWS + " \u884C\uFF0C\u8BF7\u5206\u6279\u5BFC\u51FA");
+    }
     const merges = Array.isArray(body.merges) ? body.merges : [];
     const cols = Array.isArray(body.cols) ? body.cols : [];
     const widths = Array.isArray(body.widths) ? body.widths : [];
@@ -101606,9 +101651,9 @@ async function handler5(req, res) {
       }
     }
     if (withImages && imageCells.length) {
-      for (const cell of imageCells) {
+      await mapLimit(imageCells, IMAGE_CONCURRENCY, async (cell) => {
         const buf = await loadImageBuffer(cell.url);
-        if (!buf) continue;
+        if (!buf) return;
         try {
           const imageId = wb.addImage({ buffer: buf, extension: extOf(cell.url) });
           ws.addImage(imageId, {
@@ -101617,7 +101662,7 @@ async function handler5(req, res) {
           });
         } catch {
         }
-      }
+      });
     }
     const buffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -101625,20 +101670,6 @@ async function handler5(req, res) {
     return res.status(200).send(Buffer.from(buffer));
   } catch (e) {
     return handleError2(res, e);
-  }
-}
-
-// server/_handlers/_lib/rbac.ts
-function requirePermission(ctx, permission) {
-  if (ctx.roles.includes("super_admin")) return;
-  if (!ctx.permissions.includes(permission)) {
-    throw Errors.forbidden(`\u65E0\u6743\u9650\uFF1A${permission}`);
-  }
-}
-function requireAnyPermission(ctx, permissions) {
-  if (ctx.roles.includes("super_admin")) return;
-  if (!permissions.some((p) => ctx.permissions.includes(p))) {
-    throw Errors.forbidden(`\u65E0\u6743\u9650\uFF1A${permissions.join(" \u6216 ")}`);
   }
 }
 
@@ -102678,10 +102709,16 @@ async function handler17(req, res) {
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const updates = items.filter((it) => foundIds.has(it.id)).map((it) => ({ id: it.id, overseas_stock: it.overseas_stock, updated_at: now }));
     let updatedCount = 0;
+    const groupByStock = /* @__PURE__ */ new Map();
     for (const u of updates) {
-      const { data: upd, error: upErr } = await supabase.from("products").update({ overseas_stock: u.overseas_stock, updated_at: now }).eq("id", u.id).is("deleted_at", null).select("id");
+      const v = Number(u.overseas_stock) || 0;
+      if (!groupByStock.has(v)) groupByStock.set(v, []);
+      groupByStock.get(v).push(u.id);
+    }
+    for (const [stock, idList] of groupByStock) {
+      const { data: upd, error: upErr } = await supabase.from("products").update({ overseas_stock: stock, updated_at: now }).in("id", idList).is("deleted_at", null).select("id");
       if (upErr) throw upErr;
-      if (upd && upd.length) updatedCount += 1;
+      updatedCount += (upd || []).length;
     }
     await writeAudit(ctx, req, "batch_stock", "product", void 0, null, {
       updated: updatedCount,
@@ -102823,29 +102860,34 @@ async function handler19(req, res) {
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
-    requireAnyPermission(ctx, [
-      "products.read",
-      "inventory.read",
-      "sales.read",
-      "shipment.read",
-      "procurement.read",
-      "transfer.read",
-      "after_sales.read"
-    ]);
+    requirePermission(ctx, "system.manage");
     const supabase = getAdminClient();
     const tables = {};
     const failed = [];
+    const PAGE_SIZE = 500;
     for (const name of CORE_TABLES) {
+      const allRows = [];
+      let ok = true;
       try {
-        const { data, error } = await supabase.from(name).select("*");
-        if (error) {
-          failed.push(name);
-          continue;
+        let from = 0;
+        for (; ; ) {
+          const { data, error } = await supabase.from(name).select("*").range(from, from + PAGE_SIZE - 1);
+          if (error) {
+            ok = false;
+            break;
+          }
+          allRows.push(...data || []);
+          if (!data || data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
         }
-        tables[name] = data || [];
       } catch (e) {
-        failed.push(name);
+        ok = false;
       }
+      if (!ok) {
+        failed.push(name);
+        continue;
+      }
+      tables[name] = allRows;
     }
     const payload = {
       app: "cb-erp",
@@ -104125,16 +104167,45 @@ async function handler33(req, res) {
         overseas_stock: r.overseas_stock,
         updated_at: (/* @__PURE__ */ new Date()).toISOString()
       }));
+      const saleDates = Array.from(new Set(rows.map((r) => r.sale_date)));
+      const existingMap = /* @__PURE__ */ new Map();
+      for (let i = 0; i < saleDates.length; i += 500) {
+        const dateBatch = saleDates.slice(i, i + 500);
+        const { data: existingRows, error: exErr } = await supabase.from("daily_sales").select("*").in("sale_date", dateBatch);
+        if (exErr) throw exErr;
+        for (const e of existingRows || []) {
+          existingMap.set(`${e.sale_date}|${e.platform}|${e.link_id}`, e);
+        }
+      }
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const mergedRows = rows.map((r) => {
+        const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
+        const ex = existingMap.get(key);
+        if (!ex) return r;
+        return {
+          sale_date: r.sale_date,
+          platform: r.platform,
+          link_id: r.link_id,
+          product_name: r.product_name || ex.product_name || "",
+          quantity: (Number(ex.quantity) || 0) + (Number(r.quantity) || 0),
+          refund_qty: (Number(ex.refund_qty) || 0) + (Number(r.refund_qty) || 0),
+          refund_amount: (Number(ex.refund_amount) || 0) + (Number(r.refund_amount) || 0),
+          // unit_price / overseas_stock 取本次导入的最新非 0 值，为 0 时保留原值
+          unit_price: Number(r.unit_price) > 0 ? r.unit_price : Number(ex.unit_price) || 0,
+          overseas_stock: Number(r.overseas_stock) > 0 ? r.overseas_stock : Number(ex.overseas_stock) || 0,
+          updated_at: now
+        };
+      });
       const { error } = await supabase.from("daily_sales").upsert(
-        rows,
+        mergedRows,
         { onConflict: "sale_date,platform,link_id" }
       );
       if (error) throw error;
       await writeAudit(ctx, req, "create", "daily_sales", null, null, {
-        rows: rows.length,
+        rows: mergedRows.length,
         sale_date: body.rows[0].sale_date
       });
-      return res.status(201).json({ data: { imported: rows.length } });
+      return res.status(201).json({ data: { imported: mergedRows.length } });
     }
     return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
   } catch (e) {
@@ -104706,7 +104777,7 @@ var actionSchema = external_exports.object({
   type: typeSchema,
   id: external_exports.string().uuid()
 });
-var READ_PERMISSIONS = [
+var READ_PERMISSIONS2 = [
   "products.read",
   "sales.read",
   "procurement.read",
@@ -104730,7 +104801,7 @@ async function handler37(req, res) {
     const ctx = await requireAuth(req);
     const supabase = getAdminClient();
     if (req.method === "GET") {
-      requireAnyPermission(ctx, READ_PERMISSIONS);
+      requireAnyPermission(ctx, READ_PERMISSIONS2);
       const typeRaw = typeof req.query.type === "string" ? req.query.type.trim() : "";
       const page = Math.max(1, parseInt(typeof req.query.page === "string" ? req.query.page : "1", 10) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt(typeof req.query.pageSize === "string" ? req.query.pageSize : "20", 10) || 20));
@@ -104770,16 +104841,15 @@ async function handler37(req, res) {
       if (!before) throw Errors.notFound("\u8BB0\u5F55\u4E0D\u5B58\u5728");
       if (!before.deleted_at) throw Errors.badRequest("\u8BE5\u8BB0\u5F55\u4E0D\u5728\u56DE\u6536\u7AD9\u4E2D");
       if (path.endsWith("/recycle-bin/restore")) {
-        const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq("id", id).select().single();
-        if (error) throw error;
         if (type === "shipment" && before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3") {
           const items = before.shipment_items || [];
           if (items.length) {
             const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
             if (domWhErr) throw domWhErr;
             if (domWh) {
+              const rpcErrors = [];
               for (const it of items) {
-                await supabase.rpc("adjust_inventory", {
+                const { error: rpcErr } = await supabase.rpc("adjust_inventory", {
                   p_product_id: it.product_id,
                   p_warehouse_id: domWh.id,
                   p_quantity: -Number(it.quantity || 0),
@@ -104789,10 +104859,18 @@ async function handler37(req, res) {
                   p_created_by: ctx.userId,
                   p_note: "\u8C03\u62E8\u53D1\u8D27\u6062\u590D\u6263\u51CF\u56FD\u5185\u5E93\u5B58"
                 });
+                if (rpcErr) {
+                  rpcErrors.push(`product ${it.product_id}: ${rpcErr.message || "RPC \u8C03\u7528\u5931\u8D25"}`);
+                }
+              }
+              if (rpcErrors.length) {
+                throw Errors.conflict("\u6062\u590D\u8D27\u4EF6\u65F6\u6263\u51CF\u56FD\u5185\u5E93\u5B58\u5931\u8D25\uFF1A" + rpcErrors.join("; "));
               }
             }
           }
         }
+        const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq("id", id).select().single();
+        if (error) throw error;
         await writeAudit(ctx, req, "restore", type, id, before, data);
         return res.status(200).json({ ok: true, data });
       }

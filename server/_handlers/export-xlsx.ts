@@ -1,7 +1,41 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import ExcelJS from 'exceljs';
 import { requireAuth } from './_lib/auth';
-import { handleError } from './_lib/error';
+import { requireAnyPermission } from './_lib/rbac';
+import { handleError, Errors } from './_lib/error';
+
+// 导出接口权限：任一读权限即可（与 system/backup 收紧策略不同，
+// 前端大量导出场景依赖这些业务读权限）
+const READ_PERMISSIONS = [
+  'products.read',
+  'inventory.read',
+  'sales.read',
+  'shipment.read',
+  'procurement.read',
+  'transfer.read',
+  'after_sales.read',
+  'replenishment.read',
+];
+
+// 单次导出行数上限，防止超大 aoa 撑爆内存/响应
+const MAX_ROWS = 50000;
+// 图片 URL 并发拉取上限，避免同时发起大量外部请求
+const IMAGE_CONCURRENCY = 5;
+
+// 受控并发的批量处理：限制同时进行的异步任务数
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = idx++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 interface ImageCell {
   r: number;
@@ -46,15 +80,19 @@ function extOf(url: string): 'png' | 'jpeg' | 'gif' | 'webp' {
 // withImages=true 时后端拉取图片插入单元格；false 时图片列由前端直接写 URL 文本
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    await requireAuth(req);
+    const ctx = await requireAuth(req);
     if (req.method !== 'POST') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
+    requireAnyPermission(ctx, READ_PERMISSIONS);
 
     const body = req.body || {};
     const fileName: string = body.fileName || 'export.xlsx';
     const sheetName: string = body.sheetName || 'Sheet1';
     const aoa: unknown[][] = Array.isArray(body.aoa) ? body.aoa : [];
+    if (aoa.length > MAX_ROWS) {
+      throw Errors.badRequest('单次导出行数不能超过 ' + MAX_ROWS + ' 行，请分批导出');
+    }
     const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = Array.isArray(body.merges) ? body.merges : [];
     const cols: { wch?: number }[] = Array.isArray(body.cols) ? body.cols : [];
     const widths: (number | null | undefined)[] = Array.isArray(body.widths) ? body.widths : [];
@@ -126,9 +164,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (withImages && imageCells.length) {
-      for (const cell of imageCells) {
+      await mapLimit(imageCells, IMAGE_CONCURRENCY, async (cell) => {
         const buf = await loadImageBuffer(cell.url);
-        if (!buf) continue;
+        if (!buf) return;
         try {
           const imageId = wb.addImage({ buffer: buf, extension: extOf(cell.url) });
           ws.addImage(imageId, {
@@ -138,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch {
           // 单张图片失败不影响整体导出
         }
-      }
+      });
     }
 
     const buffer = await wb.xlsx.writeBuffer();

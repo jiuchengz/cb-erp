@@ -133,17 +133,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at: new Date().toISOString(),
       }));
 
+      // 增量累加语义：先按 sale_date 范围查询库中已有行，再做累加合并，
+      // 避免重复导入同一 (sale_date, platform, link_id) 时整行覆盖导致
+      // 已有 quantity / refund_qty / refund_amount 丢失。
+      const saleDates = Array.from(new Set(rows.map((r: any) => r.sale_date)));
+      const existingMap = new Map<string, any>();
+      for (let i = 0; i < saleDates.length; i += 500) {
+        const dateBatch = saleDates.slice(i, i + 500);
+        const { data: existingRows, error: exErr } = await supabase
+          .from('daily_sales')
+          .select('*')
+          .in('sale_date', dateBatch);
+        if (exErr) throw exErr;
+        for (const e of existingRows || []) {
+          existingMap.set(`${e.sale_date}|${e.platform}|${e.link_id}`, e);
+        }
+      }
+
+      const now = new Date().toISOString();
+      const mergedRows = rows.map((r: any) => {
+        const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
+        const ex = existingMap.get(key);
+        if (!ex) return r;
+        return {
+          sale_date: r.sale_date,
+          platform: r.platform,
+          link_id: r.link_id,
+          product_name: r.product_name || ex.product_name || '',
+          quantity: (Number(ex.quantity) || 0) + (Number(r.quantity) || 0),
+          refund_qty: (Number(ex.refund_qty) || 0) + (Number(r.refund_qty) || 0),
+          refund_amount: (Number(ex.refund_amount) || 0) + (Number(r.refund_amount) || 0),
+          // unit_price / overseas_stock 取本次导入的最新非 0 值，为 0 时保留原值
+          unit_price: Number(r.unit_price) > 0 ? r.unit_price : (Number(ex.unit_price) || 0),
+          overseas_stock: Number(r.overseas_stock) > 0 ? r.overseas_stock : (Number(ex.overseas_stock) || 0),
+          updated_at: now,
+        };
+      });
+
       const { error } = await supabase.from('daily_sales').upsert(
-        rows,
+        mergedRows,
         { onConflict: 'sale_date,platform,link_id' }
       );
       if (error) throw error;
 
       await writeAudit(ctx, req, 'create', 'daily_sales', null, null, {
-        rows: rows.length,
+        rows: mergedRows.length,
         sale_date: body.rows[0].sale_date,
       });
-      return res.status(201).json({ data: { imported: rows.length } });
+      return res.status(201).json({ data: { imported: mergedRows.length } });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });

@@ -112,9 +112,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!before.deleted_at) throw Errors.badRequest('该记录不在回收站中');
 
       if (path.endsWith('/recycle-bin/restore')) {
-        const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq('id', id).select().single();
-        if (error) throw error;
-        // 恢复未入仓的调拨货件：对称扣回国内库存（删除时已回补）
+        // 恢复未入仓的调拨货件：对称扣回国内库存（删除时已回补）。
+        // 先执行库存扣减并收集错误：任一 RPC 失败则整体失败（不执行恢复），
+        // 避免恢复后库存与账面不一致。
         if (type === 'shipment' && (before as any).source === 'transfer' && before.cargo_status !== '已入仓') {
           const items = (before as any).shipment_items || [];
           if (items.length) {
@@ -127,8 +127,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .maybeSingle();
             if (domWhErr) throw domWhErr;
             if (domWh) {
+              const rpcErrors: string[] = [];
               for (const it of items) {
-                await supabase.rpc('adjust_inventory', {
+                const { error: rpcErr } = await supabase.rpc('adjust_inventory', {
                   p_product_id: it.product_id,
                   p_warehouse_id: domWh.id,
                   p_quantity: -Number(it.quantity || 0),
@@ -138,10 +139,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   p_created_by: ctx.userId,
                   p_note: '调拨发货恢复扣减国内库存',
                 });
+                if (rpcErr) {
+                  rpcErrors.push(`product ${it.product_id}: ${rpcErr.message || 'RPC 调用失败'}`);
+                }
+              }
+              if (rpcErrors.length) {
+                throw Errors.conflict('恢复货件时扣减国内库存失败：' + rpcErrors.join('; '));
               }
             }
           }
         }
+        const { data, error } = await supabase.from(cfg.table).update({ deleted_at: null }).eq('id', id).select().single();
+        if (error) throw error;
         await writeAudit(ctx, req, 'restore', type, id, before, data);
         return res.status(200).json({ ok: true, data });
       }
