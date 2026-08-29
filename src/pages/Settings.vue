@@ -362,16 +362,22 @@
             <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
           </el-table-column>
         </el-table>
-        <el-pagination
-          background
-          layout="total, sizes, prev, pager, next"
-          :total="auditTotal"
-          v-model:current-page="auditQuery.page"
-          v-model:page-size="auditQuery.pageSize"
-          :page-sizes="[20, 50, 100]"
-          @current-change="loadAudit"
-          @size-change="onAuditSizeChange"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ auditRows.length }} 条</span>
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :total="auditTotal"
+            v-model:current-page="auditQuery.page"
+            :page-size="auditQuery.pageSize"
+            @current-change="loadAudit"
+          />
+          <el-select v-model="auditQuery.pageSize" class="page-size-select" @change="onAuditSizeChange">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -1288,7 +1294,7 @@ async function removeWh(row: any) {
 const auditRows = ref<any[]>([])
 const auditTotal = ref(0)
 const auditLoading = ref(false)
-const auditQuery = reactive({ page: 1, pageSize: 20, resource_type: '', action: '' })
+const auditQuery = reactive({ page: 1, pageSize: 200, resource_type: '', action: '' })
 
 async function loadAudit() {
   auditLoading.value = true
@@ -1318,6 +1324,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
+}
 .page-header {
   display: flex;
   justify-content: space-between;

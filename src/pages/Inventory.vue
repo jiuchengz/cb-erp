@@ -55,16 +55,22 @@
         </el-table>
         </div>
 
-        <el-pagination
-          background
-          layout="total, sizes, prev, pager, next"
-          :total="total"
-          v-model:current-page="query.page"
-          v-model:page-size="query.pageSize"
-          :page-sizes="[20, 50, 100]"
-          @current-change="load"
-          @size-change="onSizeChange"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ rows.length }} 条</span>
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :total="total"
+            v-model:current-page="query.page"
+            :page-size="query.pageSize"
+            @current-change="load"
+          />
+          <el-select v-model="query.pageSize" class="page-size-select" @change="onSizeChange">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="库存流水" name="tx">
@@ -111,16 +117,22 @@
           </el-table-column>
         </el-table>
 
-        <el-pagination
-          background
-          layout="total, sizes, prev, pager, next"
-          :total="txTotal"
-          v-model:current-page="txQuery.page"
-          v-model:page-size="txQuery.pageSize"
-          :page-sizes="[20, 50, 100]"
-          @current-change="loadTx"
-          @size-change="onTxSizeChange"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ txRows.length }} 条</span>
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :total="txTotal"
+            v-model:current-page="txQuery.page"
+            :page-size="txQuery.pageSize"
+            @current-change="loadTx"
+          />
+          <el-select v-model="txQuery.pageSize" class="page-size-select" @change="onTxSizeChange">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="在途发货" name="intransit">
@@ -162,16 +174,22 @@
           </el-table-column>
         </el-table>
 
-        <el-pagination
-          background
-          layout="total, sizes, prev, pager, next"
-          :total="itTotal"
-          v-model:current-page="itQuery.page"
-          v-model:page-size="itQuery.pageSize"
-          :page-sizes="[20, 50, 100]"
-          @current-change="loadInTransit"
-          @size-change="onItSizeChange"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ itRows.length }} 条</span>
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :total="itTotal"
+            v-model:current-page="itQuery.page"
+            :page-size="itQuery.pageSize"
+            @current-change="loadInTransit"
+          />
+          <el-select v-model="itQuery.pageSize" class="page-size-select" @change="onItSizeChange">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
 
         <el-dialog v-model="itDetailVisible" title="在途发货 - 商品明细" width="640px">
           <div v-if="itDetail" style="margin-bottom: 10px">
@@ -284,7 +302,7 @@ function onTabChange(name: string | number) {
 const itRows = ref<any[]>([])
 const itTotal = ref(0)
 const itLoading = ref(false)
-const itQuery = reactive({ page: 1, pageSize: 20, tracking_no: '' })
+const itQuery = reactive({ page: 1, pageSize: 200, tracking_no: '' })
 const itDetailVisible = ref(false)
 const itDetail = ref<any>(null)
 
@@ -320,7 +338,7 @@ async function openItDetail(id: string) {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, sku: '', warehouse_id: '' })
+const query = reactive({ page: 1, pageSize: 200, sku: '', warehouse_id: '' })
 
 // 低库存预警阈值（可配置常量）
 const LOW_STOCK_THRESHOLD = 5
@@ -353,7 +371,7 @@ function onSizeChange() {
 const txRows = ref<any[]>([])
 const txTotal = ref(0)
 const txLoading = ref(false)
-const txQuery = reactive({ page: 1, pageSize: 20, sku: '', type: '' })
+const txQuery = reactive({ page: 1, pageSize: 200, sku: '', type: '' })
 
 async function loadTx() {
   txLoading.value = true
@@ -567,6 +585,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
+}
 .page {
   display: flex;
   flex-direction: column;

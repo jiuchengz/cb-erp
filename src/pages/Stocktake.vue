@@ -57,15 +57,21 @@
     </div>
 
     <div class="pager">
-      <el-pagination
-        layout="total, sizes, prev, pager, next"
-        :total="total"
-        :page-size="query.pageSize"
-        :current-page="query.page"
-        :page-sizes="[10, 20, 50, 100]"
-        @size-change="onSizeChange"
-        @current-change="(p: number) => { query.page = p; load() }"
-      />
+      <div class="pagination-bar">
+        <span class="pagination-total">当前页共 {{ rows.length }} 条</span>
+        <el-pagination
+          layout="total, prev, pager, next"
+          :total="total"
+          :page-size="query.pageSize"
+          :current-page="query.page"
+          @current-change="(p: number) => { query.page = p; load() }"
+        />
+        <el-select v-model="query.pageSize" class="page-size-select" @change="onSizeChange">
+          <el-option label="100条/页" :value="100" />
+          <el-option label="200条/页" :value="200" />
+          <el-option label="500条/页" :value="500" />
+        </el-select>
+      </div>
     </div>
 
     <!-- 新建：先选仓库/日期/备注 -->
@@ -188,13 +194,21 @@
         </el-table-column>
       </el-table>
       <div class="pager">
-        <el-pagination
-          layout="total, prev, pager, next"
-          :total="pickerTotal"
-          :page-size="pickerPageSize"
-          :current-page="pickerPage"
-          @current-change="(p: number) => { pickerPage = p; loadPicker() }"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ pickerRows.length }} 条</span>
+          <el-pagination
+            layout="total, prev, pager, next"
+            :total="pickerTotal"
+            :page-size="pickerPageSize"
+            :current-page="pickerPage"
+            @current-change="(p: number) => { pickerPage = p; loadPicker() }"
+          />
+          <el-select v-model="pickerPageSize" class="page-size-select" @change="pickerPage = 1; loadPicker()">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
       </div>
       <template #footer>
         <el-button @click="pickerVisible = false">取消</el-button>
@@ -349,7 +363,7 @@ function statusType(s: string): any {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 20, stocktake_no: '', warehouse_id: '', status: '' })
+const query = reactive({ page: 1, pageSize: 200, stocktake_no: '', warehouse_id: '', status: '' })
 
 async function load() {
   loading.value = true
@@ -567,13 +581,13 @@ const pickerLoading = ref(false)
 const pickerRows = ref<any[]>([])
 const pickerTotal = ref(0)
 const pickerPage = ref(1)
-const pickerPageSize = 10
+const pickerPageSize = ref(200)
 const pickerSelection = ref<any[]>([])
 
 async function loadPicker() {
   pickerLoading.value = true
   try {
-    const params: any = { page: pickerPage.value, pageSize: pickerPageSize }
+    const params: any = { page: pickerPage.value, pageSize: pickerPageSize.value }
     if (pickerQuery.value.trim()) params.search = pickerQuery.value.trim()
     const { data } = await api.get('/products', { params })
     pickerRows.value = data.data ?? []
@@ -808,6 +822,23 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
+}
 .st-meta {
   display: flex;
   flex-wrap: wrap;

@@ -42,16 +42,22 @@
       </el-table>
     </div>
 
-    <el-pagination
-      background
-      layout="total, sizes, prev, pager, next"
-      :total="total"
-      v-model:current-page="query.page"
-      v-model:page-size="query.pageSize"
-      :page-sizes="[20, 50, 100]"
-      @current-change="load"
-      @size-change="onSizeChange"
-    />
+    <div class="pagination-bar">
+      <span class="pagination-total">当前页共 {{ rows.length }} 条</span>
+      <el-pagination
+        background
+        layout="total, prev, pager, next"
+        :total="total"
+        v-model:current-page="query.page"
+        :page-size="query.pageSize"
+        @current-change="load"
+      />
+      <el-select v-model="query.pageSize" class="page-size-select" @change="onSizeChange">
+        <el-option label="100条/页" :value="100" />
+        <el-option label="200条/页" :value="200" />
+        <el-option label="500条/页" :value="500" />
+      </el-select>
+    </div>
   </div>
 </template>
 
@@ -107,7 +113,7 @@ function statusTag(s?: string) {
 const rows = ref<RecycleItem[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ type: '', page: 1, pageSize: 20 })
+const query = reactive({ type: '', page: 1, pageSize: 200 })
 
 function onTypeChange() {
   query.page = 1
@@ -174,6 +180,23 @@ onMounted(load)
 </script>
 
 <style scoped>
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
+}
 .page-desc {
   color: #909399;
   font-size: 13px;

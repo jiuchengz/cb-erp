@@ -52,16 +52,23 @@
           <el-table-column prop="user_email" label="操作人" min-width="200" show-overflow-tooltip />
         </el-table>
         <div v-if="!serverLogs.length && !serverLoading && !serverError" class="log-empty">暂无服务端审计日志</div>
-        <el-pagination
-          v-if="serverTotal > serverPageSize"
-          background
-          layout="total, prev, pager, next"
-          :total="serverTotal"
-          v-model:current-page="serverPage"
-          :page-size="serverPageSize"
-          style="margin-top: 16px; justify-content: flex-end"
-          @current-change="loadServerLogs"
-        />
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ serverLogs.length }} 条</span>
+          <el-pagination
+            v-if="serverTotal > serverPageSize"
+            background
+            layout="total, prev, pager, next"
+            :total="serverTotal"
+            v-model:current-page="serverPage"
+            :page-size="serverPageSize"
+            @current-change="loadServerLogs"
+          />
+          <el-select v-model="serverPageSize" class="page-size-select" @change="serverPage = 1; loadServerLogs()">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+            <el-option label="500条/页" :value="500" />
+          </el-select>
+        </div>
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -102,7 +109,7 @@ function logTypeLabel(t: OpLogEntry['type']) {
 const serverLogs = ref<any[]>([])
 const serverTotal = ref(0)
 const serverPage = ref(1)
-const serverPageSize = 50
+const serverPageSize = ref(200)
 const serverLoading = ref(false)
 const serverError = ref('')
 
@@ -115,7 +122,7 @@ async function loadServerLogs() {
   serverError.value = ''
   try {
     const { data } = await api.get('/audit-logs', {
-      params: { page: serverPage.value, pageSize: serverPageSize },
+      params: { page: serverPage.value, pageSize: serverPageSize.value },
     })
     serverLogs.value = data.data ?? []
     serverTotal.value = data.total ?? 0
@@ -137,6 +144,23 @@ function serverActionTag(action: string) {
 </script>
 
 <style scoped>
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.pagination-bar .el-pagination {
+  margin-top: 0;
+}
+.pagination-total {
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #606266);
+}
+.page-size-select {
+  width: 120px;
+}
 .page-header {
   display: flex;
   justify-content: space-between;
