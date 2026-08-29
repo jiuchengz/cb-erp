@@ -74,7 +74,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
+    <el-table v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange" @sort-change="onSortChange">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column label="图片" width="90">
@@ -101,8 +101,8 @@
       <el-table-column label="备注" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.remark || '—' }}</template>
       </el-table-column>
-      <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" />
-      <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" />
+      <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" sortable="custom" />
+      <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" sortable="custom" />
       <el-table-column label="库存预警" width="110" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.out_of_stock" type="danger" effect="dark" size="small">断货</el-tag>
@@ -110,7 +110,7 @@
           <el-tag v-else type="success" effect="plain" size="small">正常</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="在途数量" width="110" align="right">
+      <el-table-column prop="in_transit_qty" label="在途数量" width="110" align="right" sortable="custom">
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
         </template>
@@ -154,7 +154,7 @@
         :total="total"
         v-model:current-page="query.page"
         :page-size="query.pageSize"
-        @current-change="load"
+        @current-change="onPageChange"
       />
       <span v-else class="pagination-total">共 {{ total }} 条</span>
       <el-select v-model="query.pageSize" class="page-size-select" @change="onSizeChange">
@@ -433,6 +433,12 @@ const previewUrl = ref('')
 const query = reactive({ page: 1, pageSize: 200, search: '', status: '' })
 const rate = ref(0.38)
 
+// 列排序状态（与销售统计模块一致：全量排序后再前端分页）
+const sortState = reactive<{ prop: string; order: 'ascending' | 'descending' | null }>({
+  prop: '',
+  order: null,
+})
+
 // 销量时间范围下拉
 const salesRangeKey = ref('all') // all | today | 7d | 15d | 30d | custom
 const customSalesRange = ref<[string, string] | null>(null)
@@ -642,7 +648,8 @@ function onPreviewImage(url: string) {
 async function load() {
   loading.value = true
   try {
-    const params: Record<string, any> = { ...query }
+    // pageSize 固定传 0：一次拉取全量商品，排序与分页在前端完成（与销售统计模块一致）
+    const params: Record<string, any> = { ...query, pageSize: 0 }
     if (salesFrom.value) params.sales_from = salesFrom.value
     if (salesTo.value) params.sales_to = salesTo.value
     const { data } = await api.get('/products', { params })
@@ -655,9 +662,37 @@ async function load() {
   }
 }
 
+// 全量排序 -> 前端分页（与 Sales.vue 一致）
+const pagedRows = computed(() => {
+  let list = rows.value
+  if (sortState.prop && sortState.order) {
+    const prop = sortState.prop
+    const dir = sortState.order === 'ascending' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      const va = (a as any)[prop]
+      const vb = (b as any)[prop]
+      if (va == null && vb == null) return 0
+      if (va == null) return 1
+      if (vb == null) return -1
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+      return String(va).localeCompare(String(vb)) * dir
+    })
+  }
+  if (query.pageSize <= 0) return list
+  const start = (query.page - 1) * query.pageSize
+  return list.slice(start, start + query.pageSize)
+})
+
+function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  sortState.prop = prop || ''
+  sortState.order = order
+  query.page = 1
+}
+
+function onPageChange() {}
+
 function onSizeChange() {
   query.page = 1
-  load()
 }
 
 const dialogVisible = ref(false)
