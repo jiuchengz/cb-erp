@@ -4612,26 +4612,26 @@ var require_RealtimeClient = __commonJS({
     var RECONNECT_INTERVALS = [1e3, 2e3, 5e3, 1e4];
     var DEFAULT_RECONNECT_FALLBACK = 1e4;
     function createMemorySessionStorage() {
-      const store = /* @__PURE__ */ new Map();
+      const store2 = /* @__PURE__ */ new Map();
       return {
         get length() {
-          return store.size;
+          return store2.size;
         },
         clear() {
-          store.clear();
+          store2.clear();
         },
         getItem(key) {
-          return store.has(key) ? store.get(key) : null;
+          return store2.has(key) ? store2.get(key) : null;
         },
         key(index) {
           var _a;
-          return (_a = Array.from(store.keys())[index]) !== null && _a !== void 0 ? _a : null;
+          return (_a = Array.from(store2.keys())[index]) !== null && _a !== void 0 ? _a : null;
         },
         removeItem(key) {
-          store.delete(key);
+          store2.delete(key);
         },
         setItem(key, value) {
-          store.set(key, String(value));
+          store2.set(key, String(value));
         }
       };
     }
@@ -7396,16 +7396,16 @@ var require_local_storage = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.memoryLocalStorageAdapter = memoryLocalStorageAdapter;
-    function memoryLocalStorageAdapter(store = {}) {
+    function memoryLocalStorageAdapter(store2 = {}) {
       return {
         getItem: (key) => {
-          return store[key] || null;
+          return store2[key] || null;
         },
         setItem: (key, value) => {
-          store[key] = value;
+          store2[key] = value;
         },
         removeItem: (key) => {
-          delete store[key];
+          delete store2[key];
         }
       };
     }
@@ -76502,7 +76502,7 @@ var require_buffers = __commonJS({
 // node_modules/binary/lib/vars.js
 var require_vars = __commonJS({
   "node_modules/binary/lib/vars.js"(exports2, module2) {
-    module2.exports = function(store) {
+    module2.exports = function(store2) {
       function getset(name, value) {
         var node = vars.store;
         var keys = name.split(".");
@@ -76524,7 +76524,7 @@ var require_vars = __commonJS({
         set: function(name, value) {
           return getset(name, value);
         },
-        store: store || {}
+        store: store2 || {}
       };
       return vars;
     };
@@ -101376,6 +101376,28 @@ async function handler3(req, res) {
   }
 }
 
+// server/_handlers/_lib/ip.ts
+var IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+var IPV6_RE = /^[0-9a-fA-F:]{3,45}$/;
+function isValidIp(v) {
+  const s = (v || "").trim();
+  if (!s) return false;
+  if (s.startsWith("[") && s.endsWith("]")) return isValidIp(s.slice(1, -1));
+  return IPV4_RE.test(s) || IPV6_RE.test(s);
+}
+function clientIp(req) {
+  const vff = req.headers["x-vercel-forwarded-for"];
+  if (typeof vff === "string" && isValidIp(vff)) return vff.trim();
+  const rip = req.headers["x-real-ip"];
+  if (typeof rip === "string" && isValidIp(rip)) return rip.trim();
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd) {
+    const parts = fwd.split(",").map((p) => p.trim()).filter(isValidIp);
+    if (parts.length) return parts[parts.length - 1];
+  }
+  return "unknown";
+}
+
 // server/_handlers/_lib/captcha.ts
 var CAPTCHA_TTL_MS = 5 * 60 * 1e3;
 var failMap = /* @__PURE__ */ new Map();
@@ -101411,11 +101433,6 @@ var loginSchema = external_exports.object({
   password: external_exports.string().min(1).max(200),
   captchaToken: external_exports.string().min(1)
 });
-function clientIp(req) {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd) return fwd.split(",")[0].trim();
-  return req.headers["x-real-ip"] || "unknown";
-}
 async function verifyTurnstile(token, ip) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
@@ -104097,20 +104114,20 @@ async function handler33(req, res) {
       query = query.order("sale_date", { ascending: false }).order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
-      let statQuery = supabase.from("daily_sales").select("quantity", { count: "exact" });
-      if (saleFrom) statQuery = statQuery.gte("sale_date", saleFrom);
-      if (saleTo) statQuery = statQuery.lte("sale_date", saleTo);
+      let sumQuery = supabase.from("daily_sales").select("quantity");
+      if (saleFrom) sumQuery = sumQuery.gte("sale_date", saleFrom);
+      if (saleTo) sumQuery = sumQuery.lte("sale_date", saleTo);
       if (keyword) {
-        statQuery = statQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
+        sumQuery = sumQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
-      const { data: statRows, count: statCount } = await statQuery;
+      const { data: statRows } = await sumQuery;
       const totalQty = (statRows || []).reduce((s, r) => s + Number(r.quantity || 0), 0);
       return res.status(200).json({
         data: data || [],
         total: count ?? 0,
         page: q.page,
         pageSize: q.pageSize,
-        summary: { rows: statCount ?? 0, quantity: totalQty }
+        summary: { rows: count ?? 0, quantity: totalQty }
       });
     }
     if (req.method === "POST") {
@@ -104326,6 +104343,33 @@ async function handler34(req, res) {
   }
 }
 
+// server/_handlers/_lib/cache.ts
+var store = /* @__PURE__ */ new Map();
+var DEFAULT_TTL_MS = 9e4;
+var MAX_KEYS = 50;
+function cacheGet(key) {
+  const e = store.get(key);
+  if (!e) return void 0;
+  if (Date.now() > e.expire) {
+    store.delete(key);
+    return void 0;
+  }
+  return e.v;
+}
+function cacheSet(key, value, ttlMs = DEFAULT_TTL_MS) {
+  if (store.size >= MAX_KEYS) {
+    const now = Date.now();
+    for (const [k, e] of store) {
+      if (now > e.expire) store.delete(k);
+    }
+    if (store.size >= MAX_KEYS) {
+      const first = store.keys().next().value;
+      if (first !== void 0) store.delete(first);
+    }
+  }
+  store.set(key, { v: value, expire: Date.now() + ttlMs });
+}
+
 // server/_handlers/analysis.ts
 function fmt(d) {
   const y = d.getFullYear();
@@ -104369,6 +104413,11 @@ async function handler35(req, res) {
     const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
     const from = typeof req.query.from === "string" ? req.query.from.trim() : "";
     const to = typeof req.query.to === "string" ? req.query.to.trim() : "";
+    const CACHE_KEY = `analysis:v1:${days}:${from || "-"}:${to || "-"}`;
+    const cached2 = cacheGet(CACHE_KEY);
+    if (cached2) {
+      return res.status(200).json({ data: cached2, fromCache: true });
+    }
     const today = fmt(/* @__PURE__ */ new Date());
     let start = from || addDays(today, -(days - 1));
     let end = to || today;
@@ -104619,54 +104668,54 @@ async function handler35(req, res) {
     const domesticStockValue = Math.round(
       Array.from(domStockMap.entries()).reduce((sum, [pid, q]) => sum + q * num(productById.get(pid)?.purchase_cost || 0), 0)
     );
-    return res.status(200).json({
-      data: {
-        period: { start, end, days: n, prevStart, prevEnd },
-        summary: {
-          sale_qty: Math.round(curSum.qty),
-          refund_qty: Math.round(curSum.refundQty),
-          refund_amount: Math.round(curSum.refundAmount),
-          sale_amount: Math.round(curSum.amount),
-          ship_qty: Math.round(shipQty),
-          after_count: afterCount,
-          link_count: linkMap.size,
-          prev_sale_qty: Math.round(prevSum.qty),
-          prev_sale_amount: Math.round(prevSum.amount),
-          prev_ship_qty: Math.round(prevShipQty),
-          prev_after_count: prevAfterCount
-        },
-        platforms,
-        hot_top: hotTop.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
-        new_rise: newRise.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
-        trend,
-        warn: {
-          low_stock: lowStock.slice(0, 5),
-          in_transit: inTransitList.slice(0, 5)
-        },
-        safety_rate: {
-          total: safetyTotal,
-          pass: safetyPass,
-          rate: safetyTotal > 0 ? Math.round(safetyPass / safetyTotal * 100) : null
-        },
-        replenish: replenish.slice(0, 5),
-        ship_advice: {
-          by_status: Array.from(transitByStatus.entries()).map(([name, value]) => ({ name, value })),
-          by_forwarder: Array.from(forwarderMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
-        },
-        domestic: {
-          ship_top: domShipTop.slice(0, 3),
-          age_top: domAgeTop,
-          total_stock: Math.round(Array.from(domStockMap.values()).reduce((s, q) => s + q, 0))
-        },
-        after_reason: afterReason,
-        capital: {
-          sale_amount: Math.round(curSum.amount),
-          refund_amount: Math.round(curSum.refundAmount),
-          net_amount: Math.round(curSum.amount - curSum.refundAmount),
-          stock_value: domesticStockValue
-        }
+    const result = {
+      period: { start, end, days: n, prevStart, prevEnd },
+      summary: {
+        sale_qty: Math.round(curSum.qty),
+        refund_qty: Math.round(curSum.refundQty),
+        refund_amount: Math.round(curSum.refundAmount),
+        sale_amount: Math.round(curSum.amount),
+        ship_qty: Math.round(shipQty),
+        after_count: afterCount,
+        link_count: linkMap.size,
+        prev_sale_qty: Math.round(prevSum.qty),
+        prev_sale_amount: Math.round(prevSum.amount),
+        prev_ship_qty: Math.round(prevShipQty),
+        prev_after_count: prevAfterCount
+      },
+      platforms,
+      hot_top: hotTop.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
+      new_rise: newRise.map((h) => ({ ...h, image: linkImageMap.get(h.link_id) || "" })),
+      trend,
+      warn: {
+        low_stock: lowStock.slice(0, 5),
+        in_transit: inTransitList.slice(0, 5)
+      },
+      safety_rate: {
+        total: safetyTotal,
+        pass: safetyPass,
+        rate: safetyTotal > 0 ? Math.round(safetyPass / safetyTotal * 100) : null
+      },
+      replenish: replenish.slice(0, 5),
+      ship_advice: {
+        by_status: Array.from(transitByStatus.entries()).map(([name, value]) => ({ name, value })),
+        by_forwarder: Array.from(forwarderMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+      },
+      domestic: {
+        ship_top: domShipTop.slice(0, 3),
+        age_top: domAgeTop,
+        total_stock: Math.round(Array.from(domStockMap.values()).reduce((s, q) => s + q, 0))
+      },
+      after_reason: afterReason,
+      capital: {
+        sale_amount: Math.round(curSum.amount),
+        refund_amount: Math.round(curSum.refundAmount),
+        net_amount: Math.round(curSum.amount - curSum.refundAmount),
+        stock_value: domesticStockValue
       }
-    });
+    };
+    cacheSet(CACHE_KEY, result);
+    return res.status(200).json({ data: result });
   } catch (e) {
     return handleError2(res, e);
   }
@@ -104688,6 +104737,11 @@ async function handler36(req, res) {
     ]);
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    const CACHE_KEY = "dashboard:v1";
+    const cached2 = cacheGet(CACHE_KEY);
+    if (cached2) {
+      return res.status(200).json({ data: cached2, fromCache: true });
     }
     const supabase = getAdminClient();
     const countAll = async (table) => {
@@ -104744,20 +104798,20 @@ async function handler36(req, res) {
       if (sh.cargo_status && sh.cargo_status === "\u5DF2\u5165\u4ED3") continue;
       inTransitStock += Number(r.quantity || 0);
     }
-    return res.status(200).json({
-      data: {
-        products_count: productsCount,
-        domestic_stock: Math.round(domesticStock),
-        domestic_product_count: domesticProducts.size,
-        overseas_stock: Math.round(overseasSnapshotStock + overseasInvStock),
-        overseas_product_count: (/* @__PURE__ */ new Set([...overseasSnapshotProducts, ...overseasInvProducts])).size,
-        in_transit_stock: Math.round(inTransitStock),
-        shipments_count: shipmentsCount,
-        sales_count: salesCount,
-        after_sales_count: afterSalesCount,
-        recent_shipments: recentShipments.data || []
-      }
-    });
+    const result = {
+      products_count: productsCount,
+      domestic_stock: Math.round(domesticStock),
+      domestic_product_count: domesticProducts.size,
+      overseas_stock: Math.round(overseasSnapshotStock + overseasInvStock),
+      overseas_product_count: (/* @__PURE__ */ new Set([...overseasSnapshotProducts, ...overseasInvProducts])).size,
+      in_transit_stock: Math.round(inTransitStock),
+      shipments_count: shipmentsCount,
+      sales_count: salesCount,
+      after_sales_count: afterSalesCount,
+      recent_shipments: recentShipments.data || []
+    };
+    cacheSet(CACHE_KEY, result);
+    return res.status(200).json({ data: result });
   } catch (e) {
     return handleError2(res, e);
   }

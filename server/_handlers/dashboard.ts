@@ -4,6 +4,7 @@ import { requireAnyPermission } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
+import { cacheGet, cacheSet } from './_lib/cache';
 
 // 统计口径说明：
 // - 国内库存：inventory join warehouses(wh_type='domestic') 的数量合计 + 有库存产品种类数；
@@ -26,6 +27,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method !== 'GET') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
+    }
+
+    // 全量聚合结果短期缓存（无请求参数，key 固定）。
+    // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
+    const CACHE_KEY = 'dashboard:v1';
+    const cached = cacheGet<object>(CACHE_KEY);
+    if (cached) {
+      return res.status(200).json({ data: cached, fromCache: true });
     }
 
     const supabase = getAdminClient();
@@ -101,20 +110,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       inTransitStock += Number(r.quantity || 0);
     }
 
-    return res.status(200).json({
-      data: {
-        products_count: productsCount,
-        domestic_stock: Math.round(domesticStock),
-        domestic_product_count: domesticProducts.size,
-        overseas_stock: Math.round(overseasSnapshotStock + overseasInvStock),
-        overseas_product_count: new Set([...overseasSnapshotProducts, ...overseasInvProducts]).size,
-        in_transit_stock: Math.round(inTransitStock),
-        shipments_count: shipmentsCount,
-        sales_count: salesCount,
-        after_sales_count: afterSalesCount,
-        recent_shipments: recentShipments.data || [],
-      },
-    });
+    const result = {
+      products_count: productsCount,
+      domestic_stock: Math.round(domesticStock),
+      domestic_product_count: domesticProducts.size,
+      overseas_stock: Math.round(overseasSnapshotStock + overseasInvStock),
+      overseas_product_count: new Set([...overseasSnapshotProducts, ...overseasInvProducts]).size,
+      in_transit_stock: Math.round(inTransitStock),
+      shipments_count: shipmentsCount,
+      sales_count: salesCount,
+      after_sales_count: afterSalesCount,
+      recent_shipments: recentShipments.data || [],
+    };
+    cacheSet(CACHE_KEY, result);
+
+    return res.status(200).json({ data: result });
   } catch (e) {
     return handleError(res, e);
   }

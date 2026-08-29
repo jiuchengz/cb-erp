@@ -4,6 +4,7 @@ import { getAdminClient } from '../_lib/db';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit, loginRateLimit } from '../_lib/rate-limit';
 import { loadUserAccess } from '../_lib/auth';
+import { clientIp } from '../_lib/ip';
 import {
   getLockRemainMs,
   recordLoginFail,
@@ -17,11 +18,10 @@ const loginSchema = z.object({
   captchaToken: z.string().min(1),
 });
 
-function clientIp(req: VercelRequest): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd) return fwd.split(',')[0].trim();
-  return (req.headers['x-real-ip'] as string) || 'unknown';
-}
+// clientIp 已迁移至 ../_lib/ip.ts：
+// 优先 Vercel 可信头（x-vercel-forwarded-for / x-real-ip），
+// x-forwarded-for 仅接受合法 IP 列表并取最后一个可信跳数，无效回退 unknown。
+// 登录仍保持「IP 维度限流 + 账号维度限流」两层逻辑不变。
 
 // 服务端自验 Cloudflare Turnstile token。
 // 说明：Supabase Attack Protection 的 CAPTCHA 校验对 service_role（admin）凭据的请求会直接跳过，

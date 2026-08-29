@@ -4,6 +4,7 @@ import { requireAnyPermission } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
+import { cacheGet, cacheSet } from './_lib/cache';
 
 // ============================================================
 // 经营分析接口 /analysis
@@ -66,6 +67,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const days = isFinite(daysRaw) && daysRaw >= 0 ? daysRaw : 30;
     const from = typeof req.query.from === 'string' ? req.query.from.trim() : '';
     const to = typeof req.query.to === 'string' ? req.query.to.trim() : '';
+
+    // 全量聚合结果短期缓存，key 按请求参数区分（days/from/to），避免不同口径串缓存。
+    // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
+    const CACHE_KEY = `analysis:v1:${days}:${from || '-'}:${to || '-'}`;
+    const cached = cacheGet<object>(CACHE_KEY);
+    if (cached) {
+      return res.status(200).json({ data: cached, fromCache: true });
+    }
+
     const today = fmt(new Date());
 
     let start = from || addDays(today, -(days - 1));
@@ -392,8 +402,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       Array.from(domStockMap.entries()).reduce((sum, [pid, q]) => sum + q * num(productById.get(pid)?.purchase_cost || 0), 0)
     );
 
-    return res.status(200).json({
-      data: {
+    const result = {
         period: { start, end, days: n, prevStart, prevEnd },
         summary: {
           sale_qty: Math.round(curSum.qty),
@@ -438,8 +447,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           net_amount: Math.round(curSum.amount - curSum.refundAmount),
           stock_value: domesticStockValue,
         },
-      },
-    });
+      };
+    cacheSet(CACHE_KEY, result);
+    return res.status(200).json({ data: result });
   } catch (e) {
     return handleError(res, e);
   }

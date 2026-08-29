@@ -47,16 +47,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data, error, count } = await query;
       if (error) throw error;
 
-      // 汇总统计：所选范围内的总出单行数、总销量
-      let statQuery: any = supabase
-        .from('daily_sales')
-        .select('quantity', { count: 'exact' });
-      if (saleFrom) statQuery = statQuery.gte('sale_date', saleFrom);
-      if (saleTo) statQuery = statQuery.lte('sale_date', saleTo);
+      // 汇总统计：总出单行数直接复用主查询的 exact count（过滤条件一致），
+      // 不再重复发起一次带 count 的聚合查询；总销量需额外拉取轻量列 quantity
+      // 在内存求和（PostgREST 无内置 sum 聚合，相比原实现已省去一次 count 扫描）。
+      let sumQuery: any = supabase.from('daily_sales').select('quantity');
+      if (saleFrom) sumQuery = sumQuery.gte('sale_date', saleFrom);
+      if (saleTo) sumQuery = sumQuery.lte('sale_date', saleTo);
       if (keyword) {
-        statQuery = statQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
+        sumQuery = sumQuery.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
       }
-      const { data: statRows, count: statCount } = await statQuery;
+      const { data: statRows } = await sumQuery;
       const totalQty = (statRows || []).reduce((s: number, r: any) => s + Number(r.quantity || 0), 0);
 
       return res.status(200).json({
@@ -64,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         total: count ?? 0,
         page: q.page,
         pageSize: q.pageSize,
-        summary: { rows: statCount ?? 0, quantity: totalQty },
+        summary: { rows: count ?? 0, quantity: totalQty },
       });
     }
 

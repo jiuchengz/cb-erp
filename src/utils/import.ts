@@ -1,13 +1,13 @@
-import * as XLSX from 'xlsx'
-import JSZip from 'jszip'
-
+// xlsx / jszip 为重库（合计数百 KB），改为在具体函数内动态 import，
+// 避免进入主包与首屏加载；各调用方 API 不变。
 export interface TemplateColumn {
   label: string
   sample?: string | number
 }
 
 // 下载含中文表头 + 示例行的 xlsx 模板
-export function downloadTemplate(columns: TemplateColumn[], sheetName: string, fileName: string) {
+export async function downloadTemplate(columns: TemplateColumn[], sheetName: string, fileName: string) {
+  const XLSX = await import('xlsx')
   const headers = columns.map((c) => c.label)
   const sample = columns.map((c) => (c.sample === undefined ? '' : c.sample))
   const ws = XLSX.utils.aoa_to_sheet([headers, sample])
@@ -18,7 +18,8 @@ export function downloadTemplate(columns: TemplateColumn[], sheetName: string, f
 }
 
 // 解析 Excel 文件（array 读取，兼容 xlsx/xls/csv），返回表头与数据行（不含表头行）
-export function readExcelFile(file: File): Promise<{ headers: string[]; rows: any[][] }> {
+export async function readExcelFile(file: File): Promise<{ headers: string[]; rows: any[][] }> {
+  const XLSX = await import('xlsx')
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (evt) => {
@@ -117,6 +118,7 @@ export async function extractFloatingImages(
 ): Promise<Record<number, Record<number, string>>> {
   const result: Record<number, Record<number, string>> = {}
   try {
+    const JSZip = (await import('jszip')).default
     const zip = await JSZip.loadAsync(arrayBuffer)
     const drawingFiles = Object.keys(zip.files).filter((p) => /^xl\/drawings\/drawing\d+\.xml$/.test(p))
     // 先收集所有 (row, col, raw dataUrl) 压缩任务，再分批并行压缩，避免 600 张图串行等待

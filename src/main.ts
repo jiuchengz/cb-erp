@@ -1,8 +1,9 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import 'element-plus/dist/index.css'
+// Element Plus 组件样式由 unplugin-vue-components 按需注入；
+// 这里保留 base.css（CSS 变量基础）与暗色模式 css-vars。
+import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import router from './router'
@@ -104,7 +105,8 @@ const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
+// Element Plus 已改为按需引入（vite.config.ts 自动导入），不再 app.use(ElementPlus)；
+// 中文 locale 通过 App.vue 的 el-config-provider 注入。
 app.mount('#app')
 
 // 加载网站自定义图标（浏览器标签页 favicon / 登录页 / 侧边栏 logo）
