@@ -91,30 +91,33 @@
         </div>
       </template>
       <div class="stock-stats" v-loading="loadingRecent">
-        <div class="stock-item">
+        <router-link to="/inventory?wh_type=domestic" class="stock-item stock-link">
           <div class="stock-icon domestic">🏭</div>
           <div class="stock-info">
             <div class="stock-label">国内库存</div>
             <div class="stock-value">{{ fmtKpi(stats.domestic_stock) }} <small>件</small></div>
-            <div class="stock-sub">{{ stats.domestic_product_count }} 种产品</div>
+            <div class="stock-sub">{{ stats.domestic_product_count }} 种产品 · 点击查看</div>
           </div>
-        </div>
-        <div class="stock-item">
+          <span class="stock-arrow">›</span>
+        </router-link>
+        <router-link to="/inventory?wh_type=overseas" class="stock-item stock-link">
           <div class="stock-icon overseas">🌍</div>
           <div class="stock-info">
             <div class="stock-label">国外库存</div>
             <div class="stock-value">{{ fmtKpi(stats.overseas_stock) }} <small>件</small></div>
-            <div class="stock-sub">{{ stats.overseas_product_count }} 种产品</div>
+            <div class="stock-sub">{{ stats.overseas_product_count }} 种产品 · 点击查看</div>
           </div>
-        </div>
-        <div class="stock-item">
+          <span class="stock-arrow">›</span>
+        </router-link>
+        <router-link to="/inventory?tab=intransit" class="stock-item stock-link">
           <div class="stock-icon transit">🚢</div>
           <div class="stock-info">
             <div class="stock-label">在途库存</div>
             <div class="stock-value">{{ fmtKpi(stats.in_transit_stock) }} <small>件</small></div>
-            <div class="stock-sub">国内 → 海外仓</div>
+            <div class="stock-sub">国内 → 海外仓 · 点击查看</div>
           </div>
-        </div>
+          <span class="stock-arrow">›</span>
+        </router-link>
       </div>
     </el-card>
 
@@ -534,6 +537,10 @@ onMounted(() => {
 .stock-card { margin-top: 8px; }
 .stock-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .stock-item { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: #f7f9fc; border-radius: 10px; }
+.stock-link { cursor: pointer; text-decoration: none; position: relative; transition: all .2s; border: 1px solid transparent; }
+.stock-link:hover { background: #eef3fc; border-color: var(--brand); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(64, 158, 255, .15); }
+.stock-arrow { margin-left: auto; font-size: 20px; color: var(--brand); opacity: 0; transition: opacity .2s, transform .2s; }
+.stock-link:hover .stock-arrow { opacity: 1; transform: translateX(2px); }
 .stock-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
 .stock-icon.domestic { background: #ecf5ff; }
 .stock-icon.overseas { background: #fdf6ec; }

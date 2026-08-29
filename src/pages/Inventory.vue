@@ -22,6 +22,10 @@
             @keyup.enter="load"
             @clear="load"
           />
+          <el-select v-model="query.wh_type" placeholder="仓库类型" clearable style="width: 140px" @change="onWhTypeChange">
+            <el-option label="国内仓" value="domestic" />
+            <el-option label="海外仓" value="overseas" />
+          </el-select>
           <el-select v-model="query.warehouse_id" placeholder="仓库" clearable style="width: 180px" @change="load">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
@@ -240,6 +244,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
@@ -286,7 +291,7 @@ async function loadAllProducts(): Promise<any[]> {
 async function loadOptions() {
   try {
     const whRes = await api.get('/warehouses')
-    warehouses.value = (whRes.data.data ?? []).filter((w: any) => w.wh_type === 'domestic')
+    warehouses.value = whRes.data.data ?? []
     products.value = await loadAllProducts()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
@@ -335,10 +340,11 @@ async function openItDetail(id: string) {
 }
 
 // 库存列表
+const route = useRoute()
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 200, sku: '', warehouse_id: '' })
+const query = reactive({ page: 1, pageSize: 200, sku: '', warehouse_id: '', wh_type: '' })
 
 // 低库存预警阈值（可配置常量）
 const LOW_STOCK_THRESHOLD = 5
@@ -360,6 +366,13 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function onWhTypeChange() {
+  // 切换仓库类型后清空具体仓库，避免跨类型仓库 id 冲突
+  query.warehouse_id = ''
+  query.page = 1
+  load()
 }
 
 function onSizeChange() {
@@ -579,8 +592,19 @@ async function onImportFile(e: Event) {
 }
 
 onMounted(() => {
-  load()
   loadOptions()
+  const wh = route.query.wh_type
+  const tab = route.query.tab
+  if (tab === 'intransit') {
+    activeTab.value = 'intransit'
+    loadInTransit()
+  } else if (wh === 'domestic' || wh === 'overseas') {
+    activeTab.value = 'list'
+    query.wh_type = wh
+    load()
+  } else {
+    load()
+  }
 })
 </script>
 
