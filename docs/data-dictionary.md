@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 0407e8e3d987d087c85f0d8325c2f820_44d040d7a3cb11f192a2525400287e28
+    ReservedCode1: imCjGWS8Zq1lDl25uuMj6dzFM2iMk0XfboWK9YxCI70OPiK9Y7y59txdbVnVVQnMmurFU6cw1to8ghJey7VdhQEXSArmA8uJrGemJaKa2zixO90q4WoIZlH7kI/YD137yTJF/7DQTQhBKwMLMFyRvmNMUq1/ra6ld380RBtxqQfhTyrWINydg30OS3E=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 0407e8e3d987d087c85f0d8325c2f820_44d040d7a3cb11f192a2525400287e28
+    ReservedCode2: imCjGWS8Zq1lDl25uuMj6dzFM2iMk0XfboWK9YxCI70OPiK9Y7y59txdbVnVVQnMmurFU6cw1to8ghJey7VdhQEXSArmA8uJrGemJaKa2zixO90q4WoIZlH7kI/YD137yTJF/7DQTQhBKwMLMFyRvmNMUq1/ra6ld380RBtxqQfhTyrWINydg30OS3E=
+---
+
 # cb-erp 数据字典（Data Dictionary）
 
 > 版本：v1.0（P2 数据补齐产出）
@@ -393,3 +404,4 @@ node scripts/sync-exchange-rates.mjs --days 90
 - 所有表默认启用 RLS；业务读写走 service_role（仅服务端），见 `server/_handlers/_lib/db.ts`。
 - 软删除：036 起 products/sales_orders/purchase_orders/shipments/after_sales/replenishment_orders 均有 `deleted_at`，列表查询需过滤 `deleted_at is null`。
 - 日期字段一律 `timestamptz`；`daily_sales.sale_date` 为纯 `date`（业务日期，按墨西哥城时区 UTC-6 语义导入，034 default_timezone）。
+*（内容由AI生成，仅供参考）*

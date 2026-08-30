@@ -185,7 +185,7 @@
           <b>{{ alerts.summary.safe }}</b> 正常
         </div>
       </div>
-      <el-table v-loading="alertsLoading" :data="alertsDisplay" size="small" empty-text="暂无预警商品">
+      <el-table :resizable="false" v-loading="alertsLoading" :data="alertsDisplay" size="small" empty-text="暂无预警商品">
         <el-table-column label="预警" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.alert_type === 'out_of_stock' ? 'danger' : 'warning'" effect="dark" size="small">
@@ -234,7 +234,7 @@
           <el-button link type="primary" @click="loadRecent">刷新</el-button>
         </div>
       </template>
-      <el-table v-loading="loadingRecent" :data="recentShipments" border stripe empty-text="暂无发货记录">
+      <el-table :resizable="false" v-loading="loadingRecent" :data="recentShipments" border stripe empty-text="暂无发货记录">
         <el-table-column prop="tracking_no" label="运单号" min-width="180" />
         <el-table-column label="货代" width="120">
           <template #default="{ row }">{{ row.forwarders?.name || '-' }}</template>

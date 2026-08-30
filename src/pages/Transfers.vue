@@ -35,7 +35,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
+      <el-table :resizable="false" v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="46" />
         <el-table-column prop="tracking_no" label="货件号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="cargo_code" label="货代号" min-width="140" show-overflow-tooltip />
@@ -178,7 +178,7 @@
         <el-descriptions-item label="货物状态">{{ detail.cargo_status || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
-      <el-table v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
+      <el-table :resizable="false" v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
         <el-table-column label="产品编码" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
         </el-table-column>
@@ -292,7 +292,7 @@ import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { exportViaServer, todayStr } from '../utils/export'
-import { readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
+import { readExcelFile, buildColMap, cellStr, cellNum, cellDateStr } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('shipment.write'))
@@ -381,7 +381,7 @@ async function onTransferImportChange(e: Event) {
         forwarder_name: cellStr(row, colIdx.forwarder_name) || null,
         shipping_mode: cellStr(row, colIdx.shipping_mode) || null,
         shipping_cartons: cellNum(row, colIdx.shipping_cartons, 0) || null,
-        ship_date: cellStr(row, colIdx.ship_date) || null,
+        ship_date: cellDateStr(row, colIdx.ship_date) || null,
         product_code: cellStr(row, colIdx.product_code),
         quantity: cellNum(row, colIdx.quantity, 0),
         remark: cellStr(row, colIdx.remark) || null,

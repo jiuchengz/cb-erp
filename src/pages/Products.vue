@@ -74,7 +74,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange" @sort-change="onSortChange">
+    <el-table :resizable="false" v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange" @sort-change="onSortChange">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column label="图片" width="90">
@@ -185,7 +185,7 @@
             </el-radio-group>
           </div>
           <h4 class="track-section-title">在途 / 发货批次（{{ trackShipments.length }} / {{ trackData.shipments.length }}）</h4>
-          <el-table :data="trackShipments" border size="small" max-height="300">
+          <el-table :resizable="false" :data="trackShipments" border size="small" max-height="300">
             <el-table-column label="货件号" min-width="150" show-overflow-tooltip>
               <template #default="{ row }">{{ row.tracking_no || row.cargo_code || '—' }}</template>
             </el-table-column>
@@ -227,7 +227,7 @@
             />
           </div>
           <h4 class="track-section-title">销量明细（{{ trackSalesRangeLabel }}，{{ trackSales.length }} 天）</h4>
-          <el-table :data="trackSales" border size="small" max-height="300">
+          <el-table :resizable="false" :data="trackSales" border size="small" max-height="300">
             <el-table-column prop="sale_date" label="日期" width="120" />
             <el-table-column prop="platform" label="平台" width="140" />
             <el-table-column prop="quantity" label="销量" width="100" align="right" />

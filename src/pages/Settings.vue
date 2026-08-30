@@ -252,7 +252,7 @@
           <h2>角色管理</h2>
           <el-button v-if="canManage" type="primary" @click="openRoleCreate">新增角色</el-button>
         </div>
-        <el-table v-loading="rolesLoading" :data="roles" border stripe>
+        <el-table :resizable="false" v-loading="rolesLoading" :data="roles" border stripe>
           <el-table-column prop="name" label="角色名" min-width="160" />
           <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
           <el-table-column label="权限数" width="100" align="right">
@@ -271,7 +271,7 @@
         <div class="page-header">
           <h2>权限列表</h2>
         </div>
-        <el-table v-loading="permsLoading" :data="permissions" border stripe>
+        <el-table :resizable="false" v-loading="permsLoading" :data="permissions" border stripe>
           <el-table-column prop="code" label="权限码" min-width="220" />
           <el-table-column prop="name" label="名称" min-width="160" />
           <el-table-column prop="description" label="描述" min-width="260" show-overflow-tooltip />
@@ -283,7 +283,7 @@
           <h2>仓库管理</h2>
           <el-button v-if="canManage" type="primary" @click="openWhCreate">新增仓库</el-button>
         </div>
-        <el-table v-loading="whLoading" :data="warehouses" border stripe>
+        <el-table :resizable="false" v-loading="whLoading" :data="warehouses" border stripe>
           <el-table-column prop="name" label="仓库名称" min-width="180" />
           <el-table-column prop="code" label="编码" min-width="120" />
           <el-table-column label="仓库类型" width="110">
@@ -352,7 +352,7 @@
           />
           <el-button type="primary" @click="loadAudit">查询</el-button>
         </div>
-        <el-table v-loading="auditLoading" :data="auditRows" border stripe>
+        <el-table :resizable="false" v-loading="auditLoading" :data="auditRows" border stripe>
           <el-table-column prop="user_email" label="操作人" min-width="180" />
           <el-table-column prop="resource_type" label="资源类型" min-width="140" />
           <el-table-column prop="action" label="动作" min-width="120" />

@@ -22,7 +22,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table v-loading="loading" :data="rows" border stripe height="100%">
+      <el-table :resizable="false" v-loading="loading" :data="rows" border stripe height="100%">
         <el-table-column prop="stocktake_no" label="盘点单号" min-width="170" show-overflow-tooltip />
         <el-table-column prop="warehouse_name" label="仓库" min-width="140" show-overflow-tooltip />
         <el-table-column label="盘点日期" width="120">
@@ -110,7 +110,7 @@
         <span v-if="editRow.remark">备注：{{ editRow.remark }}</span>
       </div>
 
-      <el-table v-loading="saving" :data="editRow.items" border stripe max-height="420">
+      <el-table :resizable="false" v-loading="saving" :data="editRow.items" border stripe max-height="420">
         <el-table-column label="商品编码" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
         </el-table-column>
@@ -171,7 +171,7 @@
         <el-button type="primary" @click="applyPicker">搜索</el-button>
         <span class="st-tip">共 {{ pickerTotal }} 个商品，勾选后点击添加</span>
       </div>
-      <el-table
+      <el-table :resizable="false"
         v-loading="pickerLoading"
         :data="pickerRows"
         border
@@ -222,7 +222,7 @@
         以下 {{ unpickedList.length }} 个商品在系统中有库存，但未出现在导入表格中（未盘到）。
         加入盘点单后将按 <b>实盘 0</b> 处理，审核时自动清零系统库存并写入盘亏流水。
       </div>
-      <el-table
+      <el-table :resizable="false"
         v-loading="unpickedLoading"
         :data="unpickedList"
         border
@@ -268,7 +268,7 @@
           <div class="summary-note">共复盘 {{ summary.stocktake_count }} 张已完成盘点单，金额按商品售价估算（{{ getCurrencyCode() }}）</div>
 
           <h3 class="summary-title">按商品（Top 20）</h3>
-          <el-table :data="summary.by_product.slice(0, 20)" size="small" border max-height="320">
+          <el-table :resizable="false" :data="summary.by_product.slice(0, 20)" size="small" border max-height="320">
             <el-table-column label="商品" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="cell2">{{ row.name }}</div>
@@ -295,7 +295,7 @@
           </el-table>
 
           <h3 class="summary-title">按仓库</h3>
-          <el-table :data="summary.by_warehouse" size="small" border max-height="260">
+          <el-table :resizable="false" :data="summary.by_warehouse" size="small" border max-height="260">
             <el-table-column prop="warehouse_name" label="仓库" min-width="150" />
             <el-table-column label="盘点单数" width="90" align="right" prop="stocktake_count" />
             <el-table-column label="盘盈" width="80" align="right">

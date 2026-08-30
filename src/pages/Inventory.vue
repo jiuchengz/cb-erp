@@ -34,7 +34,7 @@
         <div v-if="query.wh_type === 'overseas'" class="overseas-tip">海外仓库存为平台可用库存快照（overseas_stock），不区分具体仓库</div>
 
         <div class="table-wrap">
-        <el-table v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName" height="100%">
+        <el-table :resizable="false" v-loading="loading" :data="rows" border stripe :row-class-name="rowClassName" height="100%">
           <el-table-column label="产品编号" min-width="140" show-overflow-tooltip>
             <template #default="{ row }">{{ row.products?.code || '—' }}</template>
           </el-table-column>
@@ -109,7 +109,7 @@
           <el-button type="primary" @click="loadTx">查询</el-button>
         </div>
 
-        <el-table v-loading="txLoading" :data="txRows" border stripe>
+        <el-table :resizable="false" v-loading="txLoading" :data="txRows" border stripe>
           <el-table-column label="SKU" min-width="140">
             <template #default="{ row }">{{ row.products?.sku }}</template>
           </el-table-column>
@@ -168,7 +168,7 @@
           <el-button type="primary" @click="loadInTransit">查询</el-button>
         </div>
 
-        <el-table v-loading="itLoading" :data="itRows" border stripe>
+        <el-table :resizable="false" v-loading="itLoading" :data="itRows" border stripe>
           <el-table-column prop="tracking_no" label="运单号" min-width="160" />
           <el-table-column label="货代" min-width="140">
             <template #default="{ row }">{{ row.forwarders?.name || '-' }}</template>
@@ -216,7 +216,7 @@
             <b>{{ itDetail.tracking_no }}</b>
             <span v-if="itDetail.forwarders?.name" style="margin-left: 10px; color: #909399">货代：{{ itDetail.forwarders.name }}</span>
           </div>
-          <el-table v-if="itDetail" :data="itDetail.shipment_items || []" border stripe size="small" max-height="360">
+          <el-table :resizable="false" v-if="itDetail" :data="itDetail.shipment_items || []" border stripe size="small" max-height="360">
             <el-table-column prop="product_id" label="商品ID" min-width="220" show-overflow-tooltip />
             <el-table-column prop="quantity" label="数量" width="100" align="right" />
             <el-table-column prop="sales_order_id" label="关联销售单ID" min-width="200" show-overflow-tooltip />

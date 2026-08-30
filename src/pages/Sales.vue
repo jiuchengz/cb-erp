@@ -71,7 +71,7 @@
     </el-alert>
 
     <div class="table-wrap">
-    <el-table
+    <el-table :resizable="false"
       v-loading="loading"
       :data="pagedRows"
       border

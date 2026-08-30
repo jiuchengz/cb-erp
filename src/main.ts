@@ -5,6 +5,10 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 // 这里保留 base.css（CSS 变量基础）与暗色模式 css-vars。
 import 'element-plus/theme-chalk/base.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
+// 按需引入模式下，函数式调用的 ElMessage / ElMessageBox 样式不会随模板组件自动注入，
+// 需显式引入，否则弹窗/消息提示无样式、表现为全屏或异常排版。
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
 import App from './App.vue'
 import router from './router'
 import { useSiteStore } from './stores/site'

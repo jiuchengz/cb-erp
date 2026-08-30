@@ -282,7 +282,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const [shipmentNo, group] of groups) {
       const rowNos = group.rows.map((r) => r.row_no);
-      const rowLabel = rowNos.length === 1 ? `第 ${rowNos[0]} 行` : `第 ${Math.min(...rowNos)}-${Math.max(...rowNos)} 行`;
+      // 行号标签：纯数字或区间（如 "2" / "2-8"），由前端统一拼「第 X 行」避免重复前缀
+      const rowLabel = rowNos.length === 1 ? String(rowNos[0]) : `${Math.min(...rowNos)}-${Math.max(...rowNos)}`;
 
       // 组级字段：取第一条非空值
       const first = group.rows[0].data;

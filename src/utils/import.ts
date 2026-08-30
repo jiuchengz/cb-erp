@@ -18,6 +18,7 @@ export async function downloadTemplate(columns: TemplateColumn[], sheetName: str
 }
 
 // 解析 Excel 文件（array 读取，兼容 xlsx/xls/csv），返回表头与数据行（不含表头行）
+// cellDates: true 让日期格式单元格解析为 Date 对象，避免日期被读成 Excel 序列号（如 46261）
 export async function readExcelFile(file: File): Promise<{ headers: string[]; rows: any[][] }> {
   const XLSX = await import('xlsx')
   return new Promise((resolve, reject) => {
@@ -25,9 +26,9 @@ export async function readExcelFile(file: File): Promise<{ headers: string[]; ro
     reader.onload = (evt) => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array' })
+        const wb = XLSX.read(data, { type: 'array', cellDates: true })
         const sheet = wb.Sheets[wb.SheetNames[0]]
-        const raw = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][]
+        const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true }) as any[][]
         if (!raw.length) {
           reject(new Error('文件为空'))
           return
@@ -69,6 +70,34 @@ export function cellNum(row: any[], idx: number | undefined, def = 0): number {
   if (!s) return def
   const n = Number(s)
   return Number.isFinite(n) ? n : def
+}
+
+// 单元格日期取值：Date 对象 -> YYYY-MM-DD；纯数字（Excel 日期序列号）-> YYYY-MM-DD；
+// 已是文本日期（如 2026-08-27 或 2026/8/27）则归一化返回，保证后端 date 列可解析。
+export function cellDateValue(v: unknown): string {
+  if (v === null || v === undefined) return ''
+  const fmt = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  if (v instanceof Date && !isNaN(v.getTime())) return fmt(v)
+  const s = String(v).trim()
+  if (!s) return s
+  // 已是日期格式文本（2026-08-27 / 2026/8/27），统一为 YYYY-MM-DD
+  const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  const n = Number(s)
+  // Excel 日期序列号范围：1900-01-01(1) ~ 2100-12-31(73414)
+  if (Number.isFinite(n) && n >= 1 && n <= 73414) {
+    const d = new Date(Math.round((n - 25569) * 86400000))
+    if (!isNaN(d.getTime())) return fmt(d)
+  }
+  return s
+}
+
+export function cellDateStr(row: any[], idx: number | undefined): string {
+  if (idx === undefined || !row || row[idx] === null || row[idx] === undefined) return ''
+  return cellDateValue(row[idx])
 }
 
 // 自动生成单号：PREFIX-YYYYMMDD-序号

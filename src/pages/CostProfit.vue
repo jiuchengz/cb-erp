@@ -34,7 +34,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table :data="rows" v-loading="loading" border stripe size="small" style="width: 100%" max-height="calc(100vh - 250px)">
+      <el-table :resizable="false" :data="rows" v-loading="loading" border stripe size="small" style="width: 100%" max-height="calc(100vh - 250px)">
         <el-table-column prop="code" label="产品编码" min-width="130" show-overflow-tooltip />
         <el-table-column prop="name" label="产品名称" min-width="180" show-overflow-tooltip />
         <el-table-column label="图片" width="70">

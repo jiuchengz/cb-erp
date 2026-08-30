@@ -22,7 +22,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
+    <el-table :resizable="false" v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column label="补货时间" width="170">
         <template #default="{ row }">{{ row.replenishment_time || '-' }}</template>

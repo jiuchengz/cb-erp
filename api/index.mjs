@@ -106549,7 +106549,7 @@ async function handler55(req, res) {
           pushError(rowNo, e?.message || "\u5199\u5165\u5931\u8D25");
         }
       }
-      await writeAudit(ctx, req, "import", "shipment", null, null, {
+      await writeAudit(ctx, req, "import", "shipment", void 0, void 0, {
         source: "manual",
         rows: parsedRows.length,
         created,
@@ -106598,7 +106598,7 @@ async function handler55(req, res) {
     if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
     for (const [shipmentNo, group] of groups) {
       const rowNos = group.rows.map((r) => r.row_no);
-      const rowLabel = rowNos.length === 1 ? `\u7B2C ${rowNos[0]} \u884C` : `\u7B2C ${Math.min(...rowNos)}-${Math.max(...rowNos)} \u884C`;
+      const rowLabel = rowNos.length === 1 ? String(rowNos[0]) : `${Math.min(...rowNos)}-${Math.max(...rowNos)}`;
       const first = group.rows[0].data;
       const fwName = group.rows.map((r) => cleanStr(r.data.forwarder_name)).find(Boolean) || null;
       const forwarderId = fwName ? forwarderMap.get(fwName) || null : null;
@@ -106719,7 +106719,7 @@ async function handler55(req, res) {
         items: items.length
       });
     }
-    await writeAudit(ctx, req, "import", "shipment", null, null, {
+    await writeAudit(ctx, req, "import", "shipment", void 0, void 0, {
       source: "transfer",
       rows: transferRows.length,
       created,

@@ -24,7 +24,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
+    <el-table :resizable="false" v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="email" label="邮箱" min-width="200" />
       <el-table-column prop="name" label="姓名" min-width="140" />

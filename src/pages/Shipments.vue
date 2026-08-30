@@ -30,7 +30,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="rows" border stripe :row-style="rowStyle" @selection-change="onSelectionChange" height="100%">
+    <el-table :resizable="false" v-loading="loading" :data="rows" border stripe :row-style="rowStyle" @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column label="发货时间" width="130">
         <template #default="{ row }">
@@ -382,7 +382,7 @@
         <el-descriptions-item label="预约时间">{{ detail.appointment_time ? formatDate(detail.appointment_time) : '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
-      <el-table v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
+      <el-table :resizable="false" v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
         <el-table-column prop="product_id" label="商品ID" min-width="240" show-overflow-tooltip />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
         <el-table-column prop="sales_order_id" label="关联销售单ID" min-width="240" show-overflow-tooltip />
@@ -408,7 +408,7 @@
 
     <!-- 货代管理弹窗 -->
     <el-dialog v-model="forwarderVisible" title="货代管理" width="680px" destroy-on-close>
-      <el-table :data="forwarders" border stripe size="small" max-height="360">
+      <el-table :resizable="false" :data="forwarders" border stripe size="small" max-height="360">
         <el-table-column prop="name" label="名称" min-width="150" />
         <el-table-column prop="contact" label="联系人" width="120">
           <template #default="{ row }">{{ row.contact || '-' }}</template>
@@ -445,7 +445,7 @@
     </el-dialog>
     <!-- 货物状态管理弹窗 -->
     <el-dialog v-model="cargoStatusVisible" title="货物状态管理" width="620px" destroy-on-close>
-      <el-table :data="cargoStatuses" border stripe size="small" max-height="360">
+      <el-table :resizable="false" :data="cargoStatuses" border stripe size="small" max-height="360">
         <el-table-column prop="sort_order" label="排序" width="80" />
         <el-table-column prop="name" label="状态名称" min-width="150" />
         <el-table-column label="颜色" min-width="160">
@@ -479,6 +479,7 @@ import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
+import { cellDateValue } from '../utils/import'
 import * as XLSX from 'xlsx'
 
 const auth = useAuthStore()
@@ -1070,7 +1071,8 @@ async function onImportFileChange(e: Event) {
   importing.value = true
   try {
     const buf = await file.arrayBuffer()
-    const wb = XLSX.read(buf)
+    // cellDates: true 使日期格式单元格解析为 Date，避免被读成 Excel 序列号（如 46261）
+    const wb = XLSX.read(buf, { cellDates: true })
     const ws = wb.Sheets[wb.SheetNames[0]]
     if (!ws) {
       ElMessage.warning('Excel 中没有可读取的工作表')
@@ -1114,7 +1116,7 @@ async function onImportFileChange(e: Event) {
       rows.push({
         row_no: i + 1,
         warehouse_no: str(get(row, 'warehouse_no')),
-        ship_date: str(get(row, 'ship_date')),
+        ship_date: cellDateValue(get(row, 'ship_date')) || null,
         forwarder_name: str(get(row, 'forwarder')),
         shipping_cartons: num(get(row, 'shipping_cartons')),
         shipping_qty: num(get(row, 'shipping_qty')),

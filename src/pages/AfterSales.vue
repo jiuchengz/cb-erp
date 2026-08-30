@@ -20,7 +20,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
+    <el-table :resizable="false" v-loading="loading" :data="rows" border stripe @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="order_no" label="售后单号" min-width="160" />
       <el-table-column label="类型" width="100">
@@ -166,7 +166,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
-      <el-table v-if="detail" :data="detail.after_sale_items || []" border stripe size="small" style="margin-top: 12px">
+      <el-table :resizable="false" v-if="detail" :data="detail.after_sale_items || []" border stripe size="small" style="margin-top: 12px">
         <el-table-column label="图片" width="80">
           <template #default="{ row }">
             <img
@@ -271,7 +271,7 @@
 
     <!-- 售后类型管理弹窗 -->
     <el-dialog v-model="typeVisible" title="售后类型管理" width="680px" destroy-on-close>
-      <el-table :data="afterSaleTypes" border stripe size="small" max-height="340">
+      <el-table :resizable="false" :data="afterSaleTypes" border stripe size="small" max-height="340">
         <el-table-column prop="sort_order" label="排序" width="70" />
         <el-table-column prop="value" label="类型标识" min-width="120" />
         <el-table-column prop="name" label="类型名称" min-width="130" />

@@ -20,7 +20,7 @@
             <el-option label="错误" value="error" />
           </el-select>
         </div>
-        <el-table :data="filteredLocal" border stripe>
+        <el-table :resizable="false" :data="filteredLocal" border stripe>
           <el-table-column label="时间" width="180">
             <template #default="{ row }">{{ row.time }}</template>
           </el-table-column>
@@ -37,7 +37,7 @@
 
       <el-tab-pane :label="`服务端审计日志 (${serverTotal})`" name="server">
         <div v-if="serverError" class="log-error">{{ serverError }}</div>
-        <el-table v-loading="serverLoading" :data="serverLogs" border stripe>
+        <el-table :resizable="false" v-loading="serverLoading" :data="serverLogs" border stripe>
           <el-table-column label="时间" width="180">
             <template #default="{ row }">{{ formatServerTime(row.created_at) }}</template>
           </el-table-column>

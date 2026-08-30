@@ -13,7 +13,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table v-loading="loading" :data="rows" border stripe height="100%">
+      <el-table :resizable="false" v-loading="loading" :data="rows" border stripe height="100%">
         <el-table-column label="类型" width="130">
           <template #default="{ row }">
             <el-tag :type="typeMap[row.type]?.tag || 'info'" size="small">{{ typeMap[row.type]?.label || row.type }}</el-tag>
