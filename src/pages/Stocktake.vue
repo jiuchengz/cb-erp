@@ -271,7 +271,7 @@
           <el-table :data="summary.by_product.slice(0, 20)" size="small" border max-height="320">
             <el-table-column label="商品" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">
-                <div>{{ row.name }}</div>
+                <div class="cell2">{{ row.name }}</div>
                 <div class="summary-sku">{{ row.sku }}</div>
               </template>
             </el-table-column>

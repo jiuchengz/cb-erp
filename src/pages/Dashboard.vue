@@ -195,7 +195,7 @@
         </el-table-column>
         <el-table-column label="商品" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <div>{{ row.name }}</div>
+            <div class="cell2">{{ row.name }}</div>
             <div class="alert-sku">{{ row.sku || row.code || '—' }}</div>
           </template>
         </el-table-column>
@@ -488,7 +488,7 @@ onMounted(() => {
 .quick.active { background: var(--accent, #409eff); color: #fff; border-color: var(--accent, #409eff); }
 
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
-.kpi { background: var(--glass-bg, #fff); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow, 0 1px 4px rgba(0,0,0,.06)); }
+.kpi { background: var(--glass-bg, #fff); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow, 0 1px 4px rgba(0,0,0,.06)); height: 112px; overflow: hidden; }
 .kpi .label { font-size: 13px; color: var(--ink-3); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
 .kpi .label .ico { font-size: 18px; }
 .kpi .value { font-size: 24px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }

@@ -31099,8 +31099,8 @@ var require_saxes = __commonJS({
        *
        * @param handler The handler to set.
        */
-      on(name, handler59) {
-        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler59;
+      on(name, handler60) {
+        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler60;
       }
       /**
        * Unset an event handler.
@@ -31145,11 +31145,11 @@ var require_saxes = __commonJS({
        */
       fail(message) {
         const err = this.makeError(message);
-        const handler59 = this.errorHandler;
-        if (handler59 === void 0) {
+        const handler60 = this.errorHandler;
+        if (handler60 === void 0) {
           throw err;
         } else {
-          handler59(err);
+          handler60(err);
         }
         return this;
       }
@@ -32165,20 +32165,20 @@ var require_saxes = __commonJS({
       // END OF STATE ENGINE METHODS
       handleTextInRoot() {
         let { i: start, forbiddenState } = this;
-        const { chunk, textHandler: handler59 } = this;
+        const { chunk, textHandler: handler60 } = this;
         scanLoop:
           while (true) {
             switch (this.getCode()) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler59(text + slice);
+                    handler60(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler59(slice);
+                    handler60(slice);
                   }
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32187,7 +32187,7 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32213,7 +32213,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case NL_LIKE:
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
@@ -32221,7 +32221,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case EOC:
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break scanLoop;
@@ -32233,7 +32233,7 @@ var require_saxes = __commonJS({
       }
       handleTextOutsideRoot() {
         let { i: start } = this;
-        const { chunk, textHandler: handler59 } = this;
+        const { chunk, textHandler: handler60 } = this;
         let nonSpace = false;
         outRootLoop:
           while (true) {
@@ -32241,14 +32241,14 @@ var require_saxes = __commonJS({
             switch (code) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler59(text + slice);
+                    handler60(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler59(slice);
+                    handler60(slice);
                   }
                 }
                 break outRootLoop;
@@ -32256,20 +32256,20 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 nonSpace = true;
                 break outRootLoop;
               case NL_LIKE:
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
                 start = this.i;
                 break;
               case EOC:
-                if (handler59 !== void 0) {
+                if (handler60 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break outRootLoop;
@@ -32499,12 +32499,12 @@ var require_saxes = __commonJS({
           this.text += "</>";
           return;
         }
-        const handler59 = this.closeTagHandler;
+        const handler60 = this.closeTagHandler;
         let l2 = tags.length;
         while (l2-- > 0) {
           const tag = this.tag = tags.pop();
           this.topNS = tag.ns;
-          handler59 === null || handler59 === void 0 ? void 0 : handler59(tag);
+          handler60 === null || handler60 === void 0 ? void 0 : handler60(tag);
           if (tag.name === name) {
             break;
           }
@@ -48942,23 +48942,23 @@ var require_async = __commonJS({
           unsaturated: [],
           empty: []
         };
-        function on(event, handler59) {
-          events[event].push(handler59);
+        function on(event, handler60) {
+          events[event].push(handler60);
         }
-        function once2(event, handler59) {
+        function once2(event, handler60) {
           const handleAndRemove = (...args) => {
             off(event, handleAndRemove);
-            handler59(...args);
+            handler60(...args);
           };
           events[event].push(handleAndRemove);
         }
-        function off(event, handler59) {
+        function off(event, handler60) {
           if (!event) return Object.keys(events).forEach((ev) => events[ev] = []);
-          if (!handler59) return events[event] = [];
-          events[event] = events[event].filter((ev) => ev !== handler59);
+          if (!handler60) return events[event] = [];
+          events[event] = events[event].filter((ev) => ev !== handler60);
         }
         function trigger(event, ...args) {
-          events[event].forEach((handler59) => handler59(...args));
+          events[event].forEach((handler60) => handler60(...args));
         }
         var processingScheduled = false;
         function _insert(data, insertAtFront, rejectOnError, callback) {
@@ -49027,8 +49027,8 @@ var require_async = __commonJS({
           }
           return false;
         }
-        const eventMethod = (name) => (handler59) => {
-          if (!handler59) {
+        const eventMethod = (name) => (handler60) => {
+          if (!handler60) {
             return new Promise((resolve, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
@@ -49037,7 +49037,7 @@ var require_async = __commonJS({
             });
           }
           off(name);
-          on(name, handler59);
+          on(name, handler60);
         };
         var isProcessing = false;
         var q = {
@@ -78284,7 +78284,7 @@ var require_debuggability = __commonJS({
       };
       Promise2.prototype._onCancel = function() {
       };
-      Promise2.prototype._setOnCancel = function(handler59) {
+      Promise2.prototype._setOnCancel = function(handler60) {
         ;
       };
       Promise2.prototype._attachCancellationCallback = function(onCancel) {
@@ -78839,10 +78839,10 @@ var require_finally = __commonJS({
       var util2 = require_util4();
       var CancellationError = Promise2.CancellationError;
       var errorObj2 = util2.errorObj;
-      function PassThroughHandlerContext(promise, type, handler59) {
+      function PassThroughHandlerContext(promise, type, handler60) {
         this.promise = promise;
         this.type = type;
-        this.handler = handler59;
+        this.handler = handler60;
         this.called = false;
         this.cancelPromise = null;
       }
@@ -78877,10 +78877,10 @@ var require_finally = __commonJS({
       }
       function finallyHandler(reasonOrValue) {
         var promise = this.promise;
-        var handler59 = this.handler;
+        var handler60 = this.handler;
         if (!this.called) {
           this.called = true;
-          var ret2 = this.isFinallyHandler() ? handler59.call(promise._boundValue()) : handler59.call(promise._boundValue(), reasonOrValue);
+          var ret2 = this.isFinallyHandler() ? handler60.call(promise._boundValue()) : handler60.call(promise._boundValue(), reasonOrValue);
           if (ret2 !== void 0) {
             promise._setReturnedNonUndefined();
             var maybePromise = tryConvertToPromise(ret2, promise);
@@ -78916,26 +78916,26 @@ var require_finally = __commonJS({
           return reasonOrValue;
         }
       }
-      Promise2.prototype._passThrough = function(handler59, type, success, fail2) {
-        if (typeof handler59 !== "function") return this.then();
+      Promise2.prototype._passThrough = function(handler60, type, success, fail2) {
+        if (typeof handler60 !== "function") return this.then();
         return this._then(
           success,
           fail2,
           void 0,
-          new PassThroughHandlerContext(this, type, handler59),
+          new PassThroughHandlerContext(this, type, handler60),
           void 0
         );
       };
-      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler59) {
+      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler60) {
         return this._passThrough(
-          handler59,
+          handler60,
           0,
           finallyHandler,
           finallyHandler
         );
       };
-      Promise2.prototype.tap = function(handler59) {
-        return this._passThrough(handler59, 1, finallyHandler);
+      Promise2.prototype.tap = function(handler60) {
+        return this._passThrough(handler60, 1, finallyHandler);
       };
       return PassThroughHandlerContext;
     };
@@ -79336,10 +79336,10 @@ var require_direct_resolve = __commonJS({
           );
         } else {
           var _reason = arguments[1];
-          var handler59 = function() {
+          var handler60 = function() {
             throw _reason;
           };
-          return this.caught(reason, handler59);
+          return this.caught(reason, handler60);
         }
       };
       Promise2.prototype.catchReturn = function(value) {
@@ -79355,10 +79355,10 @@ var require_direct_resolve = __commonJS({
         } else {
           var _value = arguments[1];
           if (_value instanceof Promise2) _value.suppressUnhandledRejections();
-          var handler59 = function() {
+          var handler60 = function() {
             return _value;
           };
-          return this.caught(value, handler59);
+          return this.caught(value, handler60);
         }
       };
     };
@@ -81460,22 +81460,22 @@ var require_promise = __commonJS({
         }
         var domain = getDomain();
         if (!((bitField & 50397184) === 0)) {
-          var handler59, value, settler = target._settlePromiseCtx;
+          var handler60, value, settler = target._settlePromiseCtx;
           if ((bitField & 33554432) !== 0) {
             value = target._rejectionHandler0;
-            handler59 = didFulfill;
+            handler60 = didFulfill;
           } else if ((bitField & 16777216) !== 0) {
             value = target._fulfillmentHandler0;
-            handler59 = didReject;
+            handler60 = didReject;
             target._unsetRejectionIsUnhandled();
           } else {
             settler = target._settlePromiseLateCancellationObserver;
             value = new CancellationError("late cancellation observer");
             target._attachExtraTrace(value);
-            handler59 = didReject;
+            handler60 = didReject;
           }
           async.invoke(settler, target, {
-            handler: domain === null ? handler59 : typeof handler59 === "function" && util2.domainBind(domain, handler59),
+            handler: domain === null ? handler60 : typeof handler60 === "function" && util2.domainBind(domain, handler60),
             promise,
             receiver,
             value
@@ -81656,7 +81656,7 @@ var require_promise = __commonJS({
           promise._rejectCallback(r, true);
         }
       };
-      Promise2.prototype._settlePromiseFromHandler = function(handler59, receiver, value, promise) {
+      Promise2.prototype._settlePromiseFromHandler = function(handler60, receiver, value, promise) {
         var bitField = promise._bitField;
         if ((bitField & 65536) !== 0) return;
         promise._pushContext();
@@ -81666,10 +81666,10 @@ var require_promise = __commonJS({
             x = errorObj2;
             x.e = new TypeError2("cannot .spread() a non-array: " + util2.classString(value));
           } else {
-            x = tryCatch2(handler59).apply(this._boundValue(), value);
+            x = tryCatch2(handler60).apply(this._boundValue(), value);
           }
         } else {
-          x = tryCatch2(handler59).call(receiver, value);
+          x = tryCatch2(handler60).call(receiver, value);
         }
         var promiseCreated = promise._popContext();
         bitField = promise._bitField;
@@ -81694,7 +81694,7 @@ var require_promise = __commonJS({
       Promise2.prototype._setFollowee = function(promise) {
         this._rejectionHandler0 = promise;
       };
-      Promise2.prototype._settlePromise = function(promise, handler59, receiver, value) {
+      Promise2.prototype._settlePromise = function(promise, handler60, receiver, value) {
         var isPromise = promise instanceof Promise2;
         var bitField = this._bitField;
         var asyncGuaranteed = (bitField & 134217728) !== 0;
@@ -81702,10 +81702,10 @@ var require_promise = __commonJS({
           if (isPromise) promise._invokeInternalOnCancel();
           if (receiver instanceof PassThroughHandlerContext && receiver.isFinallyHandler()) {
             receiver.cancelPromise = promise;
-            if (tryCatch2(handler59).call(receiver, value) === errorObj2) {
+            if (tryCatch2(handler60).call(receiver, value) === errorObj2) {
               promise._reject(errorObj2.e);
             }
-          } else if (handler59 === reflectHandler) {
+          } else if (handler60 === reflectHandler) {
             promise._fulfill(reflectHandler.call(receiver));
           } else if (receiver instanceof Proxyable) {
             receiver._promiseCancelled(promise);
@@ -81714,12 +81714,12 @@ var require_promise = __commonJS({
           } else {
             receiver.cancel();
           }
-        } else if (typeof handler59 === "function") {
+        } else if (typeof handler60 === "function") {
           if (!isPromise) {
-            handler59.call(receiver, value, promise);
+            handler60.call(receiver, value, promise);
           } else {
             if (asyncGuaranteed) promise._setAsyncGuaranteed();
-            this._settlePromiseFromHandler(handler59, receiver, value, promise);
+            this._settlePromiseFromHandler(handler60, receiver, value, promise);
           }
         } else if (receiver instanceof Proxyable) {
           if (!receiver._isResolved()) {
@@ -81739,15 +81739,15 @@ var require_promise = __commonJS({
         }
       };
       Promise2.prototype._settlePromiseLateCancellationObserver = function(ctx) {
-        var handler59 = ctx.handler;
+        var handler60 = ctx.handler;
         var promise = ctx.promise;
         var receiver = ctx.receiver;
         var value = ctx.value;
-        if (typeof handler59 === "function") {
+        if (typeof handler60 === "function") {
           if (!(promise instanceof Promise2)) {
-            handler59.call(receiver, value, promise);
+            handler60.call(receiver, value, promise);
           } else {
-            this._settlePromiseFromHandler(handler59, receiver, value, promise);
+            this._settlePromiseFromHandler(handler60, receiver, value, promise);
           }
         } else if (promise instanceof Promise2) {
           promise._reject(value);
@@ -81756,12 +81756,12 @@ var require_promise = __commonJS({
       Promise2.prototype._settlePromiseCtx = function(ctx) {
         this._settlePromise(ctx.promise, ctx.handler, ctx.receiver, ctx.value);
       };
-      Promise2.prototype._settlePromise0 = function(handler59, value, bitField) {
+      Promise2.prototype._settlePromise0 = function(handler60, value, bitField) {
         var promise = this._promise0;
         var receiver = this._receiverAt(0);
         this._promise0 = void 0;
         this._receiver0 = void 0;
-        this._settlePromise(promise, handler59, receiver, value);
+        this._settlePromise(promise, handler60, receiver, value);
       };
       Promise2.prototype._clearCallbackDataAtIndex = function(index) {
         var base = index * 4 - 4;
@@ -81801,20 +81801,20 @@ var require_promise = __commonJS({
       };
       Promise2.prototype._fulfillPromises = function(len, value) {
         for (var i = 1; i < len; i++) {
-          var handler59 = this._fulfillmentHandlerAt(i);
+          var handler60 = this._fulfillmentHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler59, receiver, value);
+          this._settlePromise(promise, handler60, receiver, value);
         }
       };
       Promise2.prototype._rejectPromises = function(len, reason) {
         for (var i = 1; i < len; i++) {
-          var handler59 = this._rejectionHandlerAt(i);
+          var handler60 = this._rejectionHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler59, receiver, reason);
+          this._settlePromise(promise, handler60, receiver, reason);
         }
       };
       Promise2.prototype._settlePromises = function() {
@@ -88420,14 +88420,14 @@ var require_iterate_stream = __commonJS({
     function once(eventEmitter, type) {
       return new Promise((resolve) => {
         let fired = false;
-        const handler59 = () => {
+        const handler60 = () => {
           if (!fired) {
             fired = true;
-            eventEmitter.removeListener(type, handler59);
+            eventEmitter.removeListener(type, handler60);
             resolve();
           }
         };
-        eventEmitter.addListener(type, handler59);
+        eventEmitter.addListener(type, handler60);
       });
     }
   }
@@ -104251,7 +104251,7 @@ async function handler33(req, res) {
         { onConflict: "sale_date,platform,link_id" }
       );
       if (error) throw error;
-      await writeAudit(ctx, req, "create", "daily_sales", null, null, {
+      await writeAudit(ctx, req, "create", "daily_sales", void 0, null, {
         rows: mergedRows.length,
         sale_date: body.rows[0].sale_date
       });
@@ -105318,7 +105318,7 @@ async function handler39(req, res) {
     }
     return res.status(502).json({ error: { code: "RATES_UNAVAILABLE", message: "\u6C47\u7387\u670D\u52A1\u6682\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" } });
   } catch (e) {
-    handleError2(e, req, res);
+    return handleError2(res, e);
   }
 }
 
@@ -105846,10 +105846,12 @@ async function handler50(req, res) {
       if (Object.keys(body).length === 0) throw Errors.badRequest("\u65E0\u66F4\u65B0\u5B57\u6BB5");
       const textKeys = ["sku", "code", "link_id", "name", "barcode", "category", "unit", "remark", "competitor_id", "shipping_mode", "listing_time", "image_text", "currency"];
       const nullableKeys = ["code", "link_id", "barcode", "category", "remark", "competitor_id", "listing_time", "image_text"];
+      const normalized = body;
       for (const k of textKeys) {
-        if (typeof body[k] === "string") {
-          const v = body[k].trim();
-          body[k] = v === "" && nullableKeys.includes(k) ? null : v;
+        const val = normalized[k];
+        if (typeof val === "string") {
+          const v = val.trim();
+          normalized[k] = v === "" && nullableKeys.includes(k) ? null : v;
         }
       }
       const { data: before } = await supabase.from("products").select("*").eq("id", id).is("deleted_at", null).single();
@@ -106366,8 +106368,383 @@ async function handler54(req, res) {
   }
 }
 
-// server/_handlers/shipments/confirm-inbound.ts
+// server/_handlers/shipments/import.ts
+var MAX_ROWS2 = 1e3;
+var manualRowSchema = external_exports.object({
+  row_no: external_exports.number().int().positive().optional(),
+  ship_date: external_exports.string().max(32).nullable().optional(),
+  forwarder_name: external_exports.string().max(128).nullable().optional(),
+  shipping_mode: external_exports.string().max(20).nullable().optional(),
+  warehouse_no: external_exports.string().max(50).nullable().optional(),
+  shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipping_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  shipment_no: external_exports.string().min(1).max(100),
+  product_code: external_exports.string().max(100).nullable().optional(),
+  billable_weight_vol: external_exports.string().max(50).nullable().optional(),
+  volume_diff: external_exports.string().max(50).nullable().optional(),
+  billable_amount: external_exports.union([external_exports.null(), external_exports.coerce.number()]).optional(),
+  estimated_arrival: external_exports.string().max(32).nullable().optional(),
+  cargo_status: external_exports.string().max(20).nullable().optional(),
+  appointment_time: external_exports.string().max(32).nullable().optional(),
+  warehouse_status: external_exports.string().max(100).nullable().optional(),
+  actual_warehouse_qty: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  abnormal_penalty: external_exports.string().max(500).nullable().optional(),
+  bill_check_status: external_exports.string().max(20).nullable().optional()
+});
+var transferRowSchema = external_exports.object({
+  row_no: external_exports.number().int().positive().optional(),
+  shipment_no: external_exports.string().min(1).max(100),
+  cargo_code: external_exports.string().max(100).nullable().optional(),
+  forwarder_name: external_exports.string().max(128).nullable().optional(),
+  shipping_mode: external_exports.string().max(20).nullable().optional(),
+  shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
+  ship_date: external_exports.string().max(32).nullable().optional(),
+  product_code: external_exports.string().min(1).max(100),
+  quantity: external_exports.coerce.number().positive(),
+  remark: external_exports.string().max(1e3).nullable().optional()
+});
+var importSchema2 = external_exports.object({
+  source: external_exports.enum(["manual", "transfer"]).default("manual"),
+  rows: external_exports.array(external_exports.unknown()).min(1).max(MAX_ROWS2)
+});
+function cleanStr(v) {
+  if (v === "" || v === null || v === void 0) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+function cleanNum(v) {
+  if (v === "" || v === null || v === void 0) return null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
 async function handler55(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    const ctx = await requireAuth(req);
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    requirePermission(ctx, "shipment.write");
+    const body = parse(importSchema2, req.body || {});
+    const supabase = getAdminClient();
+    const source = body.source;
+    const rawRows = body.rows;
+    const errors = [];
+    const forwarderMap = /* @__PURE__ */ new Map();
+    {
+      const { data: fRows } = await supabase.from("forwarders").select("id, name");
+      for (const f of fRows || []) {
+        const n = cleanStr(f.name);
+        if (n) forwarderMap.set(n, f.id);
+      }
+    }
+    const productIdMap = /* @__PURE__ */ new Map();
+    {
+      const { data: pRows } = await supabase.from("products").select("id, code, sku, barcode").is("deleted_at", null);
+      for (const p of pRows || []) {
+        for (const key of [p.code, p.sku, p.barcode]) {
+          const k = cleanStr(key);
+          if (k && !productIdMap.has(k)) productIdMap.set(k, p.id);
+        }
+      }
+    }
+    const pushError = (rowNo, message) => {
+      errors.push({ row: String(rowNo), message });
+    };
+    let created = 0;
+    let updated = 0;
+    let failedRows = 0;
+    let transferOrders = 0;
+    if (source === "manual") {
+      const parsedRows = [];
+      rawRows.forEach((r, i) => {
+        const rowNo = r?.row_no || i + 1;
+        const parsed = manualRowSchema.safeParse(r);
+        if (!parsed.success) {
+          failedRows++;
+          const msg = parsed.error.issues[0]?.message || "\u5B57\u6BB5\u683C\u5F0F\u9519\u8BEF";
+          pushError(rowNo, msg);
+          parsedRows.push({ row_no: rowNo, ok: false });
+          return;
+        }
+        parsedRows.push({ row_no: rowNo, ok: true, data: parsed.data });
+      });
+      const nos = Array.from(
+        new Set(parsedRows.filter((p) => p.ok).map((p) => String(cleanStr(p.data.shipment_no) || "").trim()).filter(Boolean))
+      );
+      const existingMap = /* @__PURE__ */ new Map();
+      for (let i = 0; i < nos.length; i += 500) {
+        const chunk = nos.slice(i, i + 500);
+        const { data: exRows } = await supabase.from("shipments").select("id, shipment_no, tracking_no").is("deleted_at", null).in("shipment_no", chunk);
+        for (const e of exRows || []) {
+          const k = cleanStr(e.shipment_no);
+          if (k && !existingMap.has(k)) existingMap.set(k, e.id);
+        }
+      }
+      for (const p of parsedRows) {
+        if (!p.ok || !p.data) continue;
+        const r = p.data;
+        const rowNo = p.row_no;
+        const shipmentNo = cleanStr(r.shipment_no);
+        if (!shipmentNo) {
+          failedRows++;
+          pushError(rowNo, "\u8D27\u4EF6\u53F7\u4E3A\u7A7A\uFF0C\u5DF2\u8DF3\u8FC7");
+          continue;
+        }
+        let forwarderId = null;
+        const fwName = cleanStr(r.forwarder_name);
+        if (fwName) {
+          forwarderId = forwarderMap.get(fwName) || null;
+          if (!forwarderId) {
+            failedRows++;
+            pushError(rowNo, `\u8D27\u4EE3\u300C${fwName}\u300D\u4E0D\u5B58\u5728\uFF0C\u8BF7\u5148\u5230\u7CFB\u7EDF\u8BBE\u7F6E\u7EF4\u62A4\u8D27\u4EE3`);
+            continue;
+          }
+        }
+        const payload = {
+          warehouse_no: cleanStr(r.warehouse_no),
+          ship_date: cleanStr(r.ship_date),
+          forwarder_id: forwarderId,
+          shipping_cartons: cleanNum(r.shipping_cartons),
+          shipping_qty: cleanNum(r.shipping_qty),
+          shipping_mode: cleanStr(r.shipping_mode),
+          shipment_no: shipmentNo,
+          product_code: cleanStr(r.product_code),
+          billable_weight_vol: cleanStr(r.billable_weight_vol),
+          volume_diff: cleanStr(r.volume_diff),
+          billable_amount: cleanNum(r.billable_amount),
+          estimated_arrival: cleanStr(r.estimated_arrival),
+          cargo_status: cleanStr(r.cargo_status) || "\u8F6C\u8FD0\u4E2D",
+          appointment_time: cleanStr(r.appointment_time),
+          warehouse_status: cleanStr(r.warehouse_status),
+          actual_warehouse_qty: cleanNum(r.actual_warehouse_qty),
+          abnormal_penalty: cleanStr(r.abnormal_penalty),
+          bill_check_status: cleanStr(r.bill_check_status) || "\u5F85\u786E\u8BA4"
+        };
+        const existingId = existingMap.get(shipmentNo);
+        try {
+          if (existingId) {
+            const { error: upErr } = await supabase.from("shipments").update(payload).eq("id", existingId);
+            if (upErr) throw upErr;
+            updated++;
+          } else {
+            const { error: inErr } = await supabase.from("shipments").insert({
+              ...payload,
+              tracking_no: shipmentNo,
+              source: "manual",
+              created_by: ctx.userId
+            });
+            if (inErr) {
+              if (inErr.code === "23505") {
+                failedRows++;
+                pushError(rowNo, `\u8D27\u4EF6\u53F7\u300C${shipmentNo}\u300D\u5DF2\u5B58\u5728\uFF08\u53EF\u80FD\u521A\u88AB\u521B\u5EFA\uFF09\uFF0C\u5DF2\u8DF3\u8FC7`);
+                continue;
+              }
+              throw inErr;
+            }
+            created++;
+          }
+        } catch (e) {
+          failedRows++;
+          pushError(rowNo, e?.message || "\u5199\u5165\u5931\u8D25");
+        }
+      }
+      await writeAudit(ctx, req, "import", "shipment", null, null, {
+        source: "manual",
+        rows: parsedRows.length,
+        created,
+        updated,
+        failedRows
+      });
+      return res.status(200).json({
+        data: {
+          source,
+          total_rows: parsedRows.length,
+          created,
+          updated,
+          transfer_orders: 0,
+          failed_rows: failedRows,
+          errors
+        }
+      });
+    }
+    const transferRows = [];
+    rawRows.forEach((r, i) => {
+      const rowNo = r?.row_no || i + 1;
+      const parsed = transferRowSchema.safeParse(r);
+      if (!parsed.success) {
+        failedRows++;
+        const msg = parsed.error.issues[0]?.message || "\u5B57\u6BB5\u683C\u5F0F\u9519\u8BEF";
+        pushError(rowNo, msg);
+        transferRows.push({ row_no: rowNo, ok: false });
+        return;
+      }
+      transferRows.push({ row_no: rowNo, ok: true, data: parsed.data });
+    });
+    const groups = /* @__PURE__ */ new Map();
+    for (const p of transferRows) {
+      if (!p.ok || !p.data) continue;
+      const shipmentNo = cleanStr(p.data.shipment_no);
+      if (!shipmentNo) {
+        failedRows++;
+        pushError(p.row_no, "\u8D27\u4EF6\u53F7\u4E3A\u7A7A\uFF0C\u5DF2\u8DF3\u8FC7");
+        continue;
+      }
+      if (!groups.has(shipmentNo)) groups.set(shipmentNo, { rows: [] });
+      groups.get(shipmentNo).rows.push({ row_no: p.row_no, data: p.data });
+    }
+    const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+    if (domWhErr) throw domWhErr;
+    if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
+    for (const [shipmentNo, group] of groups) {
+      const rowNos = group.rows.map((r) => r.row_no);
+      const rowLabel = rowNos.length === 1 ? `\u7B2C ${rowNos[0]} \u884C` : `\u7B2C ${Math.min(...rowNos)}-${Math.max(...rowNos)} \u884C`;
+      const first = group.rows[0].data;
+      const fwName = group.rows.map((r) => cleanStr(r.data.forwarder_name)).find(Boolean) || null;
+      const forwarderId = fwName ? forwarderMap.get(fwName) || null : null;
+      if (!forwarderId) {
+        failedRows += group.rows.length;
+        pushError(rowLabel, `\u8D27\u4EE3${fwName ? `\u300C${fwName}\u300D\u4E0D\u5B58\u5728\uFF0C\u8BF7\u5148\u5230\u7CFB\u7EDF\u8BBE\u7F6E\u7EF4\u62A4\u8D27\u4EE3` : "\u4E3A\u7A7A\uFF0C\u8BF7\u586B\u5199\u8D27\u4EE3"}`);
+        continue;
+      }
+      const items = [];
+      let groupFailed = 0;
+      for (const r of group.rows) {
+        const productCode = cleanStr(r.data.product_code);
+        const productId = productCode ? productIdMap.get(productCode) : void 0;
+        if (!productCode || !productId) {
+          failedRows++;
+          groupFailed++;
+          pushError(r.row_no, `\u4EA7\u54C1\u7F16\u7801\u300C${productCode || ""}\u300D\u4E0D\u5B58\u5728\uFF0C\u8BF7\u6838\u5BF9\u5546\u54C1\u7BA1\u7406\u4E2D\u7F16\u7801/SKU/\u6761\u7801`);
+          continue;
+        }
+        const qty = cleanNum(r.data.quantity);
+        if (qty === null || qty <= 0) {
+          failedRows++;
+          groupFailed++;
+          pushError(r.row_no, "\u6570\u91CF\u5FC5\u987B\u4E3A\u5927\u4E8E 0 \u7684\u6570\u5B57");
+          continue;
+        }
+        items.push({ product_id: productId, quantity: qty, remark: cleanStr(r.data.remark) });
+      }
+      if (groupFailed === group.rows.length || items.length === 0) continue;
+      const { data: shipment, error: insErr } = await supabase.from("shipments").insert({
+        tracking_no: shipmentNo,
+        shipment_no: shipmentNo,
+        cargo_code: cleanStr(first.cargo_code),
+        forwarder_id: forwarderId,
+        shipping_mode: cleanStr(first.shipping_mode),
+        shipping_cartons: cleanNum(first.shipping_cartons),
+        ship_date: cleanStr(first.ship_date),
+        source: "transfer",
+        cargo_status: "\u8F6C\u8FD0\u4E2D",
+        created_by: ctx.userId
+      }).select().single();
+      if (insErr) {
+        failedRows += group.rows.length;
+        pushError(
+          rowLabel,
+          insErr.code === "23505" ? `\u8D27\u4EF6\u53F7\u300C${shipmentNo}\u300D\u5DF2\u5B58\u5728\uFF0C\u8BF7\u7528\u7F16\u8F91\u529F\u80FD\u4FEE\u6539\u6216\u6362\u53F7` : insErr.message || "\u521B\u5EFA\u8C03\u62E8\u5355\u5931\u8D25"
+        );
+        continue;
+      }
+      const deducted = [];
+      let stockFail = null;
+      for (const it of items) {
+        const { error: invErr } = await supabase.rpc("adjust_inventory", {
+          p_product_id: it.product_id,
+          p_warehouse_id: domWh.id,
+          p_quantity: -it.quantity,
+          p_type: "transfer_out",
+          p_reference_type: "shipment",
+          p_reference_id: shipment.id,
+          p_created_by: ctx.userId,
+          p_note: `\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u6263\u51CF ${shipmentNo}`
+        });
+        if (invErr) {
+          stockFail = `\u56FD\u5185\u5E93\u5B58\u4E0D\u8DB3\uFF0C\u65E0\u6CD5\u521B\u5EFA\u8C03\u62E8\u53D1\u8D27\uFF1A\u5546\u54C1 ${it.product_id} \u7F3A\u5C11 ${it.quantity} \u4EF6`;
+          break;
+        }
+        deducted.push({ product_id: it.product_id, quantity: it.quantity });
+      }
+      if (stockFail) {
+        for (const d of deducted) {
+          await supabase.rpc("adjust_inventory", {
+            p_product_id: d.product_id,
+            p_warehouse_id: domWh.id,
+            p_quantity: d.quantity,
+            p_type: "adjustment",
+            p_reference_type: "shipment",
+            p_reference_id: shipment.id,
+            p_created_by: ctx.userId,
+            p_note: "\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u5931\u8D25\u56DE\u6EDA"
+          });
+        }
+        await supabase.from("shipments").delete().eq("id", shipment.id);
+        failedRows += group.rows.length;
+        pushError(rowLabel, stockFail);
+        continue;
+      }
+      const { error: itemErr } = await supabase.from("shipment_items").insert(
+        items.map((it) => ({
+          shipment_id: shipment.id,
+          product_id: it.product_id,
+          quantity: it.quantity,
+          remark: it.remark || null
+        }))
+      );
+      if (itemErr) {
+        for (const d of deducted) {
+          await supabase.rpc("adjust_inventory", {
+            p_product_id: d.product_id,
+            p_warehouse_id: domWh.id,
+            p_quantity: d.quantity,
+            p_type: "adjustment",
+            p_reference_type: "shipment",
+            p_reference_id: shipment.id,
+            p_created_by: ctx.userId,
+            p_note: "\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u5931\u8D25\u56DE\u6EDA"
+          });
+        }
+        await supabase.from("shipments").delete().eq("id", shipment.id);
+        failedRows += group.rows.length;
+        pushError(rowLabel, itemErr.message || "\u660E\u7EC6\u5199\u5165\u5931\u8D25");
+        continue;
+      }
+      transferOrders++;
+      created += items.length;
+      await writeAudit(ctx, req, "create", "shipment", shipment.id, null, {
+        source: "transfer",
+        tracking_no: shipmentNo,
+        items: items.length
+      });
+    }
+    await writeAudit(ctx, req, "import", "shipment", null, null, {
+      source: "transfer",
+      rows: transferRows.length,
+      created,
+      updated,
+      failedRows,
+      transferOrders
+    });
+    return res.status(200).json({
+      data: {
+        source,
+        total_rows: transferRows.length,
+        created,
+        updated,
+        transfer_orders: transferOrders,
+        failed_rows: failedRows,
+        errors
+      }
+    });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
+// server/_handlers/shipments/confirm-inbound.ts
+async function handler56(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -106444,7 +106821,7 @@ var TRANSFER_FLOW = {
 var updateSchema13 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler56(req, res) {
+async function handler57(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106544,7 +106921,7 @@ var updateSchema14 = external_exports.object({
   is_active: external_exports.boolean().optional(),
   wh_type: external_exports.enum(["domestic", "overseas"]).optional()
 });
-async function handler57(req, res) {
+async function handler58(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106635,24 +107012,25 @@ var routes = [
   { pattern: /^\/roles$/, handler: handler25 },
   { pattern: /^\/sales\/([^/]+)$/, handler: handler53, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler27 },
-  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler55, params: ["id"] },
+  { pattern: /^\/shipments\/import$/, handler: handler55 },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler56, params: ["id"] },
   { pattern: /^\/shipments\/([^/]+)$/, handler: handler54, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler28 },
   { pattern: /^\/stocktakes\/summary$/, handler: handler21 },
   { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes\/([^/]+)$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes$/, handler: handler10 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler56, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler57, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler29 },
   { pattern: /^\/users\/([^/]+)$/, handler: handler30, params: ["id"] },
   { pattern: /^\/users$/, handler: handler31 },
   { pattern: /^\/export\/xlsx$/, handler: handler5 },
   { pattern: /^\/system\/backup$/, handler: handler19 },
   { pattern: /^\/system\/logo$/, handler: handler20 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler57, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler58, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler32 }
 ];
-async function handler58(req, res) {
+async function handler59(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -106675,7 +107053,7 @@ async function handler58(req, res) {
   }
 }
 export {
-  handler58 as default
+  handler59 as default
 };
 /*! Bundled license information:
 

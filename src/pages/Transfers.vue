@@ -12,10 +12,13 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button v-if="canWrite" @click="downloadTransferTemplate">下载模板</el-button>
+        <el-button v-if="canWrite" type="primary" plain :loading="importing" @click="triggerTransferImport">批量导入</el-button>
         <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增调拨发货</el-button>
+        <input ref="transferImportRef" type="file" accept=".xlsx,.xls" style="display: none" @change="onTransferImportChange" />
       </div>
     </div>
 
@@ -289,6 +292,7 @@ import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { exportViaServer, todayStr } from '../utils/export'
+import { readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('shipment.write'))
@@ -300,7 +304,110 @@ function formatDate(v: string) {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
+const importing = ref(false)
+const transferImportRef = ref<HTMLInputElement | null>(null)
 const query = reactive({ page: 1, pageSize: 200, tracking_no: '', shipping_mode: '', cargo_status: '' })
+
+const TRANSFER_IMPORT_COLUMNS: { label: string; key: string; required?: boolean; desc?: string }[] = [
+  { label: '货件号', key: 'shipment_no', required: true, desc: '必填，唯一；同一货件号多行表示多个明细商品，将聚合为一个调拨单' },
+  { label: '货代号', key: 'cargo_code', desc: '选填' },
+  { label: '货代', key: 'forwarder_name', required: true, desc: '必填，需与系统设置-货代管理中名称完全一致' },
+  { label: '空海运', key: 'shipping_mode', desc: '选填，空运/海运' },
+  { label: '箱数', key: 'shipping_cartons', desc: '选填，数字' },
+  { label: '发货时间', key: 'ship_date', desc: '选填，如 2026-08-01' },
+  { label: '产品编码', key: 'product_code', required: true, desc: '必填，商品管理中编码/SKU/条码任一' },
+  { label: '数量', key: 'quantity', required: true, desc: '必填，大于 0 的数字' },
+  { label: '备注', key: 'remark', desc: '选填' },
+]
+
+async function downloadTransferTemplate() {
+  try {
+    const XLSX = await import('xlsx')
+    const headers = TRANSFER_IMPORT_COLUMNS.map((c) => c.label)
+    const sample = [
+      ['FBA-20260801-001', 'AGYQ81745', '广州永利货代', '海运', 10, '2026-08-01', 'AGYQ81745', 300, ''],
+      ['FBA-20260801-001', 'AGYQ81745', '广州永利货代', '海运', 10, '2026-08-01', 'B12345', 200, '同货件号第二行明细'],
+      ['FBA-20260802-002', 'ZZZ999', '深圳海通国际', '空运', 5, '2026-08-02', 'C67890', 50, ''],
+    ]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sample])
+    ws['!cols'] = headers.map((h) => ({ wch: Math.max(h.length * 2 + 4, 14) }))
+    XLSX.utils.book_append_sheet(wb, ws, '调拨导入模板')
+    const descRows = TRANSFER_IMPORT_COLUMNS.map((c) => [c.label, c.required ? '必填' : '选填', c.desc || ''])
+    const ws2 = XLSX.utils.aoa_to_sheet([['列名', '是否必填', '说明'], ...descRows])
+    ws2['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 60 }]
+    XLSX.utils.book_append_sheet(wb, ws2, '填写说明')
+    XLSX.writeFile(wb, `调拨批量导入模板_${todayStr()}.xlsx`)
+    ElMessage.success('模板已下载，请按“填写说明”页填写后导入')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '模板下载失败')
+  }
+}
+
+function triggerTransferImport() {
+  transferImportRef.value?.click()
+}
+
+async function onTransferImportChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const { headers, rows: rawRows } = await readExcelFile(file)
+    const colIdx = buildColMap(headers, {
+      shipment_no: ['货件号'],
+      cargo_code: ['货代号'],
+      forwarder_name: ['货代'],
+      shipping_mode: ['空海运'],
+      shipping_cartons: ['箱数'],
+      ship_date: ['发货时间'],
+      product_code: ['产品编码'],
+      quantity: ['数量'],
+      remark: ['备注'],
+    })
+    if (!('shipment_no' in colIdx) || !('product_code' in colIdx) || !('quantity' in colIdx)) {
+      ElMessage.warning('模板缺少必要列（货件号/产品编码/数量），请先下载模板')
+      return
+    }
+    const rows: Record<string, unknown>[] = []
+    rawRows.forEach((row, i) => {
+      if (!row || (row as any[]).every((c) => c === '' || c === null || c === undefined)) return
+      rows.push({
+        row_no: i + 2, // 表头占第 1 行，Excel 数据行从第 2 行开始
+        shipment_no: cellStr(row, colIdx.shipment_no),
+        cargo_code: cellStr(row, colIdx.cargo_code) || null,
+        forwarder_name: cellStr(row, colIdx.forwarder_name) || null,
+        shipping_mode: cellStr(row, colIdx.shipping_mode) || null,
+        shipping_cartons: cellNum(row, colIdx.shipping_cartons, 0) || null,
+        ship_date: cellStr(row, colIdx.ship_date) || null,
+        product_code: cellStr(row, colIdx.product_code),
+        quantity: cellNum(row, colIdx.quantity, 0),
+        remark: cellStr(row, colIdx.remark) || null,
+      })
+    })
+    if (!rows.length) {
+      ElMessage.warning('模板数据为空，请先下载模板填写后再导入')
+      return
+    }
+    const { data } = await api.post('/shipments/import', { source: 'transfer', rows })
+    const r = data?.data ?? {}
+    ElMessage.success(
+      `导入完成：新增调拨单 ${r.transfer_orders ?? 0} 个（明细 ${r.created ?? 0} 条）${r.failed_rows ? `，失败 ${r.failed_rows} 行` : ''}`
+    )
+    if (r.errors?.length) {
+      const lines = (r.errors as { row: string; message: string }[]).slice(0, 10).map((e) => `第 ${e.row} 行：${e.message}`)
+      console.warn('[transfers import]', r.errors)
+      ElMessageBox.alert(lines.join('\n') + (r.errors.length > 10 ? `\n...等 ${r.errors.length} 条错误` : ''), '部分行导入失败', { type: 'warning' })
+    }
+    load()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || e?.message || '导入失败，请检查文件格式')
+  } finally {
+    importing.value = false
+  }
+}
 
 function totalQty(row: any) {
   const items = row.shipment_items

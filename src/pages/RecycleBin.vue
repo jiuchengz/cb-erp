@@ -21,7 +21,7 @@
         </el-table-column>
         <el-table-column label="标题 / 单号" min-width="240">
           <template #default="{ row }">
-            <div>{{ row.title || '-' }}</div>
+            <div class="cell2">{{ row.title || '-' }}</div>
             <div v-if="row.code" class="code-text">{{ row.code }}</div>
           </template>
         </el-table-column>

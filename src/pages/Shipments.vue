@@ -4,7 +4,7 @@
       <h2>发货管理</h2>
       <div>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
-        <el-button v-if="canWrite" @click="downloadImportTemplate">导入模板</el-button>
+        <el-button v-if="canWrite" @click="downloadImportTemplate">下载模板</el-button>
         <el-button v-if="canWrite" type="primary" plain :loading="importing" @click="triggerImport">批量导入</el-button>
         <el-button v-if="canWrite" type="danger" :disabled="!selected.length" @click="batchRemove">
           批量删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -331,7 +331,7 @@
           <el-input-number v-model="editForm.pull_declare_qty" :min="0" :precision="0" style="width: 100%" />
         </el-form-item>
         <el-form-item label="(预计)到港时间">
-          <el-date-picker v-model="editForm.estimated_arrival" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+          <el-input v-model="editForm.estimated_arrival" placeholder="可填任意格式，如 2026-09-15、9月中旬" style="width: 100%" />
         </el-form-item>
         <el-form-item label="货物状态">
           <el-select v-model="editForm.cargo_status" placeholder="选择货物状态" style="width: 100%">
@@ -988,6 +988,7 @@ const IMPORT_COLUMNS: { label: string; key: string }[] = [
   { label: '计费重量/体积', key: 'billable_weight_vol' },
   { label: '体积差', key: 'volume_diff' },
   { label: '计费金额', key: 'billable_amount' },
+  { label: '(预计)到港时间', key: 'estimated_arrival' },
   { label: '货物状态', key: 'cargo_status' },
   { label: '预约时间', key: 'appointment_time' },
   { label: '入仓情况', key: 'warehouse_status' },
@@ -1040,6 +1041,7 @@ function downloadImportTemplate() {
       '31.9kg/0.24m³',
       '+0.06m³',
       5900.4,
+      '2026-09-15',
       '转运中',
       '2026-08-16 10:00',
       '全部入仓',
@@ -1093,24 +1095,6 @@ async function onImportFileChange(e: Event) {
       return
     }
 
-    // 加载已有货件号 -> id 映射（用于覆盖）
-    const existingMap = new Map<string, string>()
-    let page = 1
-    const pageSize = 200
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const { data } = await api.get('/shipments', { params: { page, pageSize } })
-      const list: any[] = data.data ?? []
-      for (const r of list) {
-        if (r.shipment_no) existingMap.set(r.shipment_no, r.id)
-      }
-      if (list.length < pageSize) break
-      page++
-    }
-
-    const forwarderNameToId = new Map<string, string>()
-    for (const f of forwarders.value) forwarderNameToId.set(f.name, f.id)
-
     const num = (v: unknown): number | null => {
       if (v === '' || v === null || v === undefined) return null
       const n = Number(String(v).trim())
@@ -1122,58 +1106,41 @@ async function onImportFileChange(e: Event) {
     }
     const get = (row: unknown[], key: string) => (colIdx[key] !== undefined ? row[colIdx[key]] : '')
 
-    let created = 0
-    let updated = 0
-    let failed = 0
-    const errors: string[] = []
+    // 组装行数据，交由后端批量导入接口统一校验与写入（逐行错误收集、部分成功提示）
+    const rows: Record<string, unknown>[] = []
     for (let i = 1; i < aoa.length; i++) {
       const row = aoa[i]
       if (!row || (row as unknown[]).every((c) => c === '' || c === null || c === undefined)) continue
-      const shipmentNo = str(get(row, 'shipment_no'))
-      if (!shipmentNo) {
-        failed++
-        errors.push(`第 ${i + 1} 行：货件号为空，已跳过`)
-        continue
-      }
-      const forwarderName = str(get(row, 'forwarder'))
-      const payload: any = {
+      rows.push({
+        row_no: i + 1,
         warehouse_no: str(get(row, 'warehouse_no')),
         ship_date: str(get(row, 'ship_date')),
-        forwarder_id: forwarderName ? forwarderNameToId.get(forwarderName) || null : null,
+        forwarder_name: str(get(row, 'forwarder')),
         shipping_cartons: num(get(row, 'shipping_cartons')),
         shipping_qty: num(get(row, 'shipping_qty')),
         shipping_mode: str(get(row, 'shipping_mode')),
-        shipment_no: shipmentNo,
+        shipment_no: str(get(row, 'shipment_no')),
         product_code: str(get(row, 'product_code')),
         billable_weight_vol: str(get(row, 'billable_weight_vol')),
         volume_diff: str(get(row, 'volume_diff')),
         billable_amount: num(get(row, 'billable_amount')),
-        cargo_status: str(get(row, 'cargo_status')) || '转运中',
+        estimated_arrival: str(get(row, 'estimated_arrival')),
+        cargo_status: str(get(row, 'cargo_status')),
         appointment_time: str(get(row, 'appointment_time')),
         warehouse_status: str(get(row, 'warehouse_status')),
         actual_warehouse_qty: num(get(row, 'actual_warehouse_qty')),
         abnormal_penalty: str(get(row, 'abnormal_penalty')),
-        bill_check_status: str(get(row, 'bill_check_status')) || '待确认',
-      }
-      try {
-        const existingId = existingMap.get(shipmentNo)
-        if (existingId) {
-          await api.patch(`/shipments/${existingId}`, payload)
-          updated++
-        } else {
-          await api.post('/shipments', payload)
-          created++
-        }
-      } catch (err: any) {
-        failed++
-        errors.push(`第 ${i + 1} 行（${shipmentNo}）：${err?.response?.data?.error?.message || err?.message || '导入失败'}`)
-      }
+        bill_check_status: str(get(row, 'bill_check_status')),
+      })
     }
 
-    ElMessage.success(`导入完成：新增 ${created} 条，覆盖 ${updated} 条${failed ? `，失败 ${failed} 条` : ''}`)
-    if (errors.length) {
-      console.warn('[shipments import]', errors)
-      ElMessageBox.alert(errors.slice(0, 10).join('\n'), '部分行导入失败', { type: 'warning' })
+    const { data: importRes } = await api.post('/shipments/import', { source: 'manual', rows })
+    const r = importRes?.data ?? {}
+    ElMessage.success(`导入完成：新增 ${r.created ?? 0} 条，覆盖 ${r.updated ?? 0} 条${r.failed_rows ? `，失败 ${r.failed_rows} 条` : ''}`)
+    if (r.errors?.length) {
+      const lines = (r.errors as { row: string; message: string }[]).slice(0, 10).map((e) => `第 ${e.row} 行：${e.message}`)
+      console.warn('[shipments import]', r.errors)
+      ElMessageBox.alert(lines.join('\n') + (r.errors.length > 10 ? `\n...等 ${r.errors.length} 条错误` : ''), '部分行导入失败', { type: 'warning' })
     }
     load()
   } catch (e: any) {

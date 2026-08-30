@@ -496,3 +496,90 @@ html.dark .el-dropdown-menu__item:not(.is-disabled):hover {
     flex-wrap: wrap;
   }
 }
+
+/* ============================================================
+   全局布局固定（布局不跳动）
+   1) 表格单元格统一不换行 + 省略号，列宽不被内容撑动；
+   2) 表头/表体行高统一固定，超长内容不再撑高；
+   3) 弹窗、卡片、表单、间距统一；
+   4) 说明：列宽本身已在各页面用 width/min-width 固定。
+   ============================================================ */
+.el-table .cell {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.el-table td.el-table__cell {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  line-height: 20px !important;
+  height: 44px;
+}
+.el-table th.el-table__cell {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  line-height: 20px !important;
+  height: 44px;
+}
+.el-table .el-table__row {
+  height: 44px;
+}
+/* 两行结构单元格（主文本 + 辅助文本）：保留两行但行高恒定、主文本省略 */
+.el-table .cell.cell2 {
+  white-space: normal !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+}
+.el-table .cell.cell2 > div:first-child {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 20px !important;
+}
+.el-table .cell.cell2 > div:nth-child(2) {
+  line-height: 16px !important;
+  font-size: 12px;
+}
+/* 行内图片/标签等不被省略号裁剪影响正常展示（仅文本类溢出省略） */
+.el-table .cell .el-tag,
+.el-table .cell img {
+  flex: none;
+  vertical-align: middle;
+}
+.el-table .cell .el-button {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+/* 固定操作列：单元格内按钮组不换行、不省略，保证操作入口完整可见 */
+.el-table .cell .el-button-group,
+.el-table .fixed-right .cell {
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* 弹窗宽度固定（桌面端）；页面已用 width 属性指定，这里兜底防跳动 */
+@media (min-width: 701px) {
+  .el-dialog {
+    max-width: calc(100vw - 48px) !important;
+  }
+}
+
+/* 卡片内间距统一 */
+.el-card__body {
+  padding: 18px 20px !important;
+}
+
+/* 表单控件统一高度，避免不同控件混排造成行高跳动 */
+.el-form-item {
+  margin-bottom: 18px;
+}
+.el-form-item__label {
+  line-height: 32px;
+}
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-input-number .el-input__wrapper {
+  min-height: 32px !important;
+}
