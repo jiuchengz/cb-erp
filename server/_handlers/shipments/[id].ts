@@ -80,7 +80,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         update.status = body.status;
       }
-      if (body.tracking_no !== undefined) update.tracking_no = body.tracking_no;
+      // 货件号变更时：若新货件号已存在于发货管理（source=manual），执行「绑定合并」——
+      // 将当前调拨记录并入该发货记录（软删除当前记录，目标记录升级为调拨发货并写入最新明细），
+      // 使同一货件号在发货管理与调拨发货管理中成为同一条记录
+      if (body.tracking_no !== undefined && body.tracking_no !== before.tracking_no) {
+        const newNo = String(body.tracking_no || '').trim();
+        if (!newNo) throw Errors.badRequest('货件号不能为空');
+        const { data: target, error: tgtErr } = await supabase
+          .from('shipments')
+          .select('id, source, cargo_status')
+          .is('deleted_at', null)
+          .eq('tracking_no', newNo)
+          .maybeSingle();
+        if (tgtErr) throw tgtErr;
+        if (target && target.id !== id) {
+          if (target.source === 'transfer') {
+            throw Errors.conflict(`货件号已存在于其他调拨发货记录：${newNo}`);
+          }
+          // source === 'manual'：绑定合并，仅允许当前记录未进入发货流程（未扣减库存）时执行
+          if ((before as any).cargo_status !== '待发货') {
+            throw Errors.conflict(
+              `当前货件已进入发货流程（${(before as any).cargo_status}），无法改号绑定；请在调拨发货管理中新建货件号 ${newNo}`
+            );
+          }
+          if (body.cargo_status !== undefined && body.cargo_status !== '待发货') {
+            throw Errors.conflict('改号绑定时货物状态须保持「待发货」，保存后可在列表中再修改状态');
+          }
+          // 1. 软删除当前调拨记录
+          const { error: delErr } = await supabase
+            .from('shipments')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id);
+          if (delErr) throw delErr;
+          // 2. 升级目标发货记录为调拨发货，写入最新字段
+          const mergedUpdate: Record<string, unknown> = {
+            source: 'transfer',
+            tracking_no: newNo,
+            shipment_no: newNo,
+            cargo_code: body.cargo_code ?? (before as any).cargo_code ?? null,
+            forwarder_id: body.forwarder_id ?? (before as any).forwarder_id ?? null,
+            shipping_mode: body.shipping_mode ?? (before as any).shipping_mode ?? null,
+            shipping_cartons: body.shipping_cartons ?? (before as any).shipping_cartons ?? 0,
+            shipping_qty: body.shipping_qty ?? (before as any).shipping_qty ?? 0,
+            ship_date: body.ship_date ?? (before as any).ship_date ?? null,
+            product_code: body.cargo_code ?? (before as any).cargo_code ?? null,
+            cargo_status: body.cargo_status ?? (before as any).cargo_status ?? '待发货',
+          };
+          const { data: merged, error: upErr } = await supabase
+            .from('shipments')
+            .update(mergedUpdate)
+            .eq('id', target.id)
+            .select()
+            .single();
+          if (upErr) {
+            // 合并失败：恢复当前记录（取消软删除），避免数据丢失
+            await supabase.from('shipments').update({ deleted_at: null }).eq('id', id);
+            throw upErr;
+          }
+          // 3. 明细以编辑表单为准
+          if (body.items && body.items.length > 0) {
+            const { error: delItemsErr } = await supabase.from('shipment_items').delete().eq('shipment_id', target.id);
+            if (delItemsErr) throw delItemsErr;
+            const { error: insItemsErr } = await supabase.from('shipment_items').insert(
+              body.items.map((it) => ({
+                shipment_id: target.id,
+                product_id: it.product_id,
+                quantity: it.quantity,
+                remark: it.remark || null,
+              }))
+            );
+            if (insItemsErr) throw insItemsErr;
+          }
+          await writeAudit(ctx, req, 'update', 'shipment', id, before, merged);
+          return res.status(200).json({
+            data: merged,
+            bound: true,
+            message: `已绑定发货管理货件号 ${newNo}，原调拨记录已合并`,
+          });
+        }
+        update.tracking_no = body.tracking_no;
+      }
       if (body.forwarder_id !== undefined) update.forwarder_id = body.forwarder_id;
       if (body.cargo_status !== undefined) update.cargo_status = body.cargo_status;
       if (body.warehouse_status !== undefined) update.warehouse_status = body.warehouse_status;
@@ -109,8 +188,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.estimated_arrival !== undefined) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== undefined) update.cargo_code = body.cargo_code;
 
+      // 调拨发货确认发货：货物状态由「待发货」变为其他状态时，扣减国内仓库库存（transfer_out）
+      const confirmItems = (body.items && body.items.length ? body.items : (before as any).shipment_items) || [];
+      const willConfirmShipment =
+        (before as any).source === 'transfer' &&
+        before.cargo_status === '待发货' &&
+        body.cargo_status !== undefined &&
+        body.cargo_status !== '待发货';
+      let deductedDomestic = false;
+      if (willConfirmShipment) {
+        const { data: domWh, error: domWhErr } = await supabase
+          .from('warehouses')
+          .select('id')
+          .eq('wh_type', 'domestic')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (domWhErr) throw domWhErr;
+        if (!domWh) throw Errors.conflict('暂无国内仓库，无法扣减国内库存');
+        for (const it of confirmItems) {
+          const { error: invErr } = await supabase.rpc('adjust_inventory', {
+            p_product_id: it.product_id,
+            p_warehouse_id: domWh.id,
+            p_quantity: -Number(it.quantity || 0),
+            p_type: 'transfer_out',
+            p_reference_type: 'shipment',
+            p_reference_id: id,
+            p_created_by: ctx.userId,
+            p_note: `调拨发货确认发货（${before.cargo_status}→${body.cargo_status}）${before.tracking_no || before.shipment_no || id}`,
+          });
+          if (invErr) throw invErr;
+        }
+        deductedDomestic = true;
+      }
+
       const { data, error } = await supabase.from('shipments').update(update).eq('id', id).select().single();
       if (error) {
+        // 已扣减国内库存但更新失败：回补，保持数据一致
+        if (deductedDomestic) {
+          const { data: domWh, error: domWhErr } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('wh_type', 'domestic')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (!domWhErr && domWh) {
+            for (const it of confirmItems) {
+              await supabase.rpc('adjust_inventory', {
+                p_product_id: it.product_id,
+                p_warehouse_id: domWh.id,
+                p_quantity: Number(it.quantity || 0),
+                p_type: 'transfer_in',
+                p_reference_type: 'shipment',
+                p_reference_id: id,
+                p_created_by: ctx.userId,
+                p_note: `调拨发货状态更新失败回补 ${before.tracking_no || before.shipment_no || id}`,
+              });
+            }
+          }
+        }
         if (error.code === '23503') throw Errors.conflict('关联的货代不存在');
         if (error.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw error;
@@ -170,7 +307,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'shipment.write');
-      const { data: before, error: getErr } = await supabase.from('shipments').select('*').eq('id', id).single();
+      const { data: before, error: getErr } = await supabase.from('shipments').select('*, shipment_items(*)').eq('id', id).single();
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw getErr;
@@ -178,31 +315,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('shipments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
-      // 删除未入仓的调拨货件：回补国内库存，避免已扣库存丢失
-      if ((before as any).source === 'transfer' && before.cargo_status !== '已入仓') {
+      // 调拨发货已确认发货（状态非「待发货」，已扣减国内库存）的记录，删除时回补国内库存；
+      // 待发货记录未扣减，无需回补；已入仓货件入仓时已增加海外库存，删除仅移除登记，不反向扣减
+      if ((before as any).source === 'transfer' && before.cargo_status !== '待发货') {
         const items = (before as any).shipment_items || [];
-        if (items.length) {
-          const { data: domWh, error: domWhErr } = await supabase
-            .from('warehouses')
-            .select('id')
-            .eq('wh_type', 'domestic')
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          if (domWhErr) throw domWhErr;
-          if (domWh) {
-            for (const it of items) {
-              await supabase.rpc('adjust_inventory', {
-                p_product_id: it.product_id,
-                p_warehouse_id: domWh.id,
-                p_quantity: Number(it.quantity || 0),
-                p_type: 'adjustment',
-                p_reference_type: 'shipment',
-                p_reference_id: id,
-                p_created_by: ctx.userId,
-                p_note: '调拨发货删除回补国内库存',
-              });
-            }
+        const { data: domWh, error: domWhErr } = await supabase
+          .from('warehouses')
+          .select('id')
+          .eq('wh_type', 'domestic')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (!domWhErr && domWh) {
+          for (const it of items) {
+            await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: domWh.id,
+              p_quantity: Number(it.quantity || 0),
+              p_type: 'transfer_in',
+              p_reference_type: 'shipment',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `删除调拨发货回补国内库存 ${before.tracking_no || before.shipment_no || id}`,
+            });
           }
         }
       }

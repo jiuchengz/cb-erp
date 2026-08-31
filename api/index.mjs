@@ -103741,6 +103741,57 @@ async function handler28(req, res) {
       requirePermission(ctx, "shipment.write");
       const body = parse(createSchema8, req.body || {});
       const supabase = getAdminClient();
+      if (body.source === "transfer") {
+        const trackingNo = String(body.tracking_no || body.shipment_no || "").trim();
+        if (trackingNo) {
+          const { data: existing, error: existErr } = await supabase.from("shipments").select("id, source, cargo_status").is("deleted_at", null).eq("tracking_no", trackingNo).maybeSingle();
+          if (existErr) throw existErr;
+          if (existing) {
+            if (existing.source === "transfer") {
+              throw Errors.conflict(`\u8D27\u4EF6\u53F7\u5DF2\u5B58\u5728\uFF1A${trackingNo}`);
+            }
+            const boundUpdate = {
+              source: "transfer",
+              shipment_no: trackingNo,
+              cargo_code: body.cargo_code ?? null,
+              forwarder_id: body.forwarder_id ?? null,
+              shipping_mode: body.shipping_mode ?? null,
+              shipping_cartons: body.shipping_cartons ?? null,
+              shipping_qty: body.shipping_qty ?? null,
+              ship_date: body.ship_date ?? null,
+              product_code: body.cargo_code ?? null,
+              cargo_status: body.cargo_status ?? "\u5F85\u53D1\u8D27"
+            };
+            const { data: boundShipment, error: boundErr } = await supabase.from("shipments").update(boundUpdate).eq("id", existing.id).select().single();
+            if (boundErr) throw boundErr;
+            if (body.items && body.items.length > 0) {
+              const { error: delErr } = await supabase.from("shipment_items").delete().eq("shipment_id", existing.id);
+              if (delErr) throw delErr;
+              const { error: itemErr } = await supabase.from("shipment_items").insert(
+                body.items.map((it) => ({
+                  shipment_id: existing.id,
+                  product_id: it.product_id,
+                  quantity: it.quantity,
+                  remark: it.remark || null,
+                  sales_order_id: it.sales_order_id || null
+                }))
+              );
+              if (itemErr) throw itemErr;
+            }
+            await writeAudit(ctx, req, "update", "shipment", existing.id, null, {
+              bound: true,
+              source: "transfer",
+              tracking_no: trackingNo,
+              items: body.items?.length ?? 0
+            });
+            return res.status(201).json({
+              data: boundShipment,
+              bound: true,
+              message: `\u8D27\u4EF6\u53F7\u5DF2\u5B58\u5728\u4E8E\u53D1\u8D27\u7BA1\u7406\uFF0C\u5DF2\u81EA\u52A8\u7ED1\u5B9A\u4E3A\u8C03\u62E8\u53D1\u8D27\uFF1A${trackingNo}`
+            });
+          }
+        }
+      }
       const { data: shipment, error } = await supabase.from("shipments").insert({
         // 兼容新表单（无 tracking_no 走 shipment_no 兜底）
         tracking_no: body.tracking_no || body.shipment_no,
@@ -103773,41 +103824,6 @@ async function handler28(req, res) {
         throw error;
       }
       if (body.items && body.items.length > 0) {
-        if (body.source === "transfer") {
-          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-          if (domWhErr) throw domWhErr;
-          if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
-          const deducted = [];
-          for (const it of body.items) {
-            const { error: invErr } = await supabase.rpc("adjust_inventory", {
-              p_product_id: it.product_id,
-              p_warehouse_id: domWh.id,
-              p_quantity: -it.quantity,
-              p_type: "transfer_out",
-              p_reference_type: "shipment",
-              p_reference_id: shipment.id,
-              p_created_by: ctx.userId,
-              p_note: `\u8C03\u62E8\u53D1\u8D27\u6263\u51CF ${body.tracking_no || body.shipment_no || shipment.id}`
-            });
-            if (invErr) {
-              for (const d of deducted) {
-                await supabase.rpc("adjust_inventory", {
-                  p_product_id: d.product_id,
-                  p_warehouse_id: domWh.id,
-                  p_quantity: d.quantity,
-                  p_type: "adjustment",
-                  p_reference_type: "shipment",
-                  p_reference_id: shipment.id,
-                  p_created_by: ctx.userId,
-                  p_note: "\u8C03\u62E8\u53D1\u8D27\u5931\u8D25\u56DE\u6EDA"
-                });
-              }
-              await supabase.from("shipments").delete().eq("id", shipment.id);
-              throw Errors.conflict(`\u56FD\u5185\u5E93\u5B58\u4E0D\u8DB3\uFF0C\u65E0\u6CD5\u521B\u5EFA\u8C03\u62E8\u53D1\u8D27\uFF1A${it.product_id} \u7F3A\u5C11 ${-it.quantity} \u4EF6`);
-            }
-            deducted.push({ product_id: it.product_id, quantity: it.quantity });
-          }
-        }
         const { error: itemErr } = await supabase.from("shipment_items").insert(
           body.items.map((it) => ({
             shipment_id: shipment.id,
@@ -106261,7 +106277,65 @@ async function handler54(req, res) {
         }
         update.status = body.status;
       }
-      if (body.tracking_no !== void 0) update.tracking_no = body.tracking_no;
+      if (body.tracking_no !== void 0 && body.tracking_no !== before.tracking_no) {
+        const newNo = String(body.tracking_no || "").trim();
+        if (!newNo) throw Errors.badRequest("\u8D27\u4EF6\u53F7\u4E0D\u80FD\u4E3A\u7A7A");
+        const { data: target, error: tgtErr } = await supabase.from("shipments").select("id, source, cargo_status").is("deleted_at", null).eq("tracking_no", newNo).maybeSingle();
+        if (tgtErr) throw tgtErr;
+        if (target && target.id !== id) {
+          if (target.source === "transfer") {
+            throw Errors.conflict(`\u8D27\u4EF6\u53F7\u5DF2\u5B58\u5728\u4E8E\u5176\u4ED6\u8C03\u62E8\u53D1\u8D27\u8BB0\u5F55\uFF1A${newNo}`);
+          }
+          if (before.cargo_status !== "\u5F85\u53D1\u8D27") {
+            throw Errors.conflict(
+              `\u5F53\u524D\u8D27\u4EF6\u5DF2\u8FDB\u5165\u53D1\u8D27\u6D41\u7A0B\uFF08${before.cargo_status}\uFF09\uFF0C\u65E0\u6CD5\u6539\u53F7\u7ED1\u5B9A\uFF1B\u8BF7\u5728\u8C03\u62E8\u53D1\u8D27\u7BA1\u7406\u4E2D\u65B0\u5EFA\u8D27\u4EF6\u53F7 ${newNo}`
+            );
+          }
+          if (body.cargo_status !== void 0 && body.cargo_status !== "\u5F85\u53D1\u8D27") {
+            throw Errors.conflict("\u6539\u53F7\u7ED1\u5B9A\u65F6\u8D27\u7269\u72B6\u6001\u987B\u4FDD\u6301\u300C\u5F85\u53D1\u8D27\u300D\uFF0C\u4FDD\u5B58\u540E\u53EF\u5728\u5217\u8868\u4E2D\u518D\u4FEE\u6539\u72B6\u6001");
+          }
+          const { error: delErr } = await supabase.from("shipments").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+          if (delErr) throw delErr;
+          const mergedUpdate = {
+            source: "transfer",
+            tracking_no: newNo,
+            shipment_no: newNo,
+            cargo_code: body.cargo_code ?? before.cargo_code ?? null,
+            forwarder_id: body.forwarder_id ?? before.forwarder_id ?? null,
+            shipping_mode: body.shipping_mode ?? before.shipping_mode ?? null,
+            shipping_cartons: body.shipping_cartons ?? before.shipping_cartons ?? 0,
+            shipping_qty: body.shipping_qty ?? before.shipping_qty ?? 0,
+            ship_date: body.ship_date ?? before.ship_date ?? null,
+            product_code: body.cargo_code ?? before.cargo_code ?? null,
+            cargo_status: body.cargo_status ?? before.cargo_status ?? "\u5F85\u53D1\u8D27"
+          };
+          const { data: merged, error: upErr } = await supabase.from("shipments").update(mergedUpdate).eq("id", target.id).select().single();
+          if (upErr) {
+            await supabase.from("shipments").update({ deleted_at: null }).eq("id", id);
+            throw upErr;
+          }
+          if (body.items && body.items.length > 0) {
+            const { error: delItemsErr } = await supabase.from("shipment_items").delete().eq("shipment_id", target.id);
+            if (delItemsErr) throw delItemsErr;
+            const { error: insItemsErr } = await supabase.from("shipment_items").insert(
+              body.items.map((it) => ({
+                shipment_id: target.id,
+                product_id: it.product_id,
+                quantity: it.quantity,
+                remark: it.remark || null
+              }))
+            );
+            if (insItemsErr) throw insItemsErr;
+          }
+          await writeAudit(ctx, req, "update", "shipment", id, before, merged);
+          return res.status(200).json({
+            data: merged,
+            bound: true,
+            message: `\u5DF2\u7ED1\u5B9A\u53D1\u8D27\u7BA1\u7406\u8D27\u4EF6\u53F7 ${newNo}\uFF0C\u539F\u8C03\u62E8\u8BB0\u5F55\u5DF2\u5408\u5E76`
+          });
+        }
+        update.tracking_no = body.tracking_no;
+      }
       if (body.forwarder_id !== void 0) update.forwarder_id = body.forwarder_id;
       if (body.cargo_status !== void 0) update.cargo_status = body.cargo_status;
       if (body.warehouse_status !== void 0) update.warehouse_status = body.warehouse_status;
@@ -106287,8 +106361,47 @@ async function handler54(req, res) {
       if (body.pull_declare_qty !== void 0) update.pull_declare_qty = body.pull_declare_qty;
       if (body.estimated_arrival !== void 0) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== void 0) update.cargo_code = body.cargo_code;
+      const confirmItems = (body.items && body.items.length ? body.items : before.shipment_items) || [];
+      const willConfirmShipment = before.source === "transfer" && before.cargo_status === "\u5F85\u53D1\u8D27" && body.cargo_status !== void 0 && body.cargo_status !== "\u5F85\u53D1\u8D27";
+      let deductedDomestic = false;
+      if (willConfirmShipment) {
+        const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (domWhErr) throw domWhErr;
+        if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
+        for (const it of confirmItems) {
+          const { error: invErr } = await supabase.rpc("adjust_inventory", {
+            p_product_id: it.product_id,
+            p_warehouse_id: domWh.id,
+            p_quantity: -Number(it.quantity || 0),
+            p_type: "transfer_out",
+            p_reference_type: "shipment",
+            p_reference_id: id,
+            p_created_by: ctx.userId,
+            p_note: `\u8C03\u62E8\u53D1\u8D27\u786E\u8BA4\u53D1\u8D27\uFF08${before.cargo_status}\u2192${body.cargo_status}\uFF09${before.tracking_no || before.shipment_no || id}`
+          });
+          if (invErr) throw invErr;
+        }
+        deductedDomestic = true;
+      }
       const { data, error } = await supabase.from("shipments").update(update).eq("id", id).select().single();
       if (error) {
+        if (deductedDomestic) {
+          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+          if (!domWhErr && domWh) {
+            for (const it of confirmItems) {
+              await supabase.rpc("adjust_inventory", {
+                p_product_id: it.product_id,
+                p_warehouse_id: domWh.id,
+                p_quantity: Number(it.quantity || 0),
+                p_type: "transfer_in",
+                p_reference_type: "shipment",
+                p_reference_id: id,
+                p_created_by: ctx.userId,
+                p_note: `\u8C03\u62E8\u53D1\u8D27\u72B6\u6001\u66F4\u65B0\u5931\u8D25\u56DE\u8865 ${before.tracking_no || before.shipment_no || id}`
+              });
+            }
+          }
+        }
         if (error.code === "23503") throw Errors.conflict("\u5173\u8054\u7684\u8D27\u4EE3\u4E0D\u5B58\u5728");
         if (error.code === "PGRST116") throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
         throw error;
@@ -106331,31 +106444,28 @@ async function handler54(req, res) {
     }
     if (req.method === "DELETE") {
       requirePermission(ctx, "shipment.write");
-      const { data: before, error: getErr } = await supabase.from("shipments").select("*").eq("id", id).single();
+      const { data: before, error: getErr } = await supabase.from("shipments").select("*, shipment_items(*)").eq("id", id).single();
       if (getErr) {
         if (getErr.code === "PGRST116") throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
         throw getErr;
       }
       const { error } = await supabase.from("shipments").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
       if (error) throw error;
-      if (before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3") {
+      if (before.source === "transfer" && before.cargo_status !== "\u5F85\u53D1\u8D27") {
         const items = before.shipment_items || [];
-        if (items.length) {
-          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-          if (domWhErr) throw domWhErr;
-          if (domWh) {
-            for (const it of items) {
-              await supabase.rpc("adjust_inventory", {
-                p_product_id: it.product_id,
-                p_warehouse_id: domWh.id,
-                p_quantity: Number(it.quantity || 0),
-                p_type: "adjustment",
-                p_reference_type: "shipment",
-                p_reference_id: id,
-                p_created_by: ctx.userId,
-                p_note: "\u8C03\u62E8\u53D1\u8D27\u5220\u9664\u56DE\u8865\u56FD\u5185\u5E93\u5B58"
-              });
-            }
+        const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (!domWhErr && domWh) {
+          for (const it of items) {
+            await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: domWh.id,
+              p_quantity: Number(it.quantity || 0),
+              p_type: "transfer_in",
+              p_reference_type: "shipment",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u5220\u9664\u8C03\u62E8\u53D1\u8D27\u56DE\u8865\u56FD\u5185\u5E93\u5B58 ${before.tracking_no || before.shipment_no || id}`
+            });
           }
         }
       }
@@ -106593,9 +106703,6 @@ async function handler55(req, res) {
       if (!groups.has(shipmentNo)) groups.set(shipmentNo, { rows: [] });
       groups.get(shipmentNo).rows.push({ row_no: p.row_no, data: p.data });
     }
-    const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-    if (domWhErr) throw domWhErr;
-    if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
     for (const [shipmentNo, group] of groups) {
       const rowNos = group.rows.map((r) => r.row_no);
       const rowLabel = rowNos.length === 1 ? String(rowNos[0]) : `${Math.min(...rowNos)}-${Math.max(...rowNos)}`;
@@ -106628,6 +106735,58 @@ async function handler55(req, res) {
         items.push({ product_id: productId, quantity: qty, remark: cleanStr(r.data.remark) });
       }
       if (groupFailed === group.rows.length || items.length === 0) continue;
+      const { data: existing, error: existErr } = await supabase.from("shipments").select("id, source").is("deleted_at", null).eq("tracking_no", shipmentNo).maybeSingle();
+      if (existErr) throw existErr;
+      if (existing && existing.source === "transfer") {
+        failedRows += group.rows.length;
+        pushError(rowLabel, `\u8D27\u4EF6\u53F7\u300C${shipmentNo}\u300D\u5DF2\u5B58\u5728\uFF0C\u8BF7\u7528\u7F16\u8F91\u529F\u80FD\u4FEE\u6539\u6216\u6362\u53F7`);
+        continue;
+      }
+      if (existing) {
+        const boundPayload = {
+          source: "transfer",
+          cargo_code: cleanStr(first.cargo_code),
+          forwarder_id: forwarderId,
+          shipping_mode: cleanStr(first.shipping_mode),
+          shipping_cartons: cleanNum(first.shipping_cartons),
+          ship_date: cleanStr(first.ship_date),
+          cargo_status: "\u5F85\u53D1\u8D27"
+        };
+        const { error: upErr } = await supabase.from("shipments").update(boundPayload).eq("id", existing.id);
+        if (upErr) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, upErr.message || "\u7ED1\u5B9A\u53D1\u8D27\u8BB0\u5F55\u5931\u8D25");
+          continue;
+        }
+        const { error: delItemsErr } = await supabase.from("shipment_items").delete().eq("shipment_id", existing.id);
+        if (delItemsErr) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, delItemsErr.message || "\u660E\u7EC6\u5199\u5165\u5931\u8D25");
+          continue;
+        }
+        const { error: itemErr2 } = await supabase.from("shipment_items").insert(
+          items.map((it) => ({
+            shipment_id: existing.id,
+            product_id: it.product_id,
+            quantity: it.quantity,
+            remark: it.remark || null
+          }))
+        );
+        if (itemErr2) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, itemErr2.message || "\u660E\u7EC6\u5199\u5165\u5931\u8D25");
+          continue;
+        }
+        transferOrders++;
+        created += items.length;
+        await writeAudit(ctx, req, "update", "shipment", existing.id, null, {
+          bound: true,
+          source: "transfer",
+          tracking_no: shipmentNo,
+          items: items.length
+        });
+        continue;
+      }
       const { data: shipment, error: insErr } = await supabase.from("shipments").insert({
         tracking_no: shipmentNo,
         shipment_no: shipmentNo,
@@ -106637,7 +106796,7 @@ async function handler55(req, res) {
         shipping_cartons: cleanNum(first.shipping_cartons),
         ship_date: cleanStr(first.ship_date),
         source: "transfer",
-        cargo_status: "\u8F6C\u8FD0\u4E2D",
+        cargo_status: "\u5F85\u53D1\u8D27",
         created_by: ctx.userId
       }).select().single();
       if (insErr) {
@@ -106646,43 +106805,6 @@ async function handler55(req, res) {
           rowLabel,
           insErr.code === "23505" ? `\u8D27\u4EF6\u53F7\u300C${shipmentNo}\u300D\u5DF2\u5B58\u5728\uFF0C\u8BF7\u7528\u7F16\u8F91\u529F\u80FD\u4FEE\u6539\u6216\u6362\u53F7` : insErr.message || "\u521B\u5EFA\u8C03\u62E8\u5355\u5931\u8D25"
         );
-        continue;
-      }
-      const deducted = [];
-      let stockFail = null;
-      for (const it of items) {
-        const { error: invErr } = await supabase.rpc("adjust_inventory", {
-          p_product_id: it.product_id,
-          p_warehouse_id: domWh.id,
-          p_quantity: -it.quantity,
-          p_type: "transfer_out",
-          p_reference_type: "shipment",
-          p_reference_id: shipment.id,
-          p_created_by: ctx.userId,
-          p_note: `\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u6263\u51CF ${shipmentNo}`
-        });
-        if (invErr) {
-          stockFail = `\u56FD\u5185\u5E93\u5B58\u4E0D\u8DB3\uFF0C\u65E0\u6CD5\u521B\u5EFA\u8C03\u62E8\u53D1\u8D27\uFF1A\u5546\u54C1 ${it.product_id} \u7F3A\u5C11 ${it.quantity} \u4EF6`;
-          break;
-        }
-        deducted.push({ product_id: it.product_id, quantity: it.quantity });
-      }
-      if (stockFail) {
-        for (const d of deducted) {
-          await supabase.rpc("adjust_inventory", {
-            p_product_id: d.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: d.quantity,
-            p_type: "adjustment",
-            p_reference_type: "shipment",
-            p_reference_id: shipment.id,
-            p_created_by: ctx.userId,
-            p_note: "\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u5931\u8D25\u56DE\u6EDA"
-          });
-        }
-        await supabase.from("shipments").delete().eq("id", shipment.id);
-        failedRows += group.rows.length;
-        pushError(rowLabel, stockFail);
         continue;
       }
       const { error: itemErr } = await supabase.from("shipment_items").insert(
@@ -106694,18 +106816,6 @@ async function handler55(req, res) {
         }))
       );
       if (itemErr) {
-        for (const d of deducted) {
-          await supabase.rpc("adjust_inventory", {
-            p_product_id: d.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: d.quantity,
-            p_type: "adjustment",
-            p_reference_type: "shipment",
-            p_reference_id: shipment.id,
-            p_created_by: ctx.userId,
-            p_note: "\u8C03\u62E8\u6279\u91CF\u5BFC\u5165\u5931\u8D25\u56DE\u6EDA"
-          });
-        }
         await supabase.from("shipments").delete().eq("id", shipment.id);
         failedRows += group.rows.length;
         pushError(rowLabel, itemErr.message || "\u660E\u7EC6\u5199\u5165\u5931\u8D25");

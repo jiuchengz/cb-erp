@@ -251,6 +251,20 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="货物状态">
+              <el-select v-model="editForm.cargo_status" style="width: 100%">
+                <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label=" ">
+              <span class="muted-hint">状态由「待发货」变为其他状态时，将自动扣减国内库存</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in editForm.items" :key="idx" class="item-row">
@@ -569,7 +583,7 @@ async function save() {
   saving.value = true
   try {
     const itemCount = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
-    await api.post('/shipments', {
+    const resp: any = await api.post('/shipments', {
       tracking_no: form.tracking_no.trim(),
       cargo_code: form.cargo_code.trim() || null,
       // 同步写发货管理展示字段，保证发货管理列表可读
@@ -582,9 +596,13 @@ async function save() {
       ship_date: form.ship_date,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
       source: 'transfer',
-      cargo_status: '转运中',
+      cargo_status: '待发货',
     })
-    ElMessage.success('创建成功，已同步到发货管理')
+    if (resp?.data?.bound) {
+      ElMessage.success('创建成功，已绑定发货管理中的同号货件并转为调拨发货')
+    } else {
+      ElMessage.success('创建成功，已同步到发货管理')
+    }
     createVisible.value = false
     load()
   } catch (e: any) {
@@ -618,6 +636,7 @@ const editForm = reactive({
   shipping_mode: '空运',
   shipping_cartons: 0,
   ship_date: '',
+  cargo_status: '待发货',
   items: [] as any[],
 })
 const editTotalOfItems = computed(() => editForm.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
@@ -639,6 +658,7 @@ async function openEdit(id: string) {
     editForm.shipping_mode = d.shipping_mode || '空运'
     editForm.shipping_cartons = d.shipping_cartons ?? 0
     editForm.ship_date = d.ship_date || ''
+    editForm.cargo_status = d.cargo_status || '待发货'
     editForm.items = (d.shipment_items || []).map((it: any) => ({
       product_id: it.product_id,
       quantity: it.quantity,
@@ -676,7 +696,7 @@ async function saveEdit() {
   saving.value = true
   try {
     const itemCount = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
-    await api.patch(`/shipments/${editingId.value}`, {
+    const resp: any = await api.patch(`/shipments/${editingId.value}`, {
       tracking_no: editForm.tracking_no.trim(),
       cargo_code: editForm.cargo_code.trim() || null,
       // 同步写发货管理展示字段
@@ -687,12 +707,18 @@ async function saveEdit() {
       shipping_mode: editForm.shipping_mode,
       shipping_cartons: editForm.shipping_cartons ?? 0,
       ship_date: editForm.ship_date,
+      cargo_status: editForm.cargo_status,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
     })
-    ElMessage.success('修改成功')
+    const saved = resp?.data?.data
+    if (resp?.data?.bound) {
+      ElMessage.success('修改成功，已绑定发货管理货件号并合并原记录')
+    } else {
+      ElMessage.success('修改成功')
+    }
     editVisible.value = false
-    if (detailVisible.value) {
-      detail.value = await fetchDetail(editingId.value)
+    if (detailVisible.value && saved) {
+      detail.value = saved
     }
     load()
   } catch (e: any) {
@@ -1123,6 +1149,11 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 13px;
   color: #606266;
+}
+.muted-hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 32px;
 }
 .sel-img {
   width: 22px;

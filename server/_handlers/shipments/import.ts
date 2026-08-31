@@ -270,15 +270,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       groups.get(shipmentNo)!.rows.push({ row_no: p.row_no, data: p.data });
     }
 
-    const { data: domWh, error: domWhErr } = await supabase
-      .from('warehouses')
-      .select('id')
-      .eq('wh_type', 'domestic')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (domWhErr) throw domWhErr;
-    if (!domWh) throw Errors.conflict('暂无国内仓库，无法扣减国内库存');
+    // 创建调拨发货不再校验/扣减国内库存（与 shipments.ts POST 手动创建一致）：
+    // 未发货状态允许无库存登记，库存联动由「已入仓」时增加海外仓库存处理
 
     for (const [shipmentNo, group] of groups) {
       const rowNos = group.rows.map((r) => r.row_no);
@@ -318,6 +311,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (groupFailed === group.rows.length || items.length === 0) continue;
 
+      // 调拨导入支持绑定：若货件号已存在于发货管理（source=manual），复用该记录升级为调拨发货，
+      // 使同一条货件在两个页面同时可见，避免 tracking_no 唯一约束报 23505
+      const { data: existing, error: existErr } = await supabase
+        .from('shipments')
+        .select('id, source')
+        .is('deleted_at', null)
+        .eq('tracking_no', shipmentNo)
+        .maybeSingle();
+      if (existErr) throw existErr;
+      if (existing && existing.source === 'transfer') {
+        failedRows += group.rows.length;
+        pushError(rowLabel, `货件号「${shipmentNo}」已存在，请用编辑功能修改或换号`);
+        continue;
+      }
+      if (existing) {
+        // source === 'manual'：绑定升级为调拨发货
+        const boundPayload: Record<string, unknown> = {
+          source: 'transfer',
+          cargo_code: cleanStr(first.cargo_code),
+          forwarder_id: forwarderId,
+          shipping_mode: cleanStr(first.shipping_mode),
+          shipping_cartons: cleanNum(first.shipping_cartons),
+          ship_date: cleanStr(first.ship_date),
+          cargo_status: '待发货',
+        };
+        const { error: upErr } = await supabase.from('shipments').update(boundPayload).eq('id', existing.id);
+        if (upErr) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, upErr.message || '绑定发货记录失败');
+          continue;
+        }
+        const { error: delItemsErr } = await supabase.from('shipment_items').delete().eq('shipment_id', existing.id);
+        if (delItemsErr) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, delItemsErr.message || '明细写入失败');
+          continue;
+        }
+        const { error: itemErr } = await supabase.from('shipment_items').insert(
+          items.map((it) => ({
+            shipment_id: existing.id,
+            product_id: it.product_id,
+            quantity: it.quantity,
+            remark: it.remark || null,
+          }))
+        );
+        if (itemErr) {
+          failedRows += group.rows.length;
+          pushError(rowLabel, itemErr.message || '明细写入失败');
+          continue;
+        }
+        transferOrders++;
+        created += items.length;
+        await writeAudit(ctx, req, 'update', 'shipment', existing.id, null, {
+          bound: true,
+          source: 'transfer',
+          tracking_no: shipmentNo,
+          items: items.length,
+        });
+        continue;
+      }
+
       // 创建调拨单（与现有新增逻辑一致：source=transfer + items，库存联动扣减）
       const { data: shipment, error: insErr } = await supabase
         .from('shipments')
@@ -330,7 +384,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           shipping_cartons: cleanNum(first.shipping_cartons),
           ship_date: cleanStr(first.ship_date),
           source: 'transfer',
-          cargo_status: '转运中',
+          cargo_status: '待发货',
           created_by: ctx.userId,
         })
         .select()
@@ -344,45 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         continue;
       }
 
-      // 扣减国内库存：与 shipments.ts POST 一致，失败回滚已扣部分并删除货件
-      const deducted: { product_id: string; quantity: number }[] = [];
-      let stockFail: string | null = null;
-      for (const it of items) {
-        const { error: invErr } = await supabase.rpc('adjust_inventory', {
-          p_product_id: it.product_id,
-          p_warehouse_id: domWh.id,
-          p_quantity: -it.quantity,
-          p_type: 'transfer_out',
-          p_reference_type: 'shipment',
-          p_reference_id: shipment.id,
-          p_created_by: ctx.userId,
-          p_note: `调拨批量导入扣减 ${shipmentNo}`,
-        });
-        if (invErr) {
-          stockFail = `国内库存不足，无法创建调拨发货：商品 ${it.product_id} 缺少 ${it.quantity} 件`;
-          break;
-        }
-        deducted.push({ product_id: it.product_id, quantity: it.quantity });
-      }
-      if (stockFail) {
-        for (const d of deducted) {
-          await supabase.rpc('adjust_inventory', {
-            p_product_id: d.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: d.quantity,
-            p_type: 'adjustment',
-            p_reference_type: 'shipment',
-            p_reference_id: shipment.id,
-            p_created_by: ctx.userId,
-            p_note: '调拨批量导入失败回滚',
-          });
-        }
-        await supabase.from('shipments').delete().eq('id', shipment.id);
-        failedRows += group.rows.length;
-        pushError(rowLabel, stockFail);
-        continue;
-      }
-
+      // 直接写入明细（不再扣减国内库存）
       const { error: itemErr } = await supabase.from('shipment_items').insert(
         items.map((it) => ({
           shipment_id: shipment.id,
@@ -392,18 +408,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
       );
       if (itemErr) {
-        for (const d of deducted) {
-          await supabase.rpc('adjust_inventory', {
-            p_product_id: d.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: d.quantity,
-            p_type: 'adjustment',
-            p_reference_type: 'shipment',
-            p_reference_id: shipment.id,
-            p_created_by: ctx.userId,
-            p_note: '调拨批量导入失败回滚',
-          });
-        }
         await supabase.from('shipments').delete().eq('id', shipment.id);
         failedRows += group.rows.length;
         pushError(rowLabel, itemErr.message || '明细写入失败');
