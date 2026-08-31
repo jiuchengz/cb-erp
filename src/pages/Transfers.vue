@@ -183,7 +183,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="调拨发货详情" width="760px">
+    <el-dialog v-model="detailVisible" title="调拨发货详情" width="760px" class="transfer-dialog transfer-detail-dialog">
       <el-descriptions v-if="detail" :column="2" border>
         <el-descriptions-item label="货件号">{{ detail.tracking_no }}</el-descriptions-item>
         <el-descriptions-item label="货代号">{{ detail.cargo_code || '-' }}</el-descriptions-item>
@@ -195,32 +195,34 @@
         <el-descriptions-item label="货物状态">{{ detail.cargo_status || '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
-      <el-table :resizable="false" v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column label="产品编码" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
-        </el-table-column>
-        <el-table-column label="图片" width="80" align="center">
-          <template #default="{ row }">
-            <img v-if="isImageUrl(imgOf(row.product_id))" :src="imgOf(row.product_id)" class="detail-thumb" />
-            <span v-else class="muted-thumb">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="中文名称" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
-        </el-table-column>
-        <el-table-column label="SKU" width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ skuOf(row.product_id) }}</template>
-        </el-table-column>
-        <el-table-column label="单位" width="80" align="center">
-          <template #default="{ row }">{{ unitOf(row.product_id) }}</template>
-        </el-table-column>
-        <el-table-column label="备注" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.remark || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="数量" width="90" align="right">
-          <template #default="{ row }">{{ row.quantity }}</template>
-        </el-table-column>
-      </el-table>
+      <div class="detail-items-wrap">
+        <el-table :resizable="false" v-if="detail" :data="detail.shipment_items || []" border stripe size="small">
+          <el-table-column label="产品编码" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="图片" width="80" align="center">
+            <template #default="{ row }">
+              <img v-if="isImageUrl(imgOf(row.product_id))" :src="imgOf(row.product_id)" class="detail-thumb" />
+              <span v-else class="muted-thumb">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="中文名称" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="SKU" width="110" show-overflow-tooltip>
+            <template #default="{ row }">{{ skuOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="单位" width="80" align="center">
+            <template #default="{ row }">{{ unitOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.remark || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="数量" width="90" align="right">
+            <template #default="{ row }">{{ row.quantity }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
       <template #footer>
         <el-button type="success" @click="printWorkOrder(detail.id)">打印工单</el-button>
         <el-button v-if="canWrite" type="primary" @click="openEdit(detail.id)">编辑</el-button>
@@ -228,7 +230,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editVisible" title="编辑调拨发货" width="760px" destroy-on-close>
+    <el-dialog v-model="editVisible" title="编辑调拨发货" width="760px" destroy-on-close class="transfer-dialog transfer-edit-dialog">
       <el-form :model="editForm" label-width="90px">
         <el-row :gutter="12">
           <el-col :span="12">
@@ -1301,5 +1303,35 @@ onMounted(() => {
 .muted-thumb {
   color: #c0c4cc;
   font-size: 12px;
+}
+/* 调拨发货弹窗：固定受限高度，明细区内滚，底部按钮固定可见 */
+.transfer-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  margin: 5vh auto;
+}
+.transfer-dialog :deep(.el-dialog__header) {
+  flex-shrink: 0;
+}
+.transfer-dialog :deep(.el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+.transfer-dialog :deep(.el-dialog__footer) {
+  flex-shrink: 0;
+}
+/* 编辑弹窗：商品明细区内部滚动，不撑高弹窗 */
+.transfer-edit-dialog .items-editor {
+  max-height: 42vh;
+  overflow-y: auto;
+}
+/* 详情弹窗：明细表格区内部滚动 */
+.detail-items-wrap {
+  max-height: 42vh;
+  overflow-y: auto;
+  margin-top: 12px;
 }
 </style>
