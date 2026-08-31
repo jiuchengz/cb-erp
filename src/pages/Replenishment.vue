@@ -165,7 +165,7 @@ import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, autoNo } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, cellDateStr, autoNo } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('replenishment.write'))
@@ -470,8 +470,8 @@ async function onImportFile(e: Event) {
       const sku = cellStr(row, col.sku)
       const whName = cellStr(row, col.warehouse)
       const qty = cellNum(row, col.quantity)
-      const time = col.time === undefined ? '' : cellStr(row, col.time) || ''
-      // 补货时间标准化为 yyyy-MM-dd（模板可能是 2026-8-31 单月日写法）
+      const time = col.time === undefined ? '' : cellDateStr(row, col.time)
+      // 补货时间标准化为 yyyy-MM-dd（兼容 Date 对象/序列号/2026-8-31 文本写法）
       const normTime = normalizeTime(time)
       if (!sku) {
         failures.push(`第${lineNo}行：产品编码为空`)
