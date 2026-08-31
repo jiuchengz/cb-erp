@@ -236,6 +236,12 @@ function firstItem(row: any) {
   }
   return null
 }
+// 补货时间标准化：2026-8-31 / 2026-8-1 -> 2026-08-31 / 2026-08-01；非日期格式原样返回
+function normalizeTime(s: string): string {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((s || '').trim())
+  if (!m) return (s || '').trim()
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+}
 async function loadAllProducts(): Promise<any[]> {
   const all: any[] = []
   let page = 1
@@ -454,7 +460,7 @@ async function onImportFile(e: Event) {
     })
     // 每个产品（Excel 每行）单独生成一条补货记录，不按仓库合并明细；
     // 完全重复行（编码+仓库+数量+时间全相同，时间为空视为相同）只保留首次出现的行，其余跳过
-    const pending: { wh: any; product: any; qty: number; lineNo: number }[] = []
+    const pending: { wh: any; product: any; qty: number; lineNo: number; time: string }[] = []
     const seen = new Map<string, number>()
     const dupGroups: { keepLine: number; skipLines: number[] }[] = []
     let autoSeq = 0
@@ -465,6 +471,8 @@ async function onImportFile(e: Event) {
       const whName = cellStr(row, col.warehouse)
       const qty = cellNum(row, col.quantity)
       const time = col.time === undefined ? '' : cellStr(row, col.time) || ''
+      // 补货时间标准化为 yyyy-MM-dd（模板可能是 2026-8-31 单月日写法）
+      const normTime = normalizeTime(time)
       if (!sku) {
         failures.push(`第${lineNo}行：产品编码为空`)
         return
@@ -487,7 +495,7 @@ async function onImportFile(e: Event) {
         failures.push(`第${lineNo}行：仓库「${whName}」未匹配到仓库`)
         return
       }
-      const key = `${sku}|${wh.id}|${qty}|${time}`
+      const key = `${sku}|${wh.id}|${qty}|${normTime}`
       const firstLine = seen.get(key)
       if (firstLine !== undefined) {
         const g = dupGroups.find((x) => x.keepLine === firstLine)
