@@ -27,10 +27,26 @@
       <el-table-column label="补货时间" width="170">
         <template #default="{ row }">{{ row.replenishment_time || '-' }}</template>
       </el-table-column>
-      <el-table-column label="产品" min-width="240">
+      <el-table-column label="产品条码" min-width="140">
         <template #default="{ row }">
-          <span class="product-label">{{ firstItemLabel(row) }}</span>
+          <span class="product-label">{{ firstItem(row)?.code || firstItem(row)?.sku || '-' }}</span>
         </template>
+      </el-table-column>
+      <el-table-column label="图片" width="90">
+        <template #default="{ row }">
+          <el-image
+            v-if="firstItem(row)?.image_text"
+            :src="firstItem(row).image_text"
+            :preview-src-list="[firstItem(row).image_text]"
+            fit="cover"
+            lazy
+            style="width: 48px; height: 48px; border-radius: 4px; display: block"
+          />
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="名称" min-width="220">
+        <template #default="{ row }">{{ firstItem(row)?.name || '-' }}</template>
       </el-table-column>
       <el-table-column label="仓库" min-width="140">
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
@@ -212,17 +228,13 @@ function warehouseName(id: string) {
 function orderItems(row: any): any[] {
   return row?.replenishment_order_items || []
 }
-// 产品列：产品编码 · 产品名称（多条明细时取第一条）
-function firstItemLabel(row: any) {
+// 产品列：返回首条明细的产品对象（条码/图片/名称分列展示）
+function firstItem(row: any) {
   const items = orderItems(row)
   if (items.length) {
-    const it = items[0]
-    if (it.products) {
-      return `${it.products.code || it.products.sku || ''} · ${it.products.name}`
-    }
-    return it.product_id || ''
+    return items[0].products || null
   }
-  return ''
+  return null
 }
 async function loadAllProducts(): Promise<any[]> {
   const all: any[] = []
@@ -368,7 +380,7 @@ const exporting = ref(false)
 async function exportRows() {
   const columns = [
     { key: 'replenishment_time', label: '补货时间', value: (r: any) => r.replenishment_time || '-' },
-    { key: 'product', label: '产品', value: (r: any) => firstItemLabel(r) },
+    { key: 'product', label: '产品', value: (r: any) => { const p = firstItem(r); return p ? `${p.code || p.sku || ''} · ${p.name || ''}` : '' } },
     { key: 'warehouse_id', label: '仓库', value: (r: any) => warehouseName(r.warehouse_id) },
     { key: 'replenish_qty', label: '补货数量', value: (r: any) => r.replenish_qty ?? '-' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
