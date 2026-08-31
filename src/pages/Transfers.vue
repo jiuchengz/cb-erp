@@ -138,11 +138,22 @@
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable :filter-method="filterProduct" placeholder="输入编码 / 中文名称搜索" style="flex: 1">
+              <el-select
+                v-model="it.product_id"
+                filterable
+                remote
+                reserve-keyword
+                :remote-method="onProductRemoteInput"
+                :loading="searchingProducts"
+                @keyup.enter="onProductSearchEnter"
+                @visible-change="onProductDropdownVisible"
+                placeholder="输入编码 / 名称，回车搜索"
+                style="flex: 1"
+              >
                 <template #prefix>
                   <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
                 </template>
-                <el-option v-for="p in products" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
+                <el-option v-for="p in productOptions" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
                   <div class="opt-line">
                     <span class="opt-code">{{ productCode(p) }}</span>
                     <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
@@ -271,11 +282,22 @@
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in editForm.items" :key="idx" class="item-row">
-              <el-select v-model="it.product_id" filterable :filter-method="filterProduct" placeholder="输入编码 / 中文名称搜索" style="flex: 1">
+              <el-select
+                v-model="it.product_id"
+                filterable
+                remote
+                reserve-keyword
+                :remote-method="onProductRemoteInput"
+                :loading="searchingProducts"
+                @keyup.enter="onProductSearchEnter"
+                @visible-change="onProductDropdownVisible"
+                placeholder="输入编码 / 名称，回车搜索"
+                style="flex: 1"
+              >
                 <template #prefix>
                   <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
                 </template>
-                <el-option v-for="p in products" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
+                <el-option v-for="p in productOptions" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
                   <div class="opt-line">
                     <span class="opt-code">{{ productCode(p) }}</span>
                     <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
@@ -463,14 +485,45 @@ const products = ref<any[]>([])
 function productCode(p: any) {
   return p.code || p.sku || p.id
 }
-// 商品下拉自定义过滤：支持输入部分编码 / SKU / 条形码 / 中文名称进行模糊搜索
-function filterProduct(query: string, option: any) {
-  const q = (query || '').trim().toLowerCase()
-  if (!q) return true
-  const p = products.value.find((x) => x.id === option.value)
-  if (!p) return false
-  const haystack = [p.code, p.sku, p.barcode, p.name].filter(Boolean).join(' ').toLowerCase()
-  return haystack.includes(q)
+// 商品下拉远程搜索：输入关键词后回车触发，与商品管理模块一致
+const productOptions = ref<any[]>([])
+const searchingProducts = ref(false)
+const productSearchKeyword = ref('')
+
+function onProductRemoteInput(kw: string) {
+  productSearchKeyword.value = (kw || '').trim()
+  // 输入时不立即搜索，先清空候选避免展示全部商品，等回车触发
+  if (productSearchKeyword.value) productOptions.value = []
+}
+
+async function onProductSearchEnter() {
+  await searchProducts(productSearchKeyword.value)
+}
+
+function onProductDropdownVisible(visible: boolean) {
+  // 打开下拉且无搜索关键词时，展示全量商品候选（保持可浏览选择）
+  if (visible && !productSearchKeyword.value) productOptions.value = [...products.value]
+}
+
+async function searchProducts(kw: string) {
+  searchingProducts.value = true
+  try {
+    if (!kw) {
+      productOptions.value = [...products.value]
+      return
+    }
+    const { data } = await api.get('/products', { params: { search: kw, page: 1, pageSize: 100 } })
+    const list = data.data ?? []
+    productOptions.value = list
+    // 合并进商品池，保证名称/图片等关联显示可用
+    const pool = new Map(products.value.map((p) => [p.id, p]))
+    list.forEach((p: any) => pool.set(p.id, p))
+    products.value = [...pool.values()]
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '商品搜索失败')
+  } finally {
+    searchingProducts.value = false
+  }
 }
 function productInfo(pid: string) {
   const p = products.value.find((x) => x.id === pid)
@@ -513,6 +566,7 @@ async function loadOptions() {
     forwarders.value = fRes.data.data ?? []
     cargoStatuses.value = csRes.data.data ?? []
     products.value = pRes
+    productOptions.value = [...pRes]
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载基础数据失败')
   }
@@ -554,6 +608,8 @@ function removeItem(idx: number) {
 }
 
 function openCreate() {
+  productSearchKeyword.value = ''
+  productOptions.value = [...products.value]
   form.tracking_no = ''
   form.cargo_code = ''
   form.forwarder_id = ''
@@ -658,6 +714,8 @@ function removeEditItem(idx: number) {
 async function openEdit(id: string) {
   try {
     const d = await fetchDetail(id)
+    productSearchKeyword.value = ''
+    productOptions.value = [...products.value]
     editingId.value = id
     editForm.tracking_no = d.tracking_no
     editForm.cargo_code = d.cargo_code || ''
