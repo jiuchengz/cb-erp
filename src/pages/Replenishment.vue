@@ -460,7 +460,7 @@ async function onImportFile(e: Event) {
     })
     // 每个产品（Excel 每行）单独生成一条补货记录，不按仓库合并明细；
     // 完全重复行（编码+仓库+数量+时间全相同，时间为空视为相同）只保留首次出现的行，其余跳过
-    const pending: { wh: any; product: any; qty: number; lineNo: number }[] = []
+    const pending: { wh: any; product: any; qty: number; lineNo: number; time: string }[] = []
     const seen = new Map<string, number>()
     const dupGroups: { keepLine: number; skipLines: number[] }[] = []
     const failures: string[] = []
@@ -503,7 +503,7 @@ async function onImportFile(e: Event) {
         return
       }
       seen.set(key, lineNo)
-      pending.push({ wh, product, qty, lineNo })
+      pending.push({ wh, product, qty, lineNo, time: normTime })
     })
     let ok = 0
     const errLines: string[] = []
@@ -512,6 +512,7 @@ async function onImportFile(e: Event) {
         // Excel 每行一条独立补货记录，列表每个产品单独一行
         await api.post('/replenishment', {
           warehouse_id: it.wh.id,
+          replenishment_time: it.time || null,
           items: [{ product_id: it.product.id, quantity: it.qty }],
         })
         ok++
