@@ -10,10 +10,14 @@
         <el-option v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
+      <el-button type="danger" :disabled="!selected.length" :loading="batchPurging" @click="batchPurge">
+        批量删除{{ selected.length ? `（${selected.length}）` : '' }}
+      </el-button>
     </div>
 
     <div class="table-wrap">
-      <el-table :resizable="false" v-loading="loading" :data="rows" border stripe height="100%">
+      <el-table :resizable="false" v-loading="loading" :data="rows" border stripe height="100%" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="46" />
         <el-table-column label="类型" width="130">
           <template #default="{ row }">
             <el-tag :type="typeMap[row.type]?.tag || 'info'" size="small">{{ typeMap[row.type]?.label || row.type }}</el-tag>
@@ -174,6 +178,41 @@ async function purge(row: RecycleItem) {
   } finally {
     row._purging = false
   }
+}
+
+const selected = ref<RecycleItem[]>([])
+const batchPurging = ref(false)
+
+function onSelectionChange(sel: RecycleItem[]) {
+  selected.value = sel
+}
+
+async function batchPurge() {
+  if (!selected.value.length) return
+  try {
+    await ElMessageBox.confirm(`确认彻底删除选中的 ${selected.value.length} 条记录？删除后不可恢复。`, '批量彻底删除', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+  batchPurging.value = true
+  let ok = 0
+  const errs: string[] = []
+  for (const row of selected.value) {
+    try {
+      await api.post('/recycle-bin/purge', { type: row.type, id: row.id })
+      ok++
+    } catch (e: any) {
+      errs.push(`${row.title || row.id}: ${e?.message || '删除失败'}`)
+    }
+  }
+  batchPurging.value = false
+  if (ok) ElMessage.success(`已彻底删除 ${ok} 条`)
+  if (errs.length) ElMessage.error(`失败 ${errs.length} 条：${errs.slice(0, 3).join('；')}${errs.length > 3 ? ' 等' : ''}`)
+  load()
 }
 
 onMounted(load)
