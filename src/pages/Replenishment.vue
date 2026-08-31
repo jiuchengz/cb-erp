@@ -27,24 +27,23 @@
       <el-table-column label="补货时间" width="170">
         <template #default="{ row }">{{ row.replenishment_time || '-' }}</template>
       </el-table-column>
-      <el-table-column label="产品编码" width="130" show-overflow-tooltip>
-        <template #default="{ row }">{{ firstItemCode(row) }}</template>
-      </el-table-column>
-      <el-table-column label="图片" width="70">
+      <el-table-column label="产品" min-width="240">
         <template #default="{ row }">
-          <el-image
-            v-if="firstItemImage(row)"
-            :src="firstItemImage(row)"
-            :preview-src-list="[firstItemImage(row)]"
-            preview-teleported
-            fit="cover"
-            class="product-img"
-          />
-          <span v-else>-</span>
+          <div class="product-cell">
+            <el-image
+              v-if="firstItemImage(row)"
+              :src="firstItemImage(row)"
+              :preview-src-list="[firstItemImage(row)]"
+              preview-teleported
+              fit="cover"
+              class="product-img"
+            />
+            <span v-else class="product-img-placeholder">-</span>
+            <el-tooltip :content="firstItemLabel(row)" placement="top" :show-after="300">
+              <span class="product-label">{{ firstItemLabel(row) }}</span>
+            </el-tooltip>
+          </div>
         </template>
-      </el-table-column>
-      <el-table-column label="产品名称" min-width="180" show-overflow-tooltip>
-        <template #default="{ row }">{{ firstItemName(row) }}</template>
       </el-table-column>
       <el-table-column label="仓库" min-width="140">
         <template #default="{ row }">{{ warehouseName(row.warehouse_id) }}</template>
@@ -238,22 +237,6 @@ function firstItemLabel(row: any) {
   }
   return ''
 }
-// 产品编码：取第一条明细的产品编码
-function firstItemCode(row: any) {
-  const items = orderItems(row)
-  if (items.length && items[0].products) {
-    return items[0].products.code || items[0].products.sku || ''
-  }
-  return ''
-}
-// 产品名称：取第一条明细的产品名称
-function firstItemName(row: any) {
-  const items = orderItems(row)
-  if (items.length && items[0].products) {
-    return items[0].products.name || ''
-  }
-  return ''
-}
 // 产品图片：取第一条明细的产品图片
 function firstItemImage(row: any) {
   const items = orderItems(row)
@@ -428,10 +411,10 @@ const importFile = ref<any>(null)
 function downloadTpl() {
   downloadTemplate(
     [
-      { label: '产品编码', sample: 'DLB-001' },
-      { label: '仓库', sample: '默认仓库' },
-      { label: '补货数量', sample: 10 },
-      { label: '补货时间', sample: '2026-08-14' },
+      { label: '产品编码', sample: 'DLB002' },
+      { label: '仓库', sample: 'CN-9店佛山仓' },
+      { label: '补货数量', sample: 50 },
+      { label: '补货时间', sample: '2026-08-31' },
       { label: '备注', sample: '' },
     ],
     '补货导入模板',
@@ -635,6 +618,18 @@ onMounted(() => {
   border-radius: 4px;
   flex-shrink: 0;
   border: 1px solid #ebeef5;
+}
+.product-img-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px dashed #dcdfe6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #c0c4cc;
+  font-size: 12px;
 }
 .product-label {
   overflow: hidden;
