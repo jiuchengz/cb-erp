@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             p_reference_type: 'replenishment_order',
             p_reference_id: id,
             p_created_by: ctx.userId,
-            p_note: `补货入库 ${before.order_no}`,
+            p_note: `补货入库 ${before.order_no ?? '补货单'}`,
           });
           if (invErr) throw invErr;
         }

@@ -14,7 +14,7 @@ const itemSchema = z.object({
 });
 
 const createSchema = z.object({
-  order_no: z.string().min(1).max(64),
+  order_no: z.string().min(1).max(64).optional().nullable(),
   warehouse_id: z.string().uuid(),
   replenish_qty: z.coerce.number().min(0).optional(),
   replenishment_time: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
@@ -115,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: order, error } = await supabase
         .from('replenishment_orders')
         .insert({
-          order_no: body.order_no,
+          order_no: body.order_no ?? null,
           warehouse_id: body.warehouse_id,
           created_by: ctx.userId,
           replenish_qty: body.replenish_qty ?? totalQty,

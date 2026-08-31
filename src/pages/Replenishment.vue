@@ -165,7 +165,7 @@ import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, cellDateStr, autoNo } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, cellDateStr } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('replenishment.write'))
@@ -300,7 +300,6 @@ async function save() {
   saving.value = true
   try {
     await api.post('/replenishment', {
-      order_no: autoNo('RPL', Math.floor(Math.random() * 900) + 100),
       warehouse_id: form.warehouse_id,
       replenishment_time: form.replenishment_time || null,
       items: [{ product_id: form.product_id, quantity: form.quantity }],
@@ -360,7 +359,8 @@ async function saveEdit() {
 
 async function removeOne(row: any) {
   try {
-    await ElMessageBox.confirm(`确定删除补货单「${row.order_no}」吗？此操作不可恢复。`, '删除确认', {
+    const delLabel = row.order_no || firstItem(row)?.code || firstItem(row)?.sku || '无单号'
+    await ElMessageBox.confirm(`确定删除补货单「${delLabel}」吗？此操作不可恢复。`, '删除确认', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消',
@@ -460,10 +460,9 @@ async function onImportFile(e: Event) {
     })
     // 每个产品（Excel 每行）单独生成一条补货记录，不按仓库合并明细；
     // 完全重复行（编码+仓库+数量+时间全相同，时间为空视为相同）只保留首次出现的行，其余跳过
-    const pending: { wh: any; product: any; qty: number; lineNo: number; time: string }[] = []
+    const pending: { wh: any; product: any; qty: number; lineNo: number }[] = []
     const seen = new Map<string, number>()
     const dupGroups: { keepLine: number; skipLines: number[] }[] = []
-    let autoSeq = 0
     const failures: string[] = []
     rows.forEach((row, idx) => {
       const lineNo = idx + 2
@@ -512,7 +511,6 @@ async function onImportFile(e: Event) {
       try {
         // Excel 每行一条独立补货记录，列表每个产品单独一行
         await api.post('/replenishment', {
-          order_no: autoNo('RPL-IMP', ++autoSeq),
           warehouse_id: it.wh.id,
           items: [{ product_id: it.product.id, quantity: it.qty }],
         })
