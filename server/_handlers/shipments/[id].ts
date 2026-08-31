@@ -41,6 +41,7 @@ const updateSchema = z.object({
   estimated_arrival: z.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: z.string().max(100).nullable().optional(),
+  store: z.string().max(100).nullable().optional(),
   tracking_no: z.string().max(100).nullable().optional(),
   items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive(), remark: z.string().max(1000).nullable().optional() })).min(1).max(200).optional(),
 });

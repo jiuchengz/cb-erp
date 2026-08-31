@@ -103707,6 +103707,7 @@ var createSchema8 = external_exports.object({
   appointment_time: external_exports.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: external_exports.string().max(100).nullable().optional(),
+  store: external_exports.string().max(100).nullable().optional(),
   source: external_exports.enum(["manual", "transfer"]).optional()
 });
 async function handler28(req, res) {
@@ -106262,6 +106263,7 @@ var updateSchema12 = external_exports.object({
   estimated_arrival: external_exports.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: external_exports.string().max(100).nullable().optional(),
+  store: external_exports.string().max(100).nullable().optional(),
   tracking_no: external_exports.string().max(100).nullable().optional(),
   items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional()
 });

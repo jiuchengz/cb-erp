@@ -41,6 +41,7 @@ const createSchema = z.object({
   appointment_time: z.string().max(32).nullable().optional(),
   // 调拨发货管理字段
   cargo_code: z.string().max(100).nullable().optional(),
+  store: z.string().max(100).nullable().optional(),
   source: z.enum(['manual', 'transfer']).optional(),
 });
 

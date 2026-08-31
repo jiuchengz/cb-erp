@@ -42,6 +42,12 @@
         <el-table-column label="货代" min-width="140">
           <template #default="{ row }">{{ forwarderName(row.forwarder_id) }}</template>
         </el-table-column>
+        <el-table-column label="店铺" min-width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.store || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="仓号" min-width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.warehouse_no || '-' }}</template>
+        </el-table-column>
         <el-table-column label="空海运" width="100">
           <template #default="{ row }">
             <el-tag :type="row.shipping_mode === '空运' ? 'primary' : 'warning'" effect="plain">{{ row.shipping_mode || '-' }}</el-tag>
@@ -587,7 +593,7 @@ async function loadOptions() {
 async function loadAllProducts(): Promise<any[]> {
   const all: any[] = []
   let page = 1
-  const pageSize = 200
+  const pageSize = 500
   for (;;) {
     const { data } = await api.get('/products', { params: { page, pageSize } })
     const list = data.data ?? []
@@ -621,7 +627,8 @@ function removeItem(idx: number) {
 
 function openCreate() {
   productSearchKeyword.value = ''
-  productOptions.value = [...products.value]
+  // 不预载全量商品候选，避免渲染数千 option 卡顿；下拉展开或输入回车时按需加载
+  productOptions.value = []
   form.tracking_no = ''
   form.cargo_code = ''
   form.forwarder_id = ''
@@ -712,6 +719,8 @@ const editForm = reactive({
   shipping_cartons: 0,
   ship_date: '',
   cargo_status: '待发货',
+  store: '',
+  warehouse_no: '',
   items: [] as any[],
 })
 const editTotalOfItems = computed(() => editForm.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
@@ -727,7 +736,11 @@ async function openEdit(id: string) {
   try {
     const d = await fetchDetail(id)
     productSearchKeyword.value = ''
-    productOptions.value = [...products.value]
+    // 仅加载已选商品保证回显，避免全量商品候选渲染卡顿；下拉展开或输入回车时按需加载
+    const selIds = (d.shipment_items || []).map((it: any) => it.product_id).filter(Boolean)
+    productOptions.value = selIds
+      .map((pid: string) => products.value.find((p) => p.id === pid))
+      .filter(Boolean)
     editingId.value = id
     editForm.tracking_no = d.tracking_no
     editForm.cargo_code = d.cargo_code || ''
