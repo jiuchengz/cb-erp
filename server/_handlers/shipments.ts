@@ -68,7 +68,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (trackingNo) query = query.ilike('tracking_no', `%${trackingNo}%`);
       const shippingMode = typeof req.query.shipping_mode === 'string' ? req.query.shipping_mode.trim() : '';
       if (shippingMode) query = query.eq('shipping_mode', shippingMode);
-      query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      // 发货时间范围筛选（格式 YYYY-MM-DD）
+      const shipDateFrom = typeof req.query.ship_date_from === 'string' && req.query.ship_date_from.trim() ? req.query.ship_date_from.trim() : '';
+      const shipDateTo = typeof req.query.ship_date_to === 'string' && req.query.ship_date_to.trim() ? req.query.ship_date_to.trim() : '';
+      if (shipDateFrom) query = query.gte('ship_date', shipDateFrom);
+      if (shipDateTo) query = query.lte('ship_date', shipDateTo);
+      // 排序：默认按创建时间倒序，支持按发货时间排序（发货管理表头时间列筛选）
+      const sortBy = typeof req.query.sort_by === 'string' ? req.query.sort_by.trim() : '';
+      const sortOrder = typeof req.query.sort_order === 'string' ? req.query.sort_order.trim() : '';
+      const allowedSort = ['ship_date', 'created_at'];
+      const orderCol = allowedSort.includes(sortBy) ? sortBy : 'created_at';
+      query = query
+        .order(orderCol, { ascending: sortOrder !== 'desc' })
+        .order('created_at', { ascending: false })
+        .range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
       return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });

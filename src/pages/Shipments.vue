@@ -32,7 +32,31 @@
     <div class="table-wrap">
     <el-table :resizable="false" v-loading="loading" :data="rows" border stripe :row-style="rowStyle" @selection-change="onSelectionChange" height="100%">
       <el-table-column type="selection" width="46" />
-      <el-table-column label="发货时间" width="130">
+      <el-table-column label="发货时间" width="235">
+        <template #header>
+          <div class="ship-date-header" @click.stop>
+            <el-date-picker
+              v-model="shipDateRange"
+              type="daterange"
+              range-separator="~"
+              start-placeholder="开始"
+              end-placeholder="结束"
+              value-format="YYYY-MM-DD"
+              size="small"
+              clearable
+              :shortcuts="shipDateShortcuts"
+              style="width: 178px"
+              @change="onShipDateChange"
+            />
+            <el-tooltip :content="shipSortTip" placement="top">
+              <span class="ship-sort-btn" @click="cycleShipSort">
+                <el-icon v-if="shipSortOrder === 'ascending'"><SortUp /></el-icon>
+                <el-icon v-else-if="shipSortOrder === 'descending'"><SortDown /></el-icon>
+                <el-icon v-else><Sort /></el-icon>
+              </span>
+            </el-tooltip>
+          </div>
+        </template>
         <template #default="{ row }">
           <span>{{ row.ship_date || '-' }}</span>
         </template>
@@ -478,6 +502,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
+import { Sort, SortUp, SortDown } from '@element-plus/icons-vue'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
 import { cellDateValue } from '../utils/import'
 import * as XLSX from 'xlsx'
@@ -581,7 +606,54 @@ function formatDateOnly(v: string) {
 const rows = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
-const query = reactive({ page: 1, pageSize: 200, cargo_status: '', bill_check_status: '' })
+const query = reactive({
+  page: 1,
+  pageSize: 200,
+  cargo_status: '',
+  bill_check_status: '',
+  ship_date_from: '',
+  ship_date_to: '',
+  sort_by: '',
+  sort_order: '',
+})
+
+// ===== 发货时间表头筛选 / 排序（交互风格与销售统计页面一致：日期范围 + 快捷周期）=====
+const shipDateRange = ref<[string, string] | null>(null)
+const shipDateShortcuts = [
+  { text: '今天', value: () => { const e = new Date(); return [e, e] as [Date, Date] } },
+  { text: '近7天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return [s, e] as [Date, Date] } },
+  { text: '近30天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 30); return [s, e] as [Date, Date] } },
+  { text: '近60天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 60); return [s, e] as [Date, Date] } },
+]
+const shipSortOrder = ref<'ascending' | 'descending' | null>(null)
+const shipSortTip = computed(() =>
+  shipSortOrder.value === 'ascending' ? '按发货时间升序' : shipSortOrder.value === 'descending' ? '按发货时间降序' : '按发货时间排序'
+)
+function onShipDateChange(v: [string, string] | null) {
+  if (Array.isArray(v) && v.length === 2 && v[0] && v[1]) {
+    query.ship_date_from = v[0]
+    query.ship_date_to = v[1]
+  } else {
+    query.ship_date_from = ''
+    query.ship_date_to = ''
+  }
+  query.page = 1
+  load()
+}
+function cycleShipSort() {
+  if (shipSortOrder.value === null) shipSortOrder.value = 'ascending'
+  else if (shipSortOrder.value === 'ascending') shipSortOrder.value = 'descending'
+  else shipSortOrder.value = null
+  if (shipSortOrder.value) {
+    query.sort_by = 'ship_date'
+    query.sort_order = shipSortOrder.value === 'ascending' ? 'asc' : 'desc'
+  } else {
+    query.sort_by = ''
+    query.sort_order = ''
+  }
+  query.page = 1
+  load()
+}
 
 async function load() {
   loading.value = true
@@ -1371,6 +1443,29 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+}
+.ship-date-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ship-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--el-text-color-regular, #606266);
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  background: var(--el-fill-color-blank, #fff);
+  transition: all 0.2s;
+}
+.ship-sort-btn:hover {
+  color: var(--el-color-primary, #409eff);
+  border-color: var(--el-color-primary, #409eff);
 }
 .el-pagination {
   margin-top: 16px;

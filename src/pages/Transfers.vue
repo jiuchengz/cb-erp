@@ -179,7 +179,7 @@
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
       <el-table :resizable="false" v-if="detail" :data="detail.shipment_items || []" border stripe size="small" style="margin-top: 12px">
-        <el-table-column label="产品编码" min-width="130" show-overflow-tooltip>
+        <el-table-column label="产品编码" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
         </el-table-column>
         <el-table-column label="图片" width="80" align="center">
@@ -188,16 +188,19 @@
             <span v-else class="muted-thumb">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="中文名称" min-width="150" show-overflow-tooltip>
+        <el-table-column label="中文名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
         </el-table-column>
-        <el-table-column label="单位" width="90" align="center">
+        <el-table-column label="SKU" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ skuOf(row.product_id) }}</template>
+        </el-table-column>
+        <el-table-column label="单位" width="80" align="center">
           <template #default="{ row }">{{ unitOf(row.product_id) }}</template>
         </el-table-column>
-        <el-table-column label="备注" min-width="140" show-overflow-tooltip>
+        <el-table-column label="备注" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
-        <el-table-column label="数量" width="100" align="right">
+        <el-table-column label="数量" width="90" align="right">
           <template #default="{ row }">{{ row.quantity }}</template>
         </el-table-column>
       </el-table>
@@ -477,6 +480,10 @@ function productCodeOf(pid: string) {
   const p = products.value.find((x) => x.id === pid)
   return p ? productCode(p) : pid
 }
+function skuOf(pid: string) {
+  const p = products.value.find((x) => x.id === pid)
+  return p?.sku || '-'
+}
 function productNameOf(pid: string) {
   const p = products.value.find((x) => x.id === pid)
   return p ? p.name : '-'
@@ -745,7 +752,7 @@ async function printWorkOrder(id: string) {
     }
     const rest = indexed.filter((x) => !UNIT_ORDER.includes(x.unit))
     if (rest.length) groups.push({ unit: '其他', rows: rest })
-    const gapRow = `<tr class="gap-row"><td colspan="8"></td></tr>`
+    const gapRow = `<tr class="gap-row"><td colspan="9"></td></tr>`
     const rowsHtml = groups
       .map((g, gi) => {
         const body = g.rows
@@ -761,6 +768,7 @@ async function printWorkOrder(id: string) {
           <td>${p?.code || it.product_id}</td>
           <td>${imgHtml}</td>
           <td>${p?.name || '-'}</td>
+          <td>${p?.sku || '-'}</td>
           <td>${p?.barcode || '-'}</td>
           <td class="num">${it.quantity}</td>
           <td>${p?.unit || '-'}</td>
@@ -848,17 +856,19 @@ async function printWorkOrder(id: string) {
           <th style="width:46px">序号</th>
           <th style="min-width:110px">产品编码</th>
           <th style="width:76px">图片</th>
-          <th style="min-width:150px">产品中文名称</th>
-          <th style="min-width:160px">条形码</th>
+          <th style="min-width:130px">产品中文名称</th>
+          <th style="min-width:90px">SKU</th>
+          <th style="min-width:120px">条形码</th>
           <th style="width:80px">数量</th>
           <th style="width:60px">单位</th>
-          <th style="min-width:120px">备注</th>
+          <th style="min-width:110px">备注</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
         <tr class="sum-row">
           <td colspan="5" style="text-align:right">合计数量（总数）</td>
+          <td></td>
           <td class="num">${totalQtyNum}</td>
           <td></td>
           <td></td>
@@ -988,7 +998,7 @@ async function exportRows(withImages = false) {
     r++
   }
   const meta = (label1: string, v1: unknown, label2: string, v2: unknown) => {
-    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', ''])
+    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', '', ''])
     r++
   }
   // 与打印工单一致：按单位分组 个→套→对→其他，组间空行，缺组跳过
@@ -997,10 +1007,10 @@ async function exportRows(withImages = false) {
     if (idx > 0) {
       push([])
     }
-    // 标题行：与参考文件一致「发货工单」，A:H 合并、宋体 24、行高 42（由服务端 styled 处理字体/边框）
+    // 标题行：与参考文件一致「发货工单」，A:I 合并、宋体 24、行高 42（由服务端 styled 处理字体/边框）
     const titleRow = r
-    aoa.push(['发货工单', '', '', '', '', '', '', ''])
-    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 7 } })
+    aoa.push(['发货工单', '', '', '', '', '', '', '', ''])
+    merges.push({ s: { r: titleRow, c: 0 }, e: { r: titleRow, c: 8 } })
     titleRows.push(titleRow)
     rowHeightRanges.push({ s: titleRow, e: titleRow, h: 42 })
     r++
@@ -1010,12 +1020,12 @@ async function exportRows(withImages = false) {
     meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
     meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
     const statusRow = r
-    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', ''])
-    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 6 } })
+    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', '', ''])
+    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 7 } })
     r++
     rowHeightRanges.push({ s: infoStart, e: statusRow, h: 20 })
     push([])
-    aoa.push(['序号', '产品编码', '图片', '产品中文名称', '条形码', '数量', '单位', '备注'])
+    aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '数量', '单位', '备注'])
     r++
     // 与参考文件一致：表头之后（明细区/组间空行/合计行）行高统一 40，表头与分隔空行保持默认
     const rangeStart = r
@@ -1035,19 +1045,20 @@ async function exportRows(withImages = false) {
       g.rows.forEach(({ it, idx: seq }) => {
         const p = prod(it.product_id)
         const img = p?.image_text || ''
+        const sku = p?.sku || ''
         if (withImages && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'))) {
           imageCells.push({ r, c: 2, url: img })
-          aoa.push([seq, p ? productCode(p) : it.product_id, '', p?.name || '', p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
+          aoa.push([seq, p ? productCode(p) : it.product_id, '', p?.name || '', sku, p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
         } else {
-          aoa.push([seq, p ? productCode(p) : it.product_id, img, p?.name || '', p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
+          aoa.push([seq, p ? productCode(p) : it.product_id, img, p?.name || '', sku, p?.barcode || '', it.quantity, p?.unit || '', it.remark || ''])
         }
         r++
       })
     })
     const total = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
     const sumRow = r
-    aoa.push(['合计数量（总数）', '', '', '', '', total, '', ''])
-    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 4 } })
+    aoa.push(['合计数量（总数）', '', '', '', '', '', total, '', ''])
+    merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 5 } })
     r++
     rowHeightRanges.push({ s: rangeStart, e: sumRow, h: 40 })
   })
@@ -1058,8 +1069,8 @@ async function exportRows(withImages = false) {
       {
         aoa,
         merges,
-        // 与参考文件「调整后的表格」列宽一致：序号/编码/图片/名称/条形码/数量/单位/备注
-        widths: [11, 12.41, 8.79, 26.4, 10.51, 4.48, 4.92, 17.6],
+        // 与参考文件「调整后的表格」列宽一致：序号/编码/图片/名称/SKU/条形码/数量/单位/备注
+        widths: [11, 12.41, 8.79, 24, 12.41, 10.51, 4.48, 4.92, 17.6],
         rowHeightRanges,
         titleRows,
         styled: true,
