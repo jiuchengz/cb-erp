@@ -103732,7 +103732,15 @@ async function handler28(req, res) {
       if (trackingNo) query = query.ilike("tracking_no", `%${trackingNo}%`);
       const shippingMode = typeof req.query.shipping_mode === "string" ? req.query.shipping_mode.trim() : "";
       if (shippingMode) query = query.eq("shipping_mode", shippingMode);
-      query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
+      const shipDateFrom = typeof req.query.ship_date_from === "string" && req.query.ship_date_from.trim() ? req.query.ship_date_from.trim() : "";
+      const shipDateTo = typeof req.query.ship_date_to === "string" && req.query.ship_date_to.trim() ? req.query.ship_date_to.trim() : "";
+      if (shipDateFrom) query = query.gte("ship_date", shipDateFrom);
+      if (shipDateTo) query = query.lte("ship_date", shipDateTo);
+      const sortBy = typeof req.query.sort_by === "string" ? req.query.sort_by.trim() : "";
+      const sortOrder = typeof req.query.sort_order === "string" ? req.query.sort_order.trim() : "";
+      const allowedSort = ["ship_date", "created_at"];
+      const orderCol = allowedSort.includes(sortBy) ? sortBy : "created_at";
+      query = query.order(orderCol, { ascending: sortOrder !== "desc" }).order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
       return res.status(200).json({ data: data || [], total: count ?? 0, page: q.page, pageSize: q.pageSize });
@@ -103754,6 +103762,7 @@ async function handler28(req, res) {
               source: "transfer",
               shipment_no: trackingNo,
               cargo_code: body.cargo_code ?? null,
+              store: body.store ?? null,
               forwarder_id: body.forwarder_id ?? null,
               shipping_mode: body.shipping_mode ?? null,
               shipping_cartons: body.shipping_cartons ?? null,
@@ -103826,6 +103835,7 @@ async function handler28(req, res) {
         abnormal_penalty: body.abnormal_penalty ?? null,
         appointment_time: body.appointment_time ?? null,
         cargo_code: body.cargo_code ?? null,
+        store: body.store ?? null,
         source: body.source ?? "manual",
         created_by: ctx.userId
       }).select().single();
@@ -106311,6 +106321,7 @@ async function handler54(req, res) {
             tracking_no: newNo,
             shipment_no: newNo,
             cargo_code: body.cargo_code ?? before.cargo_code ?? null,
+            store: body.store ?? before.store ?? null,
             forwarder_id: body.forwarder_id ?? before.forwarder_id ?? null,
             shipping_mode: body.shipping_mode ?? before.shipping_mode ?? null,
             shipping_cartons: body.shipping_cartons ?? before.shipping_cartons ?? 0,
@@ -106378,6 +106389,7 @@ async function handler54(req, res) {
       if (body.pull_declare_qty !== void 0) update.pull_declare_qty = body.pull_declare_qty;
       if (body.estimated_arrival !== void 0) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== void 0) update.cargo_code = body.cargo_code;
+      if (body.store !== void 0) update.store = body.store;
       const confirmItems = (body.items && body.items.length ? body.items : before.shipment_items) || [];
       const willConfirmShipment = before.source === "transfer" && before.cargo_status === "\u5F85\u53D1\u8D27" && body.cargo_status !== void 0 && body.cargo_status !== "\u5F85\u53D1\u8D27";
       let deductedDomestic = false;
@@ -106522,8 +106534,10 @@ var transferRowSchema = external_exports.object({
   row_no: external_exports.number().int().positive().optional(),
   shipment_no: external_exports.string().min(1).max(100),
   cargo_code: external_exports.string().max(100).nullable().optional(),
+  store: external_exports.string().max(100).nullable().optional(),
   forwarder_name: external_exports.string().max(128).nullable().optional(),
   shipping_mode: external_exports.string().max(20).nullable().optional(),
+  warehouse_no: external_exports.string().max(50).nullable().optional(),
   shipping_cartons: external_exports.union([external_exports.null(), external_exports.coerce.number().nonnegative()]).optional(),
   ship_date: external_exports.string().max(32).nullable().optional(),
   product_code: external_exports.string().min(1).max(100),
@@ -106763,8 +106777,10 @@ async function handler55(req, res) {
         const boundPayload = {
           source: "transfer",
           cargo_code: cleanStr(first.cargo_code),
+          store: cleanStr(first.store),
           forwarder_id: forwarderId,
           shipping_mode: cleanStr(first.shipping_mode),
+          warehouse_no: cleanStr(first.warehouse_no),
           shipping_cartons: cleanNum(first.shipping_cartons),
           ship_date: cleanStr(first.ship_date),
           cargo_status: "\u5F85\u53D1\u8D27"
@@ -106817,8 +106833,10 @@ async function handler55(req, res) {
         tracking_no: shipmentNo,
         shipment_no: shipmentNo,
         cargo_code: cleanStr(first.cargo_code),
+        store: cleanStr(first.store),
         forwarder_id: forwarderId,
         shipping_mode: cleanStr(first.shipping_mode),
+        warehouse_no: cleanStr(first.warehouse_no),
         shipping_cartons: cleanNum(first.shipping_cartons),
         ship_date: cleanStr(first.ship_date),
         source: "transfer",

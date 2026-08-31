@@ -113,6 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               source: 'transfer',
               shipment_no: trackingNo,
               cargo_code: body.cargo_code ?? null,
+              store: body.store ?? null,
               forwarder_id: body.forwarder_id ?? null,
               shipping_mode: body.shipping_mode ?? null,
               shipping_cartons: body.shipping_cartons ?? null,
@@ -205,6 +206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           abnormal_penalty: body.abnormal_penalty ?? null,
           appointment_time: body.appointment_time ?? null,
           cargo_code: body.cargo_code ?? null,
+          store: body.store ?? null,
           source: body.source ?? 'manual',
           created_by: ctx.userId,
         })

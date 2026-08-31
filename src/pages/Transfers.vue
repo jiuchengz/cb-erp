@@ -266,16 +266,22 @@
           </el-col>
         </el-row>
         <el-row :gutter="12">
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="货物状态">
               <el-select v-model="editForm.cargo_status" style="width: 100%">
                 <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name" />
               </el-select>
+              <div class="muted-hint">状态由「待发货」变为其他状态时，将自动扣减国内库存</div>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label=" ">
-              <span class="muted-hint">状态由「待发货」变为其他状态时，将自动扣减国内库存</span>
+          <el-col :span="8">
+            <el-form-item label="店铺">
+              <el-input v-model="editForm.store" placeholder="店铺" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="仓号">
+              <el-input v-model="editForm.warehouse_no" placeholder="仓号" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -350,8 +356,10 @@ const query = reactive({ page: 1, pageSize: 200, tracking_no: '', shipping_mode:
 const TRANSFER_IMPORT_COLUMNS: { label: string; key: string; required?: boolean; desc?: string }[] = [
   { label: '货件号', key: 'shipment_no', required: true, desc: '必填，唯一；同一货件号多行表示多个明细商品，将聚合为一个调拨单' },
   { label: '货代号', key: 'cargo_code', desc: '选填' },
+  { label: '店铺', key: 'store', desc: '选填，如 9店' },
   { label: '货代', key: 'forwarder_name', required: true, desc: '必填，需与系统设置-货代管理中名称完全一致' },
   { label: '空海运', key: 'shipping_mode', desc: '选填，空运/海运' },
+  { label: '仓号', key: 'warehouse_no', desc: '选填，如 3仓' },
   { label: '箱数', key: 'shipping_cartons', desc: '选填，数字' },
   { label: '发货时间', key: 'ship_date', desc: '选填，如 2026-08-01' },
   { label: '产品编码', key: 'product_code', required: true, desc: '必填，商品管理中编码/SKU/条码任一' },
@@ -364,9 +372,9 @@ async function downloadTransferTemplate() {
     const XLSX = await import('xlsx')
     const headers = TRANSFER_IMPORT_COLUMNS.map((c) => c.label)
     const sample = [
-      ['FBA-20260801-001', 'AGYQ81745', '广州永利货代', '海运', 10, '2026-08-01', 'AGYQ81745', 300, ''],
-      ['FBA-20260801-001', 'AGYQ81745', '广州永利货代', '海运', 10, '2026-08-01', 'B12345', 200, '同货件号第二行明细'],
-      ['FBA-20260802-002', 'ZZZ999', '深圳海通国际', '空运', 5, '2026-08-02', 'C67890', 50, ''],
+      ['FBA-20260801-001', 'AGYQ81745', '9店', '广州永利货代', '海运', '3仓', 10, '2026-08-01', 'AGYQ81745', 300, ''],
+      ['FBA-20260801-001', 'AGYQ81745', '9店', '广州永利货代', '海运', '3仓', 10, '2026-08-01', 'B12345', 200, '同货件号第二行明细'],
+      ['FBA-20260802-002', 'ZZZ999', '5店', '深圳海通国际', '空运', '5仓', 5, '2026-08-02', 'C67890', 50, ''],
     ]
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sample])
@@ -398,8 +406,10 @@ async function onTransferImportChange(e: Event) {
     const colIdx = buildColMap(headers, {
       shipment_no: ['货件号'],
       cargo_code: ['货代号'],
+      store: ['店铺'],
       forwarder_name: ['货代'],
       shipping_mode: ['空海运'],
+      warehouse_no: ['仓号'],
       shipping_cartons: ['箱数'],
       ship_date: ['发货时间'],
       product_code: ['产品编码'],
@@ -417,8 +427,10 @@ async function onTransferImportChange(e: Event) {
         row_no: i + 2, // 表头占第 1 行，Excel 数据行从第 2 行开始
         shipment_no: cellStr(row, colIdx.shipment_no),
         cargo_code: cellStr(row, colIdx.cargo_code) || null,
+        store: cellStr(row, colIdx.store) || null,
         forwarder_name: cellStr(row, colIdx.forwarder_name) || null,
         shipping_mode: cellStr(row, colIdx.shipping_mode) || null,
+        warehouse_no: cellStr(row, colIdx.warehouse_no) || null,
         shipping_cartons: cellNum(row, colIdx.shipping_cartons, 0) || null,
         ship_date: cellDateStr(row, colIdx.ship_date) || null,
         product_code: cellStr(row, colIdx.product_code),
@@ -724,6 +736,8 @@ async function openEdit(id: string) {
     editForm.shipping_cartons = d.shipping_cartons ?? 0
     editForm.ship_date = d.ship_date || ''
     editForm.cargo_status = d.cargo_status || '待发货'
+    editForm.store = d.store || ''
+    editForm.warehouse_no = d.warehouse_no || ''
     editForm.items = (d.shipment_items || []).map((it: any) => ({
       product_id: it.product_id,
       quantity: it.quantity,
@@ -773,6 +787,8 @@ async function saveEdit() {
       shipping_cartons: editForm.shipping_cartons ?? 0,
       ship_date: editForm.ship_date,
       cargo_status: editForm.cargo_status,
+      store: editForm.store.trim() || null,
+      warehouse_no: editForm.warehouse_no.trim() || null,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
     })
     const saved = resp?.data?.data
@@ -837,7 +853,6 @@ async function printWorkOrder(id: string) {
         return (gi > 0 ? gapRow : '') + body
       })
       .join('')
-    const now = sysFormatDateTime(new Date())
     const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -846,8 +861,8 @@ async function printWorkOrder(id: string) {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root { --img-size: 60px; --zoom: 1; }
-  body { font-family: "Microsoft YaHei", "SimSun", sans-serif; color: #000; padding: 24px; zoom: var(--zoom); }
-  h1 { text-align: center; font-size: 26px; letter-spacing: 12px; margin-bottom: 24px; font-weight: 700; }
+  body { font-family: "SimSun", "宋体", "Microsoft YaHei", sans-serif; color: #000; padding: 24px; zoom: var(--zoom); }
+  h1 { text-align: center; font-size: 24px; letter-spacing: 4px; margin-bottom: 16px; font-weight: 400; }
   .print-toolbar { position: fixed; top: 8px; right: 12px; z-index: 999; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
   .print-toolbar .btn { border: 1px solid #409EFF; background: #fff; color: #409EFF; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
   .print-toolbar .btn:hover { background: #ecf5ff; }
@@ -858,20 +873,18 @@ async function printWorkOrder(id: string) {
   .print-panel .row:last-child { margin-bottom: 0; }
   .print-panel input[type=range] { width: 110px; }
   .print-panel .val { width: 46px; text-align: right; color: #409EFF; }
-  .meta { border: 1.5px solid #000; margin-bottom: 16px; }
-  .meta table { width: 100%; border-collapse: collapse; }
-  .meta td { border: 1px solid #000; padding: 8px 12px; font-size: 14px; }
-  .meta .label { background: #f5f5f5; width: 110px; text-align: right; font-weight: 600; }
+  .meta { border: 1.5px solid #000; margin-bottom: 8px; }
+  .meta table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .meta td { border: 1px solid #000; padding: 3px 6px; font-size: 11pt; text-align: center; vertical-align: middle; word-break: break-all; }
   .items { border: 1.5px solid #000; margin-bottom: 8px; }
   .items table { width: 100%; border-collapse: collapse; table-layout: auto; }
-  .items th, .items td { border: 1px solid #000; padding: 6px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
-  .items th { background: #f5f5f5; font-weight: 600; }
-  .items td.num { text-align: right; font-weight: 600; white-space: nowrap; }
-  .gap-row td { border: none !important; padding: 5px !important; }
-  .sum-row td { background: #fafafa; font-weight: 700; white-space: nowrap; }
-  .print-time { text-align: right; margin-top: 14px; font-size: 11px; color: #666; }
+  .items th, .items td { border: 1px solid #000; padding: 4px 6px; font-size: 11pt; text-align: center; vertical-align: middle; word-break: break-all; }
+  .items th { font-weight: 600; }
+  .items td.num { text-align: center; white-space: nowrap; }
+  .gap-row td { border: 1px solid #000 !important; padding: 4px 6px !important; }
+  .sum-row td { white-space: nowrap; }
   @media print {
-    @page { size: A4 portrait; margin: 15mm; }
+    @page { size: A4 portrait; margin: 0.75in 0.2361in 0.75in 0.1965in; }
     body { padding: 0; }
     .print-toolbar, .print-panel { display: none !important; }
   }
@@ -890,20 +903,23 @@ async function printWorkOrder(id: string) {
   <h1>发货工单</h1>
   <div class="meta">
     <table>
+      <colgroup>
+        <col style="width:6.9%"><col style="width:10.4%"><col style="width:10.3%"><col style="width:19.4%"><col style="width:18.7%"><col style="width:7.9%"><col style="width:8%"><col style="width:18.4%">
+      </colgroup>
       <tr>
-        <td class="label">货件号</td><td>${d.tracking_no || '-'}</td>
+        <td class="label">货件号</td><td colspan="2">${d.tracking_no || '-'}</td>
         <td class="label">货代号</td><td>${d.cargo_code || '-'}</td>
+        <td class="label" colspan="2">店铺</td><td>${d.store || '-'}</td>
       </tr>
       <tr>
-        <td class="label">货　代</td><td>${forwarderName(d.forwarder_id)}</td>
+        <td class="label">货　代</td><td colspan="2">${forwarderName(d.forwarder_id)}</td>
         <td class="label">运输方式</td><td>${d.shipping_mode || '-'}</td>
+        <td class="label" colspan="2">仓号</td><td>${d.warehouse_no || '-'}</td>
       </tr>
       <tr>
-        <td class="label">箱　数</td><td>${d.shipping_cartons ?? '-'} 箱</td>
+        <td class="label">箱　数</td><td colspan="2">${d.shipping_cartons ?? '-'}</td>
         <td class="label">发货时间</td><td>${d.ship_date || '-'}</td>
-      </tr>
-      <tr>
-        <td class="label">货物状态</td><td colspan="3">${d.cargo_status || '-'}</td>
+        <td class="label" colspan="2">货物状态</td><td>${d.cargo_status || '-'}</td>
       </tr>
     </table>
   </div>
@@ -934,8 +950,7 @@ async function printWorkOrder(id: string) {
       </tbody>
     </table>
   </div>
-  <div class="print-time">制单时间：${now}</div>
-<script>
+  <script>
   function togglePanel() {
     var p = document.getElementById('panel');
     p.style.display = p.style.display === 'block' ? 'none' : 'block';
@@ -1055,8 +1070,13 @@ async function exportRows(withImages = false) {
     aoa.push(row)
     r++
   }
-  const meta = (label1: string, v1: unknown, label2: string, v2: unknown) => {
-    aoa.push([label1, v1 ?? '-', label2, v2 ?? '-', '', '', '', '', ''])
+  // 与参考文件一致：信息区每行 3 组「标签+值」，按模板合并 B:C（值1）/ F:G（标签3）/ H:I（值3）
+  const meta = (label1: string, v1: unknown, label2: string, v2: unknown, label3: string, v3: unknown) => {
+    const row = r
+    aoa.push([label1, v1 ?? '-', '', label2, v2 ?? '-', label3, '', v3 ?? '-', ''])
+    merges.push({ s: { r: row, c: 1 }, e: { r: row, c: 2 } })
+    merges.push({ s: { r: row, c: 5 }, e: { r: row, c: 6 } })
+    merges.push({ s: { r: row, c: 7 }, e: { r: row, c: 8 } })
     r++
   }
   // 与打印工单一致：按单位分组 个→套→对→其他，组间空行，缺组跳过
@@ -1072,17 +1092,15 @@ async function exportRows(withImages = false) {
     titleRows.push(titleRow)
     rowHeightRanges.push({ s: titleRow, e: titleRow, h: 42 })
     r++
-    // 信息区 4 行（货件号/货代/箱数/货物状态）行高 20
+    // 信息区 3 行（与模板一致：货件号/货代号/店铺、货代/运输方式/仓号、箱数/发货时间/货物状态）行高 20
     const infoStart = r
-    meta('货件号', ship.tracking_no, '货代号', ship.cargo_code)
-    meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode)
-    meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date)
-    const statusRow = r
-    aoa.push(['货物状态', ship.cargo_status || '-', '', '', '', '', '', '', ''])
-    merges.push({ s: { r: statusRow, c: 1 }, e: { r: statusRow, c: 7 } })
-    r++
-    rowHeightRanges.push({ s: infoStart, e: statusRow, h: 20 })
+    meta('货件号', ship.tracking_no, '货代号', ship.cargo_code, '店铺', ship.store)
+    meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode, '仓号', ship.warehouse_no)
+    meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date, '货物状态', ship.cargo_status)
+    rowHeightRanges.push({ s: infoStart, e: infoStart + 2, h: 20 })
+    const gapRowIdx = r
     push([])
+    rowHeightRanges.push({ s: gapRowIdx, e: gapRowIdx, h: 20 })
     aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '数量', '单位', '备注'])
     r++
     // 与参考文件一致：表头之后（明细区/组间空行/合计行）行高统一 40，表头与分隔空行保持默认
@@ -1127,8 +1145,8 @@ async function exportRows(withImages = false) {
       {
         aoa,
         merges,
-        // 与参考文件「调整后的表格」列宽一致：序号/编码/图片/名称/SKU/条形码/数量/单位/备注
-        widths: [11, 12.41, 8.79, 24, 12.41, 10.51, 4.48, 4.92, 17.6],
+        // 与参考文件「调拨发货_2026-08-31.xlsx」列宽完全一致（A-I）
+        widths: [6.875, 11.875, 8.792, 19.25, 18.625, 10.508, 5.25, 5.875, 17.6],
         rowHeightRanges,
         titleRows,
         styled: true,

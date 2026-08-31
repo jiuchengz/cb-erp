@@ -118,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             tracking_no: newNo,
             shipment_no: newNo,
             cargo_code: body.cargo_code ?? (before as any).cargo_code ?? null,
+            store: body.store ?? (before as any).store ?? null,
             forwarder_id: body.forwarder_id ?? (before as any).forwarder_id ?? null,
             shipping_mode: body.shipping_mode ?? (before as any).shipping_mode ?? null,
             shipping_cartons: body.shipping_cartons ?? (before as any).shipping_cartons ?? 0,
@@ -205,6 +206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.pull_declare_qty !== undefined) update.pull_declare_qty = body.pull_declare_qty;
       if (body.estimated_arrival !== undefined) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== undefined) update.cargo_code = body.cargo_code;
+      if (body.store !== undefined) update.store = body.store;
 
       // 调拨发货确认发货：货物状态由「待发货」变为其他状态时，扣减国内仓库库存（transfer_out）
       const confirmItems = (body.items && body.items.length ? body.items : (before as any).shipment_items) || [];
