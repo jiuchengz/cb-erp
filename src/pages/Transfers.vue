@@ -157,12 +157,28 @@
                 style="flex: 1"
               >
                 <template #prefix>
-                  <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
+                  <img
+                    v-if="isImageUrl(imgOf(it.product_id))"
+                    :src="thumbOf(it.product_id, 44, 44)"
+                    loading="lazy"
+                    decoding="async"
+                    referrerpolicy="no-referrer"
+                    @error="onThumbError($event, imgOf(it.product_id))"
+                    class="sel-img"
+                  />
                 </template>
                 <el-option v-for="p in productOptions" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
                   <div class="opt-line">
                     <span class="opt-code">{{ productCode(p) }}</span>
-                    <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
+                    <img
+                      v-if="isImageUrl(p.image_text)"
+                      :src="thumbUrl(p.image_text, 56, 56)"
+                      loading="lazy"
+                      decoding="async"
+                      referrerpolicy="no-referrer"
+                      @error="onThumbError($event, p.image_text)"
+                      class="opt-img"
+                    />
                     <span class="opt-name">{{ p.name }}</span>
                   </div>
                 </el-option>
@@ -202,7 +218,15 @@
           </el-table-column>
           <el-table-column label="图片" width="80" align="center">
             <template #default="{ row }">
-              <img v-if="isImageUrl(imgOf(row.product_id))" :src="imgOf(row.product_id)" class="detail-thumb" />
+              <img
+                v-if="isImageUrl(imgOf(row.product_id))"
+                :src="thumbOf(row.product_id, 96, 96)"
+                loading="lazy"
+                decoding="async"
+                referrerpolicy="no-referrer"
+                @error="onThumbError($event, imgOf(row.product_id))"
+                class="detail-thumb"
+              />
               <span v-else class="muted-thumb">-</span>
             </template>
           </el-table-column>
@@ -309,12 +333,28 @@
                 style="flex: 1"
               >
                 <template #prefix>
-                  <img v-if="isImageUrl(imgOf(it.product_id))" :src="imgOf(it.product_id)" class="sel-img" />
+                  <img
+                    v-if="isImageUrl(imgOf(it.product_id))"
+                    :src="thumbOf(it.product_id, 44, 44)"
+                    loading="lazy"
+                    decoding="async"
+                    referrerpolicy="no-referrer"
+                    @error="onThumbError($event, imgOf(it.product_id))"
+                    class="sel-img"
+                  />
                 </template>
                 <el-option v-for="p in productOptions" :key="p.id" :value="p.id" :label="`${productCode(p)} - ${p.name}`">
                   <div class="opt-line">
                     <span class="opt-code">{{ productCode(p) }}</span>
-                    <img v-if="isImageUrl(p.image_text)" :src="p.image_text" class="opt-img" />
+                    <img
+                      v-if="isImageUrl(p.image_text)"
+                      :src="thumbUrl(p.image_text, 56, 56)"
+                      loading="lazy"
+                      decoding="async"
+                      referrerpolicy="no-referrer"
+                      @error="onThumbError($event, p.image_text)"
+                      class="opt-img"
+                    />
                     <span class="opt-name">{{ p.name }}</span>
                   </div>
                 </el-option>
@@ -502,8 +542,34 @@ function forwarderName(id: string) {
 }
 
 const products = ref<any[]>([])
+// 商品池 Map 索引：避免模板中每行多次 products.value.find 线性扫描（明细行越多开销越大）
+const productMap = computed(() => {
+  const m = new Map<string, any>()
+  for (const p of products.value) m.set(p.id, p)
+  return m
+})
 function productCode(p: any) {
   return p.code || p.sku || p.id
+}
+// Supabase Storage 缩略图：object public URL 转 render/image 变换端点，滚动区只加载小图
+const STORAGE_OBJECT_PREFIX = '/storage/v1/object/public/'
+const STORAGE_RENDER_PREFIX = '/storage/v1/render/image/public/'
+function thumbUrl(url: string, w: number, h: number): string {
+  if (url.startsWith('data:image/')) return url
+  if (url.includes(STORAGE_OBJECT_PREFIX)) {
+    return url.replace(STORAGE_OBJECT_PREFIX, STORAGE_RENDER_PREFIX) + `?width=${w}&height=${h}`
+  }
+  return url
+}
+// 明细行/下拉候选小图：已选商品取缩略图（2x 适配高清屏），非 storage 图原样返回
+function thumbOf(pid: string, w: number, h: number): string {
+  const url = imgOf(pid)
+  return url ? thumbUrl(url, w, h) : ''
+}
+// 缩略图加载失败（如服务端未开启 image transformation）时回退原图，保证功能不受影响
+function onThumbError(e: Event, fullUrl: string) {
+  const img = e.target as HTMLImageElement
+  if (fullUrl && img.src !== fullUrl) img.src = fullUrl
 }
 // 商品下拉远程搜索：输入关键词后回车触发，与商品管理模块一致
 const productOptions = ref<any[]>([])
@@ -546,27 +612,27 @@ async function searchProducts(kw: string) {
   }
 }
 function productInfo(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p ? `${productCode(p)} - ${p.name}` : pid
 }
 function productCodeOf(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p ? productCode(p) : pid
 }
 function skuOf(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p?.sku || '-'
 }
 function productNameOf(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p ? p.name : '-'
 }
 function unitOf(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p?.unit || '—'
 }
 function imgOf(pid: string) {
-  const p = products.value.find((x) => x.id === pid)
+  const p = productMap.value.get(pid)
   return p?.image_text || ''
 }
 function isImageUrl(v: unknown): boolean {
@@ -1327,11 +1393,22 @@ onMounted(() => {
 .transfer-edit-dialog .items-editor {
   max-height: 42vh;
   overflow-y: auto;
+  /* 隔离滚动区重绘：避免滚动时每行图片/输入框的绘制扩散到整个弹窗，降低卡顿 */
+  contain: content;
+  will-change: scroll-position;
 }
 /* 详情弹窗：明细表格区内部滚动 */
 .detail-items-wrap {
   max-height: 42vh;
   overflow-y: auto;
   margin-top: 12px;
+  contain: content;
+  will-change: scroll-position;
+}
+/* 明细行图片：避免高清原图在滚动重绘时反复解码 */
+.sel-img,
+.opt-img,
+.detail-thumb {
+  image-rendering: auto;
 }
 </style>
