@@ -372,6 +372,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         continue;
       }
 
+      // 释放回收站（软删除）中占用同一货件号的记录，避免 insert 撞 tracking_no 唯一约束报 23505
+      {
+        const { data: recycled, error: rcErr } = await supabase
+          .from('shipments')
+          .select('id')
+          .eq('tracking_no', shipmentNo)
+          .not('deleted_at', 'is', null)
+          .maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${shipmentNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase
+            .from('shipments')
+            .update({ tracking_no: releaseNo })
+            .eq('id', recycled.id);
+          if (relErr) throw relErr;
+        }
+      }
+
       // 创建调拨单（与现有新增逻辑一致：source=transfer + items，库存联动扣减）
       const { data: shipment, error: insErr } = await supabase
         .from('shipments')

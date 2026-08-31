@@ -821,6 +821,8 @@ async function saveEdit() {
       shipping_qty: f.shipping_qty ?? null,
       shipping_mode: f.shipping_mode || null,
       shipment_no: String(f.shipment_no).trim(),
+      // 联动调拨发货管理：货件号变更时同步更新 tracking_no，使发货管理与调拨发货管理保持一致
+      tracking_no: String(f.shipment_no).trim(),
       product_code: f.product_code || null,
       billable_weight_vol: f.billable_weight_vol || null,
       volume_diff: f.volume_diff || null,

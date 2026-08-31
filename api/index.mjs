@@ -103792,6 +103792,16 @@ async function handler28(req, res) {
           }
         }
       }
+      const insertNo = String(body.tracking_no || body.shipment_no || "").trim();
+      if (insertNo) {
+        const { data: recycled, error: rcErr } = await supabase.from("shipments").select("id").eq("tracking_no", insertNo).not("deleted_at", "is", null).maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${insertNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase.from("shipments").update({ tracking_no: releaseNo }).eq("id", recycled.id);
+          if (relErr) throw relErr;
+        }
+      }
       const { data: shipment, error } = await supabase.from("shipments").insert({
         // 兼容新表单（无 tracking_no 走 shipment_no 兜底）
         tracking_no: body.tracking_no || body.shipment_no,
@@ -106334,6 +106344,13 @@ async function handler54(req, res) {
             message: `\u5DF2\u7ED1\u5B9A\u53D1\u8D27\u7BA1\u7406\u8D27\u4EF6\u53F7 ${newNo}\uFF0C\u539F\u8C03\u62E8\u8BB0\u5F55\u5DF2\u5408\u5E76`
           });
         }
+        const { data: recycled, error: rcErr } = await supabase.from("shipments").select("id").eq("tracking_no", newNo).not("deleted_at", "is", null).maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${newNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase.from("shipments").update({ tracking_no: releaseNo }).eq("id", recycled.id);
+          if (relErr) throw relErr;
+        }
         update.tracking_no = body.tracking_no;
       }
       if (body.forwarder_id !== void 0) update.forwarder_id = body.forwarder_id;
@@ -106786,6 +106803,15 @@ async function handler55(req, res) {
           items: items.length
         });
         continue;
+      }
+      {
+        const { data: recycled, error: rcErr } = await supabase.from("shipments").select("id").eq("tracking_no", shipmentNo).not("deleted_at", "is", null).maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${shipmentNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase.from("shipments").update({ tracking_no: releaseNo }).eq("id", recycled.id);
+          if (relErr) throw relErr;
+        }
       }
       const { data: shipment, error: insErr } = await supabase.from("shipments").insert({
         tracking_no: shipmentNo,

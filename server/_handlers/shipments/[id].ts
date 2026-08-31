@@ -158,6 +158,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             message: `已绑定发货管理货件号 ${newNo}，原调拨记录已合并`,
           });
         }
+        // 未命中未删除记录时，检查回收站（软删除）中是否仍占用该货件号：
+        // 软删除记录仍占 tracking_no 唯一索引，若不复用会导致 update 报 23505，
+        // 故自动将回收站记录货件号追加删除标记释放占用
+        const { data: recycled, error: rcErr } = await supabase
+          .from('shipments')
+          .select('id')
+          .eq('tracking_no', newNo)
+          .not('deleted_at', 'is', null)
+          .maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${newNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase
+            .from('shipments')
+            .update({ tracking_no: releaseNo })
+            .eq('id', recycled.id);
+          if (relErr) throw relErr;
+        }
         update.tracking_no = body.tracking_no;
       }
       if (body.forwarder_id !== undefined) update.forwarder_id = body.forwarder_id;

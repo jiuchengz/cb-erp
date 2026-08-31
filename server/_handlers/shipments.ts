@@ -144,6 +144,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // 释放回收站（软删除）中占用同一货件号的记录：
+      // 软删除记录仍占 tracking_no 唯一索引，若不复用会导致 insert 报 23505，
+      // 故自动将回收站记录货件号追加删除标记释放占用
+      const insertNo = String(body.tracking_no || body.shipment_no || '').trim();
+      if (insertNo) {
+        const { data: recycled, error: rcErr } = await supabase
+          .from('shipments')
+          .select('id')
+          .eq('tracking_no', insertNo)
+          .not('deleted_at', 'is', null)
+          .maybeSingle();
+        if (rcErr) throw rcErr;
+        if (recycled) {
+          const releaseNo = `${insertNo.slice(0, 80)}__DEL_${recycled.id.slice(0, 8)}`;
+          const { error: relErr } = await supabase
+            .from('shipments')
+            .update({ tracking_no: releaseNo })
+            .eq('id', recycled.id);
+          if (relErr) throw relErr;
+        }
+      }
+
       const { data: shipment, error } = await supabase
         .from('shipments')
         .insert({
