@@ -29,20 +29,7 @@
       </el-table-column>
       <el-table-column label="产品" min-width="240">
         <template #default="{ row }">
-          <div class="product-cell">
-            <el-image
-              v-if="firstItemImage(row)"
-              :src="firstItemImage(row)"
-              :preview-src-list="[firstItemImage(row)]"
-              preview-teleported
-              fit="cover"
-              class="product-img"
-            />
-            <span v-else class="product-img-placeholder">-</span>
-            <el-tooltip :content="firstItemLabel(row)" placement="top" :show-after="300">
-              <span class="product-label">{{ firstItemLabel(row) }}</span>
-            </el-tooltip>
-          </div>
+          <span class="product-label">{{ firstItemLabel(row) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="仓库" min-width="140">
@@ -225,23 +212,15 @@ function warehouseName(id: string) {
 function orderItems(row: any): any[] {
   return row?.replenishment_order_items || []
 }
-// 产品列：产品编码 - 产品名称（多条明细时取第一条）
+// 产品列：产品编码 · 产品名称（多条明细时取第一条）
 function firstItemLabel(row: any) {
   const items = orderItems(row)
   if (items.length) {
     const it = items[0]
     if (it.products) {
-      return `${it.products.code || it.products.sku || ''} - ${it.products.name}`
+      return `${it.products.code || it.products.sku || ''} · ${it.products.name}`
     }
     return it.product_id || ''
-  }
-  return ''
-}
-// 产品图片：取第一条明细的产品图片
-function firstItemImage(row: any) {
-  const items = orderItems(row)
-  if (items.length && items[0].products?.image_text) {
-    return items[0].products.image_text
   }
   return ''
 }
@@ -439,6 +418,7 @@ async function onImportFile(e: Event) {
       sku: ['产品编码', '商品SKU', 'SKU', '编码', 'code', 'sku'],
       warehouse: ['仓库', '仓库名称', 'warehouse', 'warehouseName'],
       quantity: ['补货数量', '数量', 'quantity', 'qty'],
+      time: ['补货时间', '时间', 'replenishment_time', 'time'],
     })
     if (col.sku === undefined || col.warehouse === undefined || col.quantity === undefined) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"、"仓库"和"补货数量"列')
@@ -460,8 +440,11 @@ async function onImportFile(e: Event) {
       whNameMap[w.name] = w
       whNameMap[w.id] = w
     })
-    // 按仓库分组，明细合并到一个补货单
-    const groups = new Map<string, { warehouse_id: string; items: { product_id: string; quantity: number }[] }>()
+    // 每个产品（Excel 每行）单独生成一条补货记录，不按仓库合并明细；
+    // 完全重复行（编码+仓库+数量+时间全相同，时间为空视为相同）只保留首次出现的行，其余跳过
+    const pending: { wh: any; product: any; qty: number; lineNo: number }[] = []
+    const seen = new Map<string, number>()
+    const dupGroups: { keepLine: number; skipLines: number[] }[] = []
     let autoSeq = 0
     const failures: string[] = []
     rows.forEach((row, idx) => {
@@ -469,6 +452,7 @@ async function onImportFile(e: Event) {
       const sku = cellStr(row, col.sku)
       const whName = cellStr(row, col.warehouse)
       const qty = cellNum(row, col.quantity)
+      const time = col.time === undefined ? '' : cellStr(row, col.time) || ''
       if (!sku) {
         failures.push(`第${lineNo}行：产品编码为空`)
         return
@@ -491,32 +475,51 @@ async function onImportFile(e: Event) {
         failures.push(`第${lineNo}行：仓库「${whName}」未匹配到仓库`)
         return
       }
-      const key = wh.id
-      if (!groups.has(key)) groups.set(key, { warehouse_id: wh.id, items: [] })
-      groups.get(key)!.items.push({ product_id: product.id, quantity: qty })
+      const key = `${sku}|${wh.id}|${qty}|${time}`
+      const firstLine = seen.get(key)
+      if (firstLine !== undefined) {
+        const g = dupGroups.find((x) => x.keepLine === firstLine)
+        if (g) g.skipLines.push(lineNo)
+        else dupGroups.push({ keepLine: firstLine, skipLines: [lineNo] })
+        return
+      }
+      seen.set(key, lineNo)
+      pending.push({ wh, product, qty, lineNo })
     })
     let ok = 0
     const errLines: string[] = []
-    for (const g of groups.values()) {
-      // 明细超过 200 条时拆分为多个补货单
-      for (let i = 0; i < g.items.length; i += 200) {
-        try {
-          await api.post('/replenishment', {
-            order_no: autoNo('RPL-IMP', ++autoSeq),
-            warehouse_id: g.warehouse_id,
-            items: g.items.slice(i, i + 200),
-          })
-          ok++
-        } catch (err: any) {
-          errLines.push(`仓库「${warehouseName(g.warehouse_id)}」：${err?.response?.data?.error?.message || '创建失败'}`)
-        }
+    for (const it of pending) {
+      try {
+        // Excel 每行一条独立补货记录，列表每个产品单独一行
+        await api.post('/replenishment', {
+          order_no: autoNo('RPL-IMP', ++autoSeq),
+          warehouse_id: it.wh.id,
+          items: [{ product_id: it.product.id, quantity: it.qty }],
+        })
+        ok++
+      } catch (err: any) {
+        errLines.push(`第${it.lineNo}行（${it.wh.name || it.wh.id}）：${err?.response?.data?.error?.message || '创建失败'}`)
       }
     }
     if (failures.length) errLines.push(...failures)
-    if (errLines.length) {
-      ElMessage.warning(`成功新增 ${ok} 单，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
+    // 重复行提示：哪些行重复、保留哪一行、共跳过几条
+    let dupSkipped = 0
+    const dupMsgs: string[] = []
+    for (const g of dupGroups) {
+      dupSkipped += g.skipLines.length
+      dupMsgs.push(`第 ${g.skipLines.join('、')} 行内容重复，保留第 ${g.keepLine} 行，已跳过`)
+    }
+    const summary = [`成功创建 ${ok} 条`]
+    if (dupSkipped) summary.push(`跳过重复 ${dupSkipped} 条`)
+    if (errLines.length) summary.push(`失败 ${errLines.length} 条`)
+    if (errLines.length || dupSkipped) {
+      const detail = [...dupMsgs.slice(0, 5), ...errLines.slice(0, 5)]
+      let more = 0
+      if (dupMsgs.length > 5) more += dupMsgs.length - 5
+      if (errLines.length > 5) more += errLines.length - 5
+      ElMessage.warning(summary.join('，') + (detail.length ? '：' + detail.join('；') : '') + (more ? ` 等 ${more} 条` : ''))
     } else {
-      ElMessage.success(`成功新增 ${ok} 单`)
+      ElMessage.success(summary.join('，'))
     }
     load()
   } catch (err: any) {
@@ -606,30 +609,6 @@ onMounted(() => {
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
-}
-.product-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.product-img {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  border: 1px solid #ebeef5;
-}
-.product-img-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  flex-shrink: 0;
-  border: 1px dashed #dcdfe6;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #c0c4cc;
-  font-size: 12px;
 }
 .product-label {
   overflow: hidden;
