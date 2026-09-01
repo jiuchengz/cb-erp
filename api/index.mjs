@@ -103301,7 +103301,7 @@ var itemSchema3 = external_exports.object({
   quantity: external_exports.coerce.number().positive()
 });
 var createSchema5 = external_exports.object({
-  order_no: external_exports.string().min(1).max(64),
+  order_no: external_exports.string().min(1).max(64).optional().nullable(),
   warehouse_id: external_exports.string().uuid(),
   replenish_qty: external_exports.coerce.number().min(0).optional(),
   replenishment_time: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
@@ -103382,7 +103382,7 @@ async function handler24(req, res) {
       const supabase = getAdminClient();
       const totalQty = body.items.reduce((s, it) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase.from("replenishment_orders").insert({
-        order_no: body.order_no,
+        order_no: body.order_no ?? null,
         warehouse_id: body.warehouse_id,
         created_by: ctx.userId,
         replenish_qty: body.replenish_qty ?? totalQty,
@@ -106129,7 +106129,7 @@ async function handler52(req, res) {
             p_reference_type: "replenishment_order",
             p_reference_id: id,
             p_created_by: ctx.userId,
-            p_note: `\u8865\u8D27\u5165\u5E93 ${before.order_no}`
+            p_note: `\u8865\u8D27\u5165\u5E93 ${before.order_no ?? "\u8865\u8D27\u5355"}`
           });
           if (invErr) throw invErr;
         }
