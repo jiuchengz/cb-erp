@@ -115,7 +115,7 @@
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column :label="salesColumnLabel" width="120" align="right">
+      <el-table-column prop="sales_qty" :label="salesColumnLabel" width="120" align="right" sortable="custom">
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.sales_qty ?? 0 }}</el-link>
         </template>
