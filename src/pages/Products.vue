@@ -103,12 +103,12 @@
       </el-table-column>
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('domestic_stock')">国内库存<span class="sort-badge">{{ sortBadge('domestic_stock') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('domestic_stock')">国内库存<span v-if="sortBadge('domestic_stock')" class="sort-badge">{{ sortBadge('domestic_stock') }}</span></span>
         </template>
       </el-table-column>
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('overseas_stock')">国外库存<span class="sort-badge">{{ sortBadge('overseas_stock') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('overseas_stock')">国外库存<span v-if="sortBadge('overseas_stock')" class="sort-badge">{{ sortBadge('overseas_stock') }}</span></span>
         </template>
       </el-table-column>
       <el-table-column label="库存预警" width="110" align="center">
@@ -120,7 +120,7 @@
       </el-table-column>
       <el-table-column prop="in_transit_qty" label="在途数量" width="110" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('in_transit_qty')">在途数量<span class="sort-badge">{{ sortBadge('in_transit_qty') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('in_transit_qty')">在途数量<span v-if="sortBadge('in_transit_qty')" class="sort-badge">{{ sortBadge('in_transit_qty') }}</span></span>
         </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
@@ -128,7 +128,7 @@
       </el-table-column>
       <el-table-column prop="sales_qty" :label="salesColumnLabel" width="120" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('sales_qty')">{{ salesColumnLabel }}<span class="sort-badge">{{ sortBadge('sales_qty') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('sales_qty')">{{ salesColumnLabel }}<span v-if="sortBadge('sales_qty')" class="sort-badge">{{ sortBadge('sales_qty') }}</span></span>
         </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.sales_qty ?? 0 }}</el-link>
