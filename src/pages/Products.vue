@@ -103,12 +103,12 @@
       </el-table-column>
       <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('domestic_stock')">国内库存<span v-if="sortBadge('domestic_stock')" class="sort-badge">{{ sortBadge('domestic_stock') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('domestic_stock')">国内库存<span v-if="sortIndex('domestic_stock')" class="sort-badge"><el-icon class="sort-badge-icon"><arrow-up v-if="sortDir('domestic_stock') === 'ascending'" /><arrow-down v-else /></el-icon>{{ sortIndex('domestic_stock') }}</span></span>
         </template>
       </el-table-column>
       <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('overseas_stock')">国外库存<span v-if="sortBadge('overseas_stock')" class="sort-badge">{{ sortBadge('overseas_stock') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('overseas_stock')">国外库存<span v-if="sortIndex('overseas_stock')" class="sort-badge"><el-icon class="sort-badge-icon"><arrow-up v-if="sortDir('overseas_stock') === 'ascending'" /><arrow-down v-else /></el-icon>{{ sortIndex('overseas_stock') }}</span></span>
         </template>
       </el-table-column>
       <el-table-column label="库存预警" width="110" align="center">
@@ -120,7 +120,7 @@
       </el-table-column>
       <el-table-column prop="in_transit_qty" label="在途数量" width="110" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('in_transit_qty')">在途数量<span v-if="sortBadge('in_transit_qty')" class="sort-badge">{{ sortBadge('in_transit_qty') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('in_transit_qty')">在途数量<span v-if="sortIndex('in_transit_qty')" class="sort-badge"><el-icon class="sort-badge-icon"><arrow-up v-if="sortDir('in_transit_qty') === 'ascending'" /><arrow-down v-else /></el-icon>{{ sortIndex('in_transit_qty') }}</span></span>
         </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
@@ -128,7 +128,7 @@
       </el-table-column>
       <el-table-column prop="sales_qty" :label="salesColumnLabel" width="120" align="right">
         <template #header>
-          <span class="sortable-header" @click="toggleSort('sales_qty')">{{ salesColumnLabel }}<span v-if="sortBadge('sales_qty')" class="sort-badge">{{ sortBadge('sales_qty') }}</span></span>
+          <span class="sortable-header" @click="toggleSort('sales_qty')">{{ salesColumnLabel }}<span v-if="sortIndex('sales_qty')" class="sort-badge"><el-icon class="sort-badge-icon"><arrow-up v-if="sortDir('sales_qty') === 'ascending'" /><arrow-down v-else /></el-icon>{{ sortIndex('sales_qty') }}</span></span>
         </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.sales_qty ?? 0 }}</el-link>
@@ -424,7 +424,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime, formatMoney, formatMoneyFrom, getCurrencyCode } from '../utils/system'
@@ -710,12 +710,15 @@ function toggleSort(prop: string) {
   query.page = 1
 }
 
-// 表头排序徽标：显示排序优先级与方向，如 1↑、2↓
-function sortBadge(prop: string) {
+// 排序优先级序号：未参与排序返回空串
+function sortIndex(prop: string) {
   const idx = sortStates.value.findIndex((s) => s.prop === prop)
-  if (idx < 0) return ''
-  const order = sortStates.value[idx].order
-  return `${idx + 1}${order === 'ascending' ? '↑' : '↓'}`
+  return idx < 0 ? '' : String(idx + 1)
+}
+// 排序方向：ascending / descending / 空串
+function sortDir(prop: string) {
+  const s = sortStates.value.find((x) => x.prop === prop)
+  return s ? s.order : ''
 }
 
 function onPageChange() {}
@@ -1370,6 +1373,10 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   font-size: 11px;
   line-height: 1;
   font-weight: 600;
+}
+.sort-badge-icon {
+  margin-right: 2px;
+  font-size: 12px;
 }
 .profit-pos {
   color: #67c23a;
