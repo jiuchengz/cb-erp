@@ -76,7 +76,6 @@
       :data="pagedRows"
       border
       stripe
-      @sort-change="onSortChange"
       height="100%"
     >
       <el-table-column label="图片" width="70" align="center">
@@ -90,15 +89,41 @@
           <div v-else class="img-fallback">无图</div>
         </template>
       </el-table-column>
-      <el-table-column prop="link_id" label="链接ID" min-width="120" sortable="custom" show-overflow-tooltip />
-      <el-table-column prop="product_name" label="产品名称" min-width="170" sortable="custom" show-overflow-tooltip />
-      <el-table-column prop="platform" label="平台/站点" min-width="100" sortable="custom" />
-      <el-table-column prop="quantity" label="销售数量" width="110" align="right" sortable="custom" />
-      <el-table-column prop="refund_qty" label="退款数量" width="110" align="right" sortable="custom" />
-      <el-table-column label="实际销量" width="110" align="right" sortable="custom" prop="netQty">
+      <el-table-column prop="link_id" label="链接ID" min-width="120" show-overflow-tooltip>
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('link_id')">链接ID<el-icon class="sort-icon" :class="{ active: !!sortDir('link_id') }"><sort v-if="!sortDir('link_id')" /><arrow-up v-else-if="sortDir('link_id') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="product_name" label="产品名称" min-width="170" show-overflow-tooltip>
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('product_name')">产品名称<el-icon class="sort-icon" :class="{ active: !!sortDir('product_name') }"><sort v-if="!sortDir('product_name')" /><arrow-up v-else-if="sortDir('product_name') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="platform" label="平台/站点" min-width="100">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('platform')">平台/站点<el-icon class="sort-icon" :class="{ active: !!sortDir('platform') }"><sort v-if="!sortDir('platform')" /><arrow-up v-else-if="sortDir('platform') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="quantity" label="销售数量" width="110" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('quantity')">销售数量<el-icon class="sort-icon" :class="{ active: !!sortDir('quantity') }"><sort v-if="!sortDir('quantity')" /><arrow-up v-else-if="sortDir('quantity') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="refund_qty" label="退款数量" width="110" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('refund_qty')">退款数量<el-icon class="sort-icon" :class="{ active: !!sortDir('refund_qty') }"><sort v-if="!sortDir('refund_qty')" /><arrow-up v-else-if="sortDir('refund_qty') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
+      <el-table-column label="实际销量" width="110" align="right" prop="netQty">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('netQty')">实际销量<el-icon class="sort-icon" :class="{ active: !!sortDir('netQty') }"><sort v-if="!sortDir('netQty')" /><arrow-up v-else-if="sortDir('netQty') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
         <template #default="{ row }">{{ row.netQty != null ? Number(row.netQty) : '-' }}</template>
       </el-table-column>
-      <el-table-column label="环比变化" width="110" align="right" sortable="custom" prop="changeRate">
+      <el-table-column label="环比变化" width="110" align="right" prop="changeRate">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('changeRate')">环比变化<el-icon class="sort-icon" :class="{ active: !!sortDir('changeRate') }"><sort v-if="!sortDir('changeRate')" /><arrow-up v-else-if="sortDir('changeRate') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
         <template #default="{ row }">
           <span v-if="row.prevQty == null" class="flat">新增</span>
           <span v-else-if="row.changeRate == null" class="flat">—</span>
@@ -107,13 +132,23 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column :label="'平均售价(' + getCurrencyCode() + ')'" min-width="120" align="right" sortable="custom" prop="avg_price">
+      <el-table-column :label="'平均售价(' + getCurrencyCode() + ')'" min-width="120" align="right" prop="avg_price">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('avg_price')">{{ '平均售价(' + getCurrencyCode() + ')' }}<el-icon class="sort-icon" :class="{ active: !!sortDir('avg_price') }"><sort v-if="!sortDir('avg_price')" /><arrow-up v-else-if="sortDir('avg_price') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
         <template #default="{ row }">{{ row.avg_price != null ? convertMoney(row.avg_price).toLocaleString() + ' ' + getCurrencyCode() : '-' }}</template>
       </el-table-column>
-      <el-table-column label="可用库存" min-width="110" align="right" sortable="custom" prop="overseas_stock">
+      <el-table-column label="可用库存" min-width="110" align="right" prop="overseas_stock">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('overseas_stock')">可用库存<el-icon class="sort-icon" :class="{ active: !!sortDir('overseas_stock') }"><sort v-if="!sortDir('overseas_stock')" /><arrow-up v-else-if="sortDir('overseas_stock') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
         <template #default="{ row }">{{ row.overseas_stock != null ? Number(row.overseas_stock) : '-' }}</template>
       </el-table-column>
-      <el-table-column prop="days" label="出单天数" width="100" align="right" sortable="custom" />
+      <el-table-column prop="days" label="出单天数" width="100" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('days')">出单天数<el-icon class="sort-icon" :class="{ active: !!sortDir('days') }"><sort v-if="!sortDir('days')" /><arrow-up v-else-if="sortDir('days') === 'ascending'" /><arrow-down v-else /></el-icon></span>
+        </template>
+      </el-table-column>
     </el-table>
     </div>
 
@@ -139,6 +174,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown, ArrowUp, Sort } from '@element-plus/icons-vue'
 import { api } from '../services/api'
 import { convertMoney, getCurrencyCode, getRate, BASE_CURRENCY, isRatesLoaded, fetchExchangeRates } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
@@ -438,10 +474,23 @@ const pagedRows = computed(() => {
   return rows.slice(start, start + query.pageSize)
 })
 
-function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
-  sortState.prop = prop || ''
-  sortState.order = order
+// 点击表头：未排序 -> 升序 -> 降序 -> 取消
+function toggleSort(prop: string) {
+  if (sortState.prop !== prop) {
+    sortState.prop = prop
+    sortState.order = 'ascending'
+  } else if (sortState.order === 'ascending') {
+    sortState.order = 'descending'
+  } else {
+    sortState.prop = ''
+    sortState.order = null
+  }
   query.page = 1
+}
+
+// 排序方向：ascending / descending / null
+function sortDir(prop: string) {
+  return sortState.prop === prop ? sortState.order : ''
 }
 
 function onPageChange() {}
@@ -662,6 +711,27 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.sortable-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.sortable-header:hover {
+  color: var(--el-color-primary, #409eff);
+}
+.sort-icon {
+  font-size: 14px;
+  color: #c0c4cc;
+  transition: color 0.2s;
+}
+.sort-icon.active {
+  color: var(--el-color-primary, #409eff);
+}
+.sortable-header:hover .sort-icon {
+  color: var(--el-color-primary, #409eff);
+}
 .pagination-bar {
   display: flex;
   align-items: center;
