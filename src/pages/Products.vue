@@ -74,7 +74,7 @@
     </div>
 
     <div class="table-wrap">
-    <el-table :resizable="false" v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange" @sort-change="onSortChange">
+    <el-table :resizable="false" v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
       <el-table-column label="图片" width="90">
@@ -101,8 +101,16 @@
       <el-table-column label="备注" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">{{ row.remark || '—' }}</template>
       </el-table-column>
-      <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right" sortable="custom" />
-      <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right" sortable="custom" />
+      <el-table-column prop="domestic_stock" label="国内库存" width="100" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('domestic_stock')">国内库存<span class="sort-badge">{{ sortBadge('domestic_stock') }}</span></span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="overseas_stock" label="国外库存" width="100" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('overseas_stock')">国外库存<span class="sort-badge">{{ sortBadge('overseas_stock') }}</span></span>
+        </template>
+      </el-table-column>
       <el-table-column label="库存预警" width="110" align="center">
         <template #default="{ row }">
           <el-tag v-if="row.out_of_stock" type="danger" effect="dark" size="small">断货</el-tag>
@@ -110,12 +118,18 @@
           <el-tag v-else type="success" effect="plain" size="small">正常</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="in_transit_qty" label="在途数量" width="110" align="right" sortable="custom">
+      <el-table-column prop="in_transit_qty" label="在途数量" width="110" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('in_transit_qty')">在途数量<span class="sort-badge">{{ sortBadge('in_transit_qty') }}</span></span>
+        </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.in_transit_qty ?? 0 }}</el-link>
         </template>
       </el-table-column>
-      <el-table-column prop="sales_qty" :label="salesColumnLabel" width="120" align="right" sortable="custom">
+      <el-table-column prop="sales_qty" :label="salesColumnLabel" width="120" align="right">
+        <template #header>
+          <span class="sortable-header" @click="toggleSort('sales_qty')">{{ salesColumnLabel }}<span class="sort-badge">{{ sortBadge('sales_qty') }}</span></span>
+        </template>
         <template #default="{ row }">
           <el-link type="primary" :underline="false" @click="openTrack(row)">{{ row.sales_qty ?? 0 }}</el-link>
         </template>
@@ -433,11 +447,8 @@ const previewUrl = ref('')
 const query = reactive({ page: 1, pageSize: 200, search: '', status: '' })
 const rate = ref(0.38)
 
-// 列排序状态（与销售统计模块一致：全量排序后再前端分页）
-const sortState = reactive<{ prop: string; order: 'ascending' | 'descending' | null }>({
-  prop: '',
-  order: null,
-})
+// 多列排序状态：数组顺序即排序优先级（先点击的为主排序），支持多列同时排序
+const sortStates = ref<{ prop: string; order: 'ascending' | 'descending' }[]>([])
 
 // 销量时间范围下拉
 const salesRangeKey = ref('all') // all | today | 7d | 15d | 30d | custom
@@ -662,31 +673,49 @@ async function load() {
   }
 }
 
-// 全量排序 -> 前端分页（与 Sales.vue 一致）
+// 全量排序 -> 前端分页（多列排序：从最低优先级条件开始稳定排序，主排序条件最后应用保证优先）
 const pagedRows = computed(() => {
   let list = rows.value
-  if (sortState.prop && sortState.order) {
-    const prop = sortState.prop
-    const dir = sortState.order === 'ascending' ? 1 : -1
-    list = [...list].sort((a, b) => {
-      const va = (a as any)[prop]
-      const vb = (b as any)[prop]
-      if (va == null && vb == null) return 0
-      if (va == null) return 1
-      if (vb == null) return -1
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
-      return String(va).localeCompare(String(vb)) * dir
-    })
+  if (sortStates.value.length) {
+    list = [...list]
+    for (let i = sortStates.value.length - 1; i >= 0; i--) {
+      const { prop, order } = sortStates.value[i]
+      const dir = order === 'ascending' ? 1 : -1
+      list.sort((a, b) => {
+        const va = (a as any)[prop]
+        const vb = (b as any)[prop]
+        if (va == null && vb == null) return 0
+        if (va == null) return 1
+        if (vb == null) return -1
+        if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+        return String(va).localeCompare(String(vb)) * dir
+      })
+    }
   }
   if (query.pageSize <= 0) return list
   const start = (query.page - 1) * query.pageSize
   return list.slice(start, start + query.pageSize)
 })
 
-function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
-  sortState.prop = prop || ''
-  sortState.order = order
+// 点击表头：未排序 -> 升序 -> 降序 -> 取消；点击其他列追加为下一级排序条件（多列同时生效）
+function toggleSort(prop: string) {
+  const idx = sortStates.value.findIndex((s) => s.prop === prop)
+  if (idx < 0) {
+    sortStates.value.push({ prop, order: 'ascending' })
+  } else if (sortStates.value[idx].order === 'ascending') {
+    sortStates.value[idx].order = 'descending'
+  } else {
+    sortStates.value = sortStates.value.filter((s) => s.prop !== prop)
+  }
   query.page = 1
+}
+
+// 表头排序徽标：显示排序优先级与方向，如 1↑、2↓
+function sortBadge(prop: string) {
+  const idx = sortStates.value.findIndex((s) => s.prop === prop)
+  if (idx < 0) return ''
+  const order = sortStates.value[idx].order
+  return `${idx + 1}${order === 'ascending' ? '↑' : '↓'}`
 }
 
 function onPageChange() {}
@@ -1316,6 +1345,30 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
 }
 .sales-range-active {
   color: var(--accent, var(--el-color-primary));
+  font-weight: 600;
+}
+.sortable-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.sortable-header:hover {
+  color: var(--el-color-primary, #409eff);
+}
+.sort-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--el-color-primary, #409eff);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
   font-weight: 600;
 }
 .profit-pos {
