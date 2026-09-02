@@ -21,6 +21,9 @@
       <a class="tool-link" href="/tools/excel-compressor.html" target="_blank" rel="noopener">
         Excel 图片压缩工具
       </a>
+      <a class="tool-link" href="/tools/airsea-packing.html" target="_blank" rel="noopener">
+        空海运 &amp; 装箱单 计算工具
+      </a>
     </form>
   </div>
 </template>

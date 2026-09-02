@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>空海运 &amp; 装箱单 计算工具</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+
+<!-- Libraries（CDN 仅用于加载代码，业务数据全程不离开当前页面） -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<style>
+:root{
+  --bg:#0a1018; --panel:rgba(20,30,40,0.9); --card:#0f1720; --accent:#1fb6ff;
+  --muted:#9fbfcd; --text:#e0f8ff; --success:#27ae60; --danger:#e74c3c;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"微软雅黑","Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(90deg,#06384f,#0b2a3a);padding:16px;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,0.5)}
+header h1{margin:0;font-size:18px}
+.privacy-tip{margin-top:8px;font-size:12px;color:#9fbfcd;background:rgba(31,182,255,0.08);border:1px solid rgba(31,182,255,0.2);display:inline-block;padding:4px 12px;border-radius:20px}
+.topbar{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.btn{background:linear-gradient(180deg,#fff,#e6f7ff);color:#042029;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,0.15)}
+.btn.secondary{background:#0b2a3a;color:var(--text);border:1px solid rgba(255,255,255,0.04)}
+.btn.danger{background:rgba(231,76,60,0.15);color:#ffb3a7;border:1px solid rgba(231,76,60,0.35)}
+.container{max-width:1180px;margin:16px auto;padding:12px}
+.tabs{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
+.tab{padding:10px 14px;border-radius:10px;background:rgba(255,255,255,0.02);cursor:pointer;color:var(--text)}
+.tab.active{background:linear-gradient(90deg,var(--accent),#2b9bd2);color:#001;font-weight:800}
+.module{display:none;padding:8px;border-radius:8px}
+.module.active{display:block}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+label{font-size:14px;color:var(--muted);display:flex;gap:6px;align-items:center}
+input[type="number"], input[type="text"], select{padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.02);color:var(--text)}
+/* box grid: 3 columns max */
+.box-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+@media(max-width:1024px){.box-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.box-grid{grid-template-columns:repeat(1,1fr)}}
+.box-card{background:var(--card);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);display:flex;gap:10px;align-items:center}
+.box-title{min-width:60px;font-weight:800;color:var(--accent)}
+.box-inputs{display:flex;gap:8px;align-items:center;flex-wrap: nowrap}
+.box-inputs input{width:65px;padding:6px;border-radius:6px}
+.box-actions{margin-left:auto;display:flex;gap:6px}
+.remove-btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:6px;border-radius:6px;cursor:pointer}
+#results{margin-top:12px;padding:12px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.06));white-space:pre-wrap;font-family:monospace;border:1px solid rgba(255,255,255,0.03)}
+.chart-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.chart-card{flex:1;min-width:250px;padding:12px;border-radius:8px;background:var(--panel)}
+.chart-card canvas{width:100% !important;height:260px !important;display:block}
+.status{margin-top:8px;padding:8px;border-radius:6px}
+.status.success{background:rgba(39,174,96,0.08);color:var(--success)}
+.status.error{background:rgba(231,76,60,0.08);color:var(--danger)}
+.download-list a{display:block;color:var(--accent);margin:6px 0;text-decoration:none}
+.small{font-size:13px;color:var(--muted)}
+.section-title{text-align:center;color:var(--accent);margin:6px 0 12px 0}
+/* 装箱单预览表格 */
+.table-preview{max-height:300px;overflow:auto;border:1px solid rgba(255,255,255,0.12);margin-bottom:10px;border-radius:6px}
+.table-preview table{border-collapse:collapse;background:#0f1720;width:100%;font-size:12px}
+.table-preview th,.table-preview td{border:1px solid rgba(255,255,255,0.1);padding:4px 6px;white-space:nowrap;color:var(--text)}
+.table-preview th{background:rgba(31,182,255,0.12);color:var(--accent);position:sticky;top:0}
+/* small screen tweaks */
+@media(max-width:420px){ .box-inputs input{width:72px} .btn{padding:8px 10px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>空海运 &amp; 装箱单 计算工具</h1>
+  <div class="privacy-tip">隐私模式：数据只在当前页面内存中处理，不写入浏览器、不上传服务器，关闭页面后自动清除</div>
+  <div class="topbar">
+    <button class="btn" id="copyAllBtn" title="复制当前结果到剪贴板">复制结果</button>
+    <button class="btn" id="exportPdfBtn" title="导出 PDF 报表">导出 PDF</button>
+    <button class="btn danger" id="clearBtn" title="清空所有输入与结果">清空全部</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="tabs" role="tablist">
+    <div class="tab active" id="tabAirSea" onclick="showModule('airSea')">空海运计算</div>
+    <div class="tab" id="tabPacking" onclick="showModule('packing')">装箱单计算</div>
+  </div>
+
+  <!-- Air/Sea module -->
+  <div id="airSea" class="module active" role="region" aria-labelledby="tabAirSea">
+    <h2 class="section-title">空运 &amp; 海运 多箱计算</h2>
+
+    <div class="controls">
+      <button class="btn" onclick="addBoxes(1)">添加箱子</button>
+      <label>空运单价 (¥/kg)
+        <input id="airRate" type="number" step="any" value="85" />
+      </label>
+      <label>体积重除数
+        <select id="volDiv"><option value="6000">6000</option><option value="5000">5000</option></select>
+      </label>
+      <label>海运单价 (¥/m³)
+        <input id="seaRate" type="number" step="any" value="3400" />
+      </label>
+      <button class="btn" onclick="onCalculateAir()">计算空运</button>
+      <button class="btn" onclick="onCalculateSea()">计算海运</button>
+    </div>
+
+    <div class="controls">
+      <button class="btn secondary" onclick="exportDataExcel()">导出 Excel（数据+结果）</button>
+      <button class="btn secondary" onclick="document.getElementById('importFile').click()">导入 Excel</button>
+      <button class="btn secondary" onclick="downloadTemplate()">下载模板</button>
+      <input id="importFile" type="file" accept=".xlsx,.xls" style="display:none" onchange="handleImport(event)" />
+    </div>
+
+    <div class="small">提示：在重量输入框按回车可自动添加新箱子；添加或编辑箱子时不弹提示，只有在点击“计算”时统一校验。所有数据仅保留在当前页面，刷新或关闭即清除。</div>
+
+    <div class="box-grid" id="boxesContainer" aria-live="polite"></div>
+
+    <div id="results" aria-live="polite">（结果会显示在这里）</div>
+
+    <div class="chart-wrap">
+      <div class="chart-card">
+        <strong>箱子重量分布 (kg)</strong>
+        <canvas id="weightChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <strong>箱子体积分布 (m³)</strong>
+        <canvas id="volChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Packing module -->
+  <div id="packing" class="module" role="region" style="display:none">
+    <h2 class="section-title">装箱单价格计算（自动识别表头）</h2>
+
+    <div class="controls">
+      <label>装箱单文件（可多选）
+        <input id="packingFile" type="file" accept=".xls,.xlsx" multiple />
+      </label>
+      <label>价格表文件
+        <input id="priceFile" type="file" accept=".xls,.xlsx" />
+      </label>
+      <label>汇率（CNY/USD）
+        <input id="exchangeRate" type="number" value="7.2" step="0.0001" />
+      </label>
+      <button class="btn" id="fetchRateBtn" onclick="fetchExchangeRate()">获取实时汇率</button>
+      <button class="btn" id="btnCalc" onclick="processPacking()">开始处理</button>
+    </div>
+
+    <div id="status" class="status small" style="display:none"></div>
+
+    <div id="resultDisplay" style="margin-top:12px"></div>
+
+    <div id="batchDownloads" class="download-list" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script>
+/* ============================
+   应用主逻辑（隐私模式：无 localStorage / sessionStorage / cookie）
+   ============================ */
+
+/* 常量消息 */
+const MSG = {
+  copySuccess: '复制成功',
+  copyFail: '复制失败',
+  needFiles: '请先上传装箱单和价格表文件',
+  processed: '处理完成',
+  processFail: '处理失败: ',
+  noBoxes: '请先添加并填写箱子数据',
+  invalidData: '有未填写或不合法的数据，请检查所有箱子（长/宽/高/重 > 0）'
+};
+
+/* DOM 引用 */
+const boxesContainer = document.getElementById('boxesContainer');
+const resultsEl = document.getElementById('results');
+const weightCanvas = document.getElementById('weightChart');
+const volCanvas = document.getElementById('volChart');
+const copyAllBtn = document.getElementById('copyAllBtn');
+const exportPdfBtn = document.getElementById('exportPdfBtn');
+const clearBtn = document.getElementById('clearBtn');
+const importFile = document.getElementById('importFile');
+const packingFileInput = document.getElementById('packingFile');
+const priceFileInput = document.getElementById('priceFile');
+const batchDownloads = document.getElementById('batchDownloads');
+const statusEl = document.getElementById('status');
+
+let boxCount = 0;
+let lastCalculation = null;
+let weightChart = null;
+let volChart = null;
+
+/* 工具函数：按指定小数位向下截断（不四舍五入） */
+function truncate(num, decimals){
+  if(typeof num !== 'number' || !isFinite(num)) return num;
+  const factor = Math.pow(10, decimals === undefined ? 2 : decimals);
+  return Math.floor(num * factor) / factor;
+}
+
+/* 模块切换（仅内存态，不持久化） */
+function showModule(id){
+  document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id === 'airSea') document.getElementById('tabAirSea').classList.add('active');
+  else document.getElementById('tabPacking').classList.add('active');
+}
+
+/* 箱子卡片创建 */
+function createBoxCard(data){
+  boxCount++;
+  const id = 'box_' + boxCount;
+  const card = document.createElement('div');
+  card.className = 'box-card';
+  card.id = id;
+  card.innerHTML =
+    '<div class="box-title">箱 ' + boxCount + '</div>' +
+    '<div class="box-inputs">' +
+      '<div><input inputmode="decimal" name="length" type="number" step="any" placeholder="长 (cm)"></div>' +
+      '<div><input inputmode="decimal" name="width" type="number" step="any" placeholder="宽 (cm)"></div>' +
+      '<div><input inputmode="decimal" name="height" type="number" step="any" placeholder="高 (cm)"></div>' +
+      '<div><input inputmode="decimal" name="weight" type="number" step="any" placeholder="重 (kg)"></div>' +
+    '</div>' +
+    '<div class="box-actions">' +
+      '<button class="remove-btn" title="删除" onclick="removeBox(\'' + id + '\')">✖</button>' +
+    '</div>';
+
+  if(data && typeof data === 'object'){
+    ['length','width','height','weight'].forEach(k => {
+      if(data[k] !== undefined && data[k] !== null){
+        const inp = card.querySelector('input[name="' + k + '"]');
+        if(inp) inp.value = data[k];
+      }
+    });
+  }
+
+  /* 输入即时标红非法值 */
+  card.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value);
+      if(isNaN(v) || v <= 0) inp.style.boxShadow = '0 0 0 3px rgba(231,76,60,0.12)';
+      else inp.style.boxShadow = 'none';
+    });
+  });
+
+  /* 重量输入回车快速添加下一箱 */
+  const weightInput = card.querySelector('input[name="weight"]');
+  weightInput.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Enter'){
+      const v = parseFloat(ev.target.value);
+      if(!isNaN(v) && v > 0){
+        addBoxes(1);
+        setTimeout(() => {
+          const last = boxesContainer.lastElementChild;
+          if(last){
+            const focusInput = last.querySelector('input[name="length"]');
+            if(focusInput){ focusInput.focus(); try{ focusInput.select(); }catch(e){} }
+          }
+        }, 60);
+      }
+    }
+  });
+  return card;
+}
+
+/* 添加 / 删除箱子 */
+function addBoxes(n){
+  for(let i = 0; i < n; i++){
+    boxesContainer.appendChild(createBoxCard());
+  }
+}
+function removeBox(id){
+  const el = document.getElementById(id);
+  if(el) el.remove();
+  const cards = document.querySelectorAll('.box-card');
+  let seq = 1;
+  cards.forEach(c => { c.querySelector('.box-title').textContent = '箱 ' + seq; seq++; });
+  boxCount = cards.length;
+  if(boxCount === 0) addBoxes(1); // 至少保留一箱
+}
+
+/* 清空全部（内存态重置） */
+function resetAll(){
+  if(!confirm('确定清空所有箱子数据、参数与结果吗？清空后无法恢复。')) return;
+  boxesContainer.innerHTML = '';
+  boxCount = 0;
+  addBoxes(1);
+  resultsEl.textContent = '（结果会显示在这里）';
+  lastCalculation = null;
+  ['airRate','seaRate'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = (id === 'airRate') ? '85' : '3400';
+  });
+  if(document.getElementById('volDiv')) document.getElementById('volDiv').value = '6000';
+  if(document.getElementById('exchangeRate')) document.getElementById('exchangeRate').value = '7.2';
+  if(document.getElementById('resultDisplay')) document.getElementById('resultDisplay').innerHTML = '';
+  if(batchDownloads) batchDownloads.innerHTML = '';
+  if(statusEl){ statusEl.style.display = 'none'; statusEl.className = 'status small'; }
+  try{ if(weightChart){ weightChart.destroy(); weightChart = null; } }catch(e){}
+  try{ if(volChart){ volChart.destroy(); volChart = null; } }catch(e){}
+}
+clearBtn.addEventListener('click', resetAll);
+
+/* 读取全部箱子（不校验） */
+function readBoxes(){
+  const arr = [];
+  document.querySelectorAll('.box-card').forEach(c => {
+    arr.push({
+      length: parseFloat(c.querySelector('input[name="length"]').value),
+      width:  parseFloat(c.querySelector('input[name="width"]').value),
+      height: parseFloat(c.querySelector('input[name="height"]').value),
+      weight: parseFloat(c.querySelector('input[name="weight"]').value)
+    });
+  });
+  return arr;
+}
+
+/* 校验箱子（计算时调用） */
+function validateBoxes(boxes){
+  if(!boxes || boxes.length === 0) return { ok:false, msg: MSG.noBoxes };
+  for(let i = 0; i < boxes.length; i++){
+    const b = boxes[i];
+    if(!isFinite(b.length) || b.length <= 0 ||
+       !isFinite(b.width)  || b.width  <= 0 ||
+       !isFinite(b.height) || b.height <= 0 ||
+       !isFinite(b.weight) || b.weight <= 0){
+      return { ok:false, msg: MSG.invalidData };
+    }
+  }
+  return { ok:true };
+}
+
+/* 图表更新 */
+function updateCharts(boxes){
+  const labels = boxes.map((b,i) => '箱 ' + (i+1));
+  const weights = boxes.map(b => Number((b.weight || 0).toFixed(2)));
+  const vols = boxes.map(b => Number((((b.length||0)*(b.width||0)*(b.height||0))/1e6 || 0).toFixed(4)));
+  try{ if(weightChart) weightChart.destroy(); }catch(e){}
+  try{ if(volChart) volChart.destroy(); }catch(e){}
+  weightChart = new Chart(weightCanvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'重量(kg)', data:weights, backgroundColor:'rgba(31,182,255,0.85)' }] },
+    options:{ maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } } }
+  });
+  volChart = new Chart(volCanvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'体积(m³)', data:vols, backgroundColor:'rgba(39,174,96,0.85)' }] },
+    options:{ maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } } }
+  });
+}
+
+/* 计算空运：体积重 = (长+2)*(宽+2)*(高+2)/除数，计费重取体积重与实重较大值 */
+function onCalculateAir(){
+  const boxes = readBoxes();
+  const v = validateBoxes(boxes);
+  if(!v.ok){ alert(v.msg); return; }
+  const airRate = parseFloat(document.getElementById('airRate').value) || 0;
+  const volDiv  = parseFloat(document.getElementById('volDiv').value) || 6000;
+
+  let totalCost = 0, totalChargeWeight = 0;
+  let out = '空运计算结果（共 ' + boxes.length + ' 箱）\n\n';
+
+  boxes.forEach((b, i) => {
+    const volWeight  = ((b.length + 2) * (b.width + 2) * (b.height + 2)) / volDiv;
+    const chargeWeight = volWeight > b.weight ? volWeight : b.weight;
+    const isThrown = volWeight > b.weight;
+    const cost = chargeWeight * airRate;
+    const actualVolume = (b.length * b.width * b.height) / 1000000;
+    totalCost += cost;
+    totalChargeWeight += chargeWeight;
+
+    out += '【箱 ' + (i+1) + '】\n';
+    out += '  实重: ' + b.weight + ' kg\n';
+    out += '  体积重(单边+2): ' + truncate(volWeight, 2) + ' kg\n';
+    out += '  实际体积: ' + truncate(actualVolume, 4) + ' m³\n';
+    out += '  类型: ' + (isThrown ? '抛货 ▲' : '重货 ▼') + '\n';
+    out += '  计费重: ' + truncate(chargeWeight, 2) + ' kg\n';
+    out += '  运费: ¥' + truncate(cost, 2) + '\n\n';
+  });
+
+  out += '汇总\n';
+  out += '总箱数: ' + boxes.length + ' 箱\n';
+  out += '总计空运计费重量: ' + truncate(totalChargeWeight, 2) + ' kg\n';
+  out += '总成本: ¥' + truncate(totalCost, 2) + ' 元';
+
+  resultsEl.textContent = out;
+  lastCalculation = { type:'air', data:out };
+  updateCharts(boxes);
+}
+
+/* 计算海运：按原始体积 / +1cm / +1.5cm 三档 */
+function onCalculateSea(){
+  const boxes = readBoxes();
+  const v = validateBoxes(boxes);
+  if(!v.ok){ alert(v.msg); return; }
+  const seaRate = parseFloat(document.getElementById('seaRate').value) || 0;
+
+  let totalVol = 0, totalWeight = 0;
+  let totalVol1cm = 0, totalVol15cm = 0;
+
+  const boxDetails = boxes.map(b => {
+    const originalVol = (b.length * b.width * b.height) / 1e6;
+    const vol1cm   = ((b.length + 1) * (b.width + 1) * (b.height + 1)) / 1e6;
+    const vol15cm  = ((b.length + 1.5) * (b.width + 1.5) * (b.height + 1.5)) / 1e6;
+    totalVol += originalVol;
+    totalWeight += b.weight;
+    totalVol1cm += vol1cm;
+    totalVol15cm += vol15cm;
+    return { originalVol, vol1cm, vol15cm, weight:b.weight };
+  });
+
+  const diff1cm  = totalVol1cm - totalVol;
+  const diff15cm = totalVol15cm - totalVol;
+  const costOriginal = totalVol * seaRate;
+  const cost1cm = totalVol1cm * seaRate;
+  const cost15cm = totalVol15cm * seaRate;
+
+  let boxInfoText = '每箱体积详情（共 ' + boxes.length + ' 箱）:\n';
+  boxDetails.forEach((box, idx) => {
+    boxInfoText +=
+      '箱 ' + (idx+1) + ': ' + truncate(box.originalVol, 3) + 'm³ (原) | ' +
+      truncate(box.vol1cm, 3) + 'm³ (+1cm) | ' +
+      truncate(box.vol15cm, 3) + 'm³ (+1.5cm)\n';
+  });
+
+  const out =
+    '海运计算结果\n\n' +
+    boxInfoText + '\n' +
+    '汇总数据:\n' +
+    '总箱数:       ' + boxes.length + ' 箱\n' +
+    '总重量:       ' + truncate(totalWeight, 4) + ' kg\n\n' +
+    '原始体积:     ' + truncate(totalVol, 4) + ' m³ | 运费: ¥' + truncate(costOriginal, 4) + '\n' +
+    '+1cm体积:     ' + truncate(totalVol1cm, 4) + ' m³ | 运费: ¥' + truncate(cost1cm, 4) + '\n' +
+    '1cm 体积差:   +' + truncate(diff1cm, 4) + ' m³\n' +
+    '+1.5cm体积:   ' + truncate(totalVol15cm, 4) + ' m³ | 运费: ¥' + truncate(cost15cm, 4) + '\n' +
+    '1.5cm 体积差: +' + truncate(diff15cm, 4) + ' m³';
+
+  resultsEl.textContent = out;
+  lastCalculation = { type:'sea', data:out };
+  updateCharts(boxes);
+}
+
+/* 导出 Excel：箱子明细 + 计算结果文本 */
+function exportDataExcel(){
+  try{
+    const boxes = readBoxes();
+    const wb = XLSX.utils.book_new();
+    const head = ['箱号','长(cm)','宽(cm)','高(cm)','重量(kg)','体积(m³)','体积重(÷6000,kg)','计费重(kg)'];
+    const rows = [head];
+    boxes.forEach((b, i) => {
+      const volWeight = ((b.length||0) + 2) * ((b.width||0) + 2) * ((b.height||0) + 2) / 6000;
+      const chargeW = Math.max(b.weight || 0, volWeight);
+      rows.push([
+        i + 1,
+        b.length || '', b.width || '', b.height || '', b.weight || '',
+        truncate(((b.length||0)*(b.width||0)*(b.height||0))/1e6, 4),
+        truncate(volWeight, 2),
+        truncate(chargeW, 2)
+      ]);
+    });
+    const ws1 = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws1, '箱子数据');
+
+    if(resultsEl.textContent && !resultsEl.textContent.startsWith('（')){
+      const lines = resultsEl.textContent.split('\n').map(l => [l]);
+      const ws2 = XLSX.utils.aoa_to_sheet(lines);
+      ws2['!cols'] = [{ wch: 80 }];
+      XLSX.utils.book_append_sheet(wb, ws2, '计算结果');
+    } else {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['请先点击“计算空运”或“计算海运”']]), '计算结果');
+    }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    XLSX.writeFile(wb, '空海运计算_' + stamp + '.xlsx');
+    alert('Excel 已导出');
+  }catch(err){
+    console.error(err);
+    alert('导出 Excel 失败: ' + (err.message || err));
+  }
+}
+
+/* 导入 Excel（箱子）：模板列 = 箱号, 重量, 长, 宽, 高 */
+function handleImport(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const arr = new Uint8Array(e.target.result);
+      const wb = XLSX.read(arr, { type:'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
+
+      boxesContainer.innerHTML = '';
+      boxCount = 0;
+
+      let imported = 0, ignored = 0;
+      for(let i = 1; i < rows.length; i++){
+        const row = rows[i];
+        if(!row || row.length === 0){ continue; }
+        const weight = Number(row[1]);
+        const length = Number(row[2]);
+        const width  = Number(row[3]);
+        const height = Number(row[4]);
+        const hasValidData = (length > 0) || (width > 0) || (height > 0) || (weight > 0);
+        if(!hasValidData){ ignored++; continue; }
+
+        boxesContainer.appendChild(createBoxCard({
+          weight: weight || '',
+          length: length || '',
+          width:  width  || '',
+          height: height || ''
+        }));
+        imported++;
+      }
+
+      if(boxCount === 0) addBoxes(1);
+
+      alert('导入完成\n\n成功导入：' + imported + ' 箱' + (ignored > 0 ? '\n已忽略空行：' + ignored + ' 行' : ''));
+    }catch(err){
+      console.error(err);
+      alert('Excel 导入失败，请检查文件格式');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  evt.target.value = '';
+}
+
+/* 下载导入模板 */
+function downloadTemplate(){
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['箱号','重量(kg)','长(cm)','宽(cm)','高(cm)'],
+    [1, 40, 80, 60, 50],
+    [2, 30, 70, 50, 45]
+  ]);
+  ws['!cols'] = [{ wch:6 },{ wch:10 },{ wch:10 },{ wch:10 },{ wch:10 }];
+  XLSX.utils.book_append_sheet(wb, ws, '模板');
+  XLSX.writeFile(wb, '导入模板.xlsx');
+}
+
+/* ---------- 装箱单批量计价 ---------- */
+async function processPacking(){
+  const packingFiles = Array.from(packingFileInput.files || []);
+  const priceFile = priceFileInput.files[0];
+  const exchangeRate = parseFloat(document.getElementById('exchangeRate').value) || 7.2;
+
+  batchDownloads.innerHTML = '';
+  const resultDisplay = document.getElementById('resultDisplay');
+  resultDisplay.innerHTML = '';
+  statusEl.style.display = 'block';
+  statusEl.className = 'status small';
+  statusEl.textContent = '处理中...';
+
+  if(!packingFiles.length || !priceFile){
+    statusEl.textContent = MSG.needFiles;
+    statusEl.className = 'status error small';
+    return;
+  }
+  if(!isFinite(exchangeRate) || exchangeRate <= 0){
+    statusEl.textContent = '请输入有效的汇率';
+    statusEl.className = 'status error small';
+    return;
+  }
+
+  try{
+    /* 读取价格表：识别 产品名称/名称/品名 + 单价/价格/RMB */
+    const priceBuf = await priceFile.arrayBuffer();
+    const priceWb = XLSX.read(priceBuf, { type:'array' });
+    const priceJson = XLSX.utils.sheet_to_json(priceWb.Sheets[priceWb.SheetNames[0]], { defval:'' });
+    const priceMap = new Map();
+    priceJson.forEach(row => {
+      const pname = row['产品名称'] || row['名称'] || row['品名'] || row['产品'];
+      const pval  = row['单价'] || row['价格'] || row['RMB'] || row['人民币'];
+      if(pname && pval !== undefined && pval !== ''){
+        const key = String(pname).trim();
+        if(key) priceMap.set(key, Number(pval));
+      }
+    });
+    if(priceMap.size === 0){
+      statusEl.textContent = '价格表中未识别到“产品名称/单价”列，请检查价格表格式';
+      statusEl.className = 'status error small';
+      return;
+    }
+
+    let totalFiles = 0, totalModified = 0, totalMiss = 0;
+
+    for(let i = 0; i < packingFiles.length; i++){
+      const buf = await packingFiles[i].arrayBuffer();
+      const wb = XLSX.read(buf, { type:'array' });
+      const sheetName = wb.SheetNames[0];
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header:1, defval:'' });
+
+      /* 定位表头行：需要同时含 货箱编号/产品名称/产品申报单价（宽松版可只含 产品名称+产品申报单价） */
+      let headerRowIdx = raw.findIndex(row =>
+        row.some(c => (c + '').includes('货箱编号')) &&
+        row.some(c => (c + '').includes('产品名称')) &&
+        row.some(c => (c + '').includes('申报单价'))
+      );
+      if(headerRowIdx === -1){
+        headerRowIdx = raw.findIndex(row =>
+          row.some(c => (c + '').includes('产品名称')) &&
+          row.some(c => (c + '').includes('申报单价'))
+        );
+      }
+      if(headerRowIdx === -1){
+        resultDisplay.innerHTML += '<p style="color:#e67e22">文件 ' + packingFiles[i].name + '：未找到目标表头，已跳过</p>';
+        continue;
+      }
+
+      const header = raw[headerRowIdx];
+      const dataRows = raw.slice(headerRowIdx + 1);
+      const idxName  = header.findIndex(c => (c + '').includes('产品名称'));
+      const idxPrice = header.findIndex(c => (c + '').includes('申报单价'));
+      if(idxName === -1 || idxPrice === -1){
+        resultDisplay.innerHTML += '<p style="color:#e67e22">文件 ' + packingFiles[i].name + '：缺少“产品名称/申报单价”列，已跳过</p>';
+        continue;
+      }
+
+      let modified = 0, miss = 0;
+      dataRows.forEach(r => {
+        const pname = (r[idxName] || '').toString().trim();
+        if(!pname) return;
+        const unitRMB = priceMap.get(pname);
+        if(unitRMB !== undefined){
+          const declaredUSD = unitRMB / exchangeRate * 1.2;
+          r[idxPrice] = parseFloat(declaredUSD.toFixed(2));
+          modified++;
+        } else {
+          miss++;
+        }
+      });
+
+      wb.Sheets[sheetName] = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+
+      const out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+      const blob = new Blob([out], { type:'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '装箱单_已计算_' + (i + 1) + '.xlsx';
+      a.textContent = '下载：' + packingFiles[i].name + '（已处理 ' + modified + ' 条）';
+      batchDownloads.appendChild(a);
+
+      const tableHTML = XLSX.utils.sheet_to_html(wb.Sheets[sheetName], { editable:false })
+        .replace(/<script[\s\S]*?<\/script>/gi, '');
+      resultDisplay.innerHTML +=
+        '<h4 style="margin:8px 0 4px">文件：' + packingFiles[i].name +
+        '（修改 ' + modified + ' 条' + (miss ? '，未匹配 ' + miss + ' 条' : '') + '）</h4>' +
+        '<div class="table-preview">' + tableHTML + '</div>';
+
+      totalFiles++; totalModified += modified; totalMiss += miss;
+    }
+
+    statusEl.textContent =
+      '处理完成：' + totalFiles + ' 个文件，共修改 ' + totalModified + ' 条' +
+      (totalMiss ? '，未匹配 ' + totalMiss + ' 条（请核对价格表产品名称）' : '');
+    statusEl.className = 'status success small';
+  }catch(err){
+    console.error(err);
+    statusEl.textContent = MSG.processFail + (err.message || err);
+    statusEl.className = 'status error small';
+  }
+}
+
+/* 实时汇率（多源轮询，只读取公开汇率，不发送任何业务数据） */
+async function fetchExchangeRate(){
+  const sources = [
+    { name:'frankfurter', url:'https://api.frankfurter.app/latest?from=CNY&to=USD',
+      parse: j => j && j.rates && j.rates.USD ? j.rates.USD : null },
+    { name:'open.er-api', url:'https://open.er-api.com/v6/latest/CNY',
+      parse: j => j && j.rates && j.rates.USD ? j.rates.USD : null },
+    { name:'exchangerate.host', url:'https://api.exchangerate.host/latest?base=CNY&symbols=USD',
+      parse: j => j && j.rates && j.rates.USD ? j.rates.USD : null }
+  ];
+  statusEl.style.display = 'block';
+  statusEl.className = 'status small';
+  statusEl.textContent = '获取汇率中...';
+
+  for(const src of sources){
+    try{
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(src.url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if(!r.ok) continue;
+      const j = await r.json();
+      const cnyPerUsd = src.parse(j);
+      if(cnyPerUsd && isFinite(cnyPerUsd) && cnyPerUsd > 0){
+        const rate = 1 / cnyPerUsd;
+        document.getElementById('exchangeRate').value = parseFloat(rate.toFixed(4));
+        statusEl.textContent = '汇率更新成功（' + src.name + '），当前 CNY/USD = ' + parseFloat(rate.toFixed(4));
+        statusEl.className = 'status success small';
+        return;
+      }
+    }catch(e){
+      /* 尝试下一个源 */
+    }
+  }
+  statusEl.textContent = '获取汇率失败，请手动输入';
+  statusEl.className = 'status error small';
+}
+
+/* 导出 PDF（html2canvas 快照文字与图表后生成 PDF） */
+exportPdfBtn.addEventListener('click', async () => {
+  try{
+    if(!resultsEl.textContent || resultsEl.textContent.startsWith('（')){
+      alert('请先计算，再导出 PDF'); return;
+    }
+    const tmp = document.createElement('div');
+    tmp.style.position = 'fixed'; tmp.style.left = '-10000px'; tmp.style.top = '0';
+    tmp.style.background = '#fff'; tmp.style.color = '#000';
+    tmp.style.padding = '20px'; tmp.style.width = '1000px'; tmp.style.boxSizing = 'border-box';
+    const title = document.createElement('h2'); title.textContent = '空海运计算报告'; tmp.appendChild(title);
+    const ts = document.createElement('div'); ts.textContent = '时间: ' + new Date().toLocaleString(); tmp.appendChild(ts);
+    const resBlock = document.createElement('pre');
+    resBlock.style.whiteSpace = 'pre-wrap'; resBlock.style.fontFamily = 'monospace'; resBlock.style.marginTop = '12px';
+    resBlock.textContent = resultsEl.textContent || '';
+    tmp.appendChild(resBlock);
+
+    const chartsWrap = document.createElement('div');
+    chartsWrap.style.display = 'flex'; chartsWrap.style.gap = '12px'; chartsWrap.style.marginTop = '12px';
+    const imgList = [];
+    if(weightChart){
+      const img1 = new Image();
+      img1.src = weightChart.toBase64Image();
+      img1.style.width = '460px'; img1.style.height = '260px';
+      chartsWrap.appendChild(img1); imgList.push(img1);
+    }
+    if(volChart){
+      const img2 = new Image();
+      img2.src = volChart.toBase64Image();
+      img2.style.width = '460px'; img2.style.height = '260px';
+      chartsWrap.appendChild(img2); imgList.push(img2);
+    }
+    tmp.appendChild(chartsWrap);
+    document.body.appendChild(tmp);
+
+    /* 确保图表图片解码完成 */
+    await Promise.all(imgList.map(img => img.decode ? img.decode().catch(() => {}) : Promise.resolve()));
+
+    const canvas = await html2canvas(tmp, { scale: 2, useCORS: true });
+    document.body.removeChild(tmp);
+    const imgData = canvas.toDataURL('image/png');
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit:'pt', format:'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 20;
+    const imgW = pageWidth - margin * 2;
+    const imgH = canvas.height * (imgW / canvas.width);
+    /* 超长内容自动分页 */
+    let remainH = imgH;
+    let offsetY = margin;
+    pdf.addImage(imgData, 'PNG', margin, offsetY, imgW, Math.min(imgH, pageHeight - margin * 2));
+    pdf.save('空海运计算报告_' + new Date().toISOString().replace(/[:.]/g,'-').slice(0,19) + '.pdf');
+    alert('PDF 已生成');
+  }catch(err){
+    console.error(err);
+    alert('导出 PDF 失败: ' + (err.message || err));
+  }
+});
+
+/* 复制结果 */
+copyAllBtn.addEventListener('click', async () => {
+  const txt = resultsEl.textContent || '';
+  if(!txt || txt.startsWith('（')){ alert('无结果可复制'); return; }
+  try{
+    await navigator.clipboard.writeText(txt);
+    alert(MSG.copySuccess);
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); alert(MSG.copySuccess); }catch(err){ alert(MSG.copyFail); }
+    ta.remove();
+  }
+});
+
+/* 初始化 */
+function initDefaults(){
+  if(!document.getElementById('airRate')){
+    const input = document.createElement('input');
+    input.id = 'airRate'; input.type = 'number'; input.value = '85'; input.step = 'any';
+    document.querySelector('.controls').appendChild(input);
+  }
+}
+initDefaults();
+
+/* 默认展示空海运模块并至少保留一箱 */
+showModule('airSea');
+if(document.querySelectorAll('.box-card').length === 0){
+  addBoxes(1);
+}
+
+/* 调试辅助 */
+window.__CalcApp = {
+  addBoxes, createBoxCard, onCalculateAir, onCalculateSea,
+  exportDataExcel, processPacking, fetchExchangeRate, resetAll
+};
+</script>
+</body>
+</html>
