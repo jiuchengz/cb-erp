@@ -16,6 +16,11 @@
 
       <button type="submit" :disabled="loading">{{ loading ? '登录中...' : '登录' }}</button>
       <p v-if="error" class="error">{{ error }}</p>
+
+      <!-- 登录页独立工具入口 -->
+      <a class="tool-link" href="/tools/excel-compressor.html" target="_blank" rel="noopener">
+        Excel 图片压缩工具
+      </a>
     </form>
   </div>
 </template>
@@ -209,4 +214,11 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 .turnstile-wrap { min-height: 65px; display: flex; justify-content: center; }
 .remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); cursor: pointer; }
 .remember input { width: 14px; height: 14px; }
+.tool-link {
+  display: block; text-align: center; font-size: 13px;
+  color: var(--accent, #6366f1); text-decoration: none;
+  border-top: 1px dashed rgba(99,102,241,.25); padding-top: 14px;
+  transition: opacity .2s ease;
+}
+.tool-link:hover { opacity: .75; text-decoration: underline; }
 </style>
