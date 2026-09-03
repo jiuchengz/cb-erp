@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -23,6 +23,8 @@ const createSchema = z.object({
   currency: z.string().max(8).optional(),
   platform: z.string().max(50).nullable().optional(),
   sale_date: z.string().max(20).nullable().optional(),
+  // 仓库归属：不传时由明细商品仓库推导；全手工明细必须显式传
+  warehouse_id: z.string().uuid().optional(),
   items: z.array(itemSchema).min(1).max(200),
 });
 
@@ -42,6 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { count: 'exact' }
         )
         .is('deleted_at', null);
+      // 仓库级隔离：普通账号仅能看到其角色绑定仓库的销售单；super_admin 看全部
+      query = applyWarehouseFilter(query, ctx, 'warehouse_id');
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       const orderNo = typeof req.query.order_no === 'string' ? req.query.order_no.trim() : '';
       const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim() : '';
@@ -82,11 +86,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
 
       const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
-      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name').in('id', prodIds).is('deleted_at', null);
+      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name, warehouse_id').in('id', prodIds).is('deleted_at', null);
       if (prodErr) throw prodErr;
-      const skuMap: Record<string, { sku: string; name: string }> = {};
-      (prods || []).forEach((p: any) => { skuMap[p.id] = { sku: p.sku, name: p.name }; });
-      if (prodIds.some((id) => !skuMap[id as string])) throw Errors.badRequest('存在无效商品 ID');
+      const prodMap: Record<string, { sku: string; name: string; warehouse_id: string | null }> = {};
+      (prods || []).forEach((p: any) => { prodMap[p.id] = { sku: p.sku, name: p.name, warehouse_id: p.warehouse_id }; });
+      if (prodIds.some((id) => !prodMap[id as string])) throw Errors.badRequest('存在无效商品 ID');
+
+      // 仓库归属：明细商品必须同仓；未显式传仓时取唯一商品仓
+      const linkedWhs = new Set<string>();
+      for (const id of prodIds) {
+        const wh = prodMap[id as string]?.warehouse_id;
+        if (wh) {
+          // 明细商品仓库必须在账号可见范围内
+          assertWarehouseVisible(ctx, wh, '该仓库的商品');
+          linkedWhs.add(wh);
+        }
+      }
+      if (linkedWhs.size > 1) throw Errors.badRequest('销售单明细商品分属多个仓库，请按仓库拆单');
+      const linkedWh = linkedWhs.values().next().value as string | undefined;
+      let orderWarehouseId = body.warehouse_id ?? linkedWh ?? null;
+      if (body.warehouse_id && linkedWh && body.warehouse_id !== linkedWh) {
+        throw Errors.badRequest('销售单仓库与明细商品仓库不一致');
+      }
+      if (!orderWarehouseId) throw Errors.badRequest('销售单缺少仓库归属，请关联商品或指定仓库');
+      assertWarehouseVisible(ctx, orderWarehouseId, '该仓库');
 
       let total = 0;
       const items = body.items.map((it) => {
@@ -95,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const disc = it.discount ?? 0;
         const subtotal = Math.max(0, qty * price - disc);
         total += subtotal;
-        const matched = it.product_id ? skuMap[it.product_id] : undefined;
+        const matched = it.product_id ? prodMap[it.product_id] : undefined;
         return {
           product_id: it.product_id ?? null,
           sku: matched?.sku ?? it.sku ?? '',
@@ -113,6 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         currency: body.currency ?? 'CNY',
         platform: body.platform ?? null,
         sale_date: body.sale_date ?? null,
+        warehouse_id: orderWarehouseId,
         total_amount: total,
         created_by: ctx.userId,
       }).select().single();

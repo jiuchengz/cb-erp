@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, assertWarehouseVisible, hasUnrestrictedWarehouse } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -21,6 +21,38 @@ const itemSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.coerce.number().positive(),
 });
+
+// 抓取售后单并做仓库可见性校验（不可见按不存在处理，防越权枚举）
+async function fetchAfterVisible(supabase: any, ctx: any, id: string) {
+  const { data, error } = await supabase
+    .from('after_sales')
+    .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
+    .eq('id', id)
+    .is('deleted_at', null)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') throw Errors.notFound('售后单不存在');
+    throw error;
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
+    throw Errors.notFound('售后单不存在');
+  }
+  return data;
+}
+
+// 明细商品仓库归属校验（超管放行存量无仓商品）
+async function assertItemsWarehouseVisible(supabase: any, ctx: any, items: { product_id: string }[]) {
+  const prodIds = [...new Set(items.map((it) => it.product_id))];
+  const { data: prods } = await supabase.from('products').select('id, warehouse_id').in('id', prodIds).is('deleted_at', null);
+  const prodMap: Record<string, string | null | undefined> = {};
+  (prods || []).forEach((p: any) => { prodMap[p.id] = p.warehouse_id ?? null; });
+  for (const pid of prodIds) {
+    const wh = prodMap[pid];
+    if (wh === undefined) throw Errors.badRequest('售后明细存在无效商品');
+    if (wh) assertWarehouseVisible(ctx, wh, '该仓库的商品');
+    else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden('售后明细商品缺少仓库归属');
+  }
+}
 
 const updateSchema = z
   .object({
@@ -46,31 +78,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'after_sales.read');
-      const { data, error } = await supabase
-        .from('after_sales')
-        .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
-        .eq('id', id)
-        .is('deleted_at', null)
-        .single();
-      if (error) {
-        if (error.code === 'PGRST116') throw Errors.notFound('售后单不存在');
-        throw error;
-      }
+      const data = await fetchAfterVisible(supabase, ctx, id);
       return res.status(200).json({ data });
     }
 
     if (req.method === 'PATCH') {
       const body = parse(updateSchema, req.body || {});
-      const { data: before, error: getErr } = await supabase
-        .from('after_sales')
-        .select('*, after_sale_items(*, products(id, name, link_id, image_text))')
-        .eq('id', id)
-        .is('deleted_at', null)
-        .single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
-        throw getErr;
-      }
+      const before = await fetchAfterVisible(supabase, ctx, id);
       requirePermission(ctx, 'after_sales.write');
 
       // 类型字典校验（若更新 type）
@@ -83,6 +97,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!typeMeta) throw Errors.badRequest(`未知售后类型：${body.type}`);
       }
 
+      // 仓库级隔离：改退货入库仓须在当前账号可见范围；普通账号不允许将单据改为无仓库归属
+      if (body.warehouse_id !== undefined && body.warehouse_id) {
+        assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
+      } else if (body.warehouse_id === null && !hasUnrestrictedWarehouse(ctx)) {
+        throw Errors.forbidden('无权将售后单改为无仓库归属');
+      }
+
       const updatePayload: any = {};
       if (body.order_no !== undefined) updatePayload.order_no = body.order_no;
       if (body.type !== undefined) updatePayload.type = body.type;
@@ -93,6 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 明细整体替换：先删旧明细，再插入新明细
       if (body.items !== undefined) {
+        await assertItemsWarehouseVisible(supabase, ctx, body.items);
         const { error: delItemsErr } = await supabase
           .from('after_sale_items')
           .delete()
@@ -148,11 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'after_sales.write');
-      const { data: before, error: getErr } = await supabase.from('after_sales').select('*').eq('id', id).single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('售后单不存在');
-        throw getErr;
-      }
+      const before = await fetchAfterVisible(supabase, ctx, id);
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('after_sales').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

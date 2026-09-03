@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, loadVisibleLinkIds } from '../_lib/rbac';
 import { handleError } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 import { getAdminClient } from '../_lib/db';
@@ -33,6 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const platform = typeof req.query.platform === 'string' ? req.query.platform.trim() : '';
     const adGroup = typeof req.query.ad_group === 'string' ? req.query.ad_group.trim() : '';
 
+    // 仓库级隔离：daily_sales 无 warehouse_id，通过 products.link_id 推导当前账号
+    // 可见链接集（super_admin 为 null = 不限制）；受限账号只统计可见仓库的链接。
+    const visibleLinks = await loadVisibleLinkIds(supabase, ctx);
+
     // 循环翻页取全量（服务端取回，网络仅一次 HTTP 往返）
     const PAGE = 1000;
     const all: any[] = [];
@@ -52,9 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order('created_at', { ascending: true })
         .range(page * PAGE, (page + 1) * PAGE - 1);
       if (error) throw error;
-      const rows = data || [];
+      const rows = (data || []).filter((r: any) => !visibleLinks || visibleLinks.has(String(r.link_id || '')));
       all.push(...rows);
-      if (rows.length < PAGE) break;
+      if ((data || []).length < PAGE) break;
     }
 
     // 与前端一致：按 link_id 聚合

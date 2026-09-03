@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, loadVisibleLinkIds } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -44,6 +44,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const adGroup = typeof req.query.ad_group === 'string' ? req.query.ad_group.trim() : '';
       const linkId = typeof req.query.link_id === 'string' ? req.query.link_id.trim() : '';
 
+      // 仓库级隔离：daily_sales 无 warehouse_id，通过 products.link_id 推导当前账号可见链接集。
+      // super_admin 返回 null（不限制）；受限账号链接集可能很大，采用分批 in 查询后在内存统一排序分页。
+      const visibleLinks = await loadVisibleLinkIds(supabase, ctx);
+      if (visibleLinks && visibleLinks.size === 0) {
+        return res.status(200).json({ data: [], total: 0, page: q.page, pageSize: q.pageSize, summary: { rows: 0, quantity: 0 } });
+      }
+
+      if (visibleLinks) {
+        // 受限账号：分批拉取可见链接数据后内存过滤、排序与分页
+        const chunkLinks = Array.from(visibleLinks);
+        const collected: any[] = [];
+        const CHUNK = 250;
+        for (let i = 0; i < chunkLinks.length; i += CHUNK) {
+          let cq: any = supabase.from('daily_sales').select('*').in('link_id', chunkLinks.slice(i, i + CHUNK));
+          if (saleFrom) cq = cq.gte('sale_date', saleFrom);
+          if (saleTo) cq = cq.lte('sale_date', saleTo);
+          if (platform) cq = cq.eq('platform', platform);
+          if (adGroup) cq = cq.eq('ad_group', adGroup);
+          if (linkId) cq = cq.eq('link_id', linkId);
+          if (keyword) {
+            cq = cq.or(`link_id.ilike.%${keyword}%,product_name.ilike.%${keyword}%`);
+          }
+          const { data: rows, error: rowsErr } = await cq;
+          if (rowsErr) throw rowsErr;
+          collected.push(...(rows || []));
+        }
+        collected.sort(
+          (a: any, b: any) => String(b.sale_date || '').localeCompare(String(a.sale_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || ''))
+        );
+        const totalCount = collected.length;
+        const paged = collected.slice((q.page - 1) * q.pageSize, q.page * q.pageSize);
+        const qty = collected.reduce((s: number, r: any) => s + Number(r.quantity || 0), 0);
+        return res.status(200).json({
+          data: paged,
+          total: totalCount,
+          page: q.page,
+          pageSize: q.pageSize,
+          summary: { rows: totalCount, quantity: qty },
+        });
+      }
+
+      // 超管/不受限路径：沿用原分页查询
       let query: any = supabase.from('daily_sales').select('*', { count: 'exact' });
       if (saleFrom) query = query.gte('sale_date', saleFrom);
       if (saleTo) query = query.lte('sale_date', saleTo);

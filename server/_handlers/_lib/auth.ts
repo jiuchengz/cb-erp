@@ -9,6 +9,9 @@ export interface AuthContext {
   avatarUrl: string;
   roles: string[];
   permissions: string[];
+  // 可见仓库集：由该账号全部角色的 role_warehouses 并集得出。
+  // super_admin 不受仓库限制，返回 null 表示"全量可见"。
+  warehouseIds: string[] | null;
 }
 
 function extractToken(req: VercelRequest): string | null {
@@ -21,19 +24,26 @@ function extractToken(req: VercelRequest): string | null {
 export interface UserAccess {
   roles: string[];
   permissions: string[];
+  warehouseIds: string[] | null;
 }
 
 // 实例级权限缓存：60 秒 TTL。
 // Supabase 冷启动/连接初期偶发返回空数组（非报错），若每次都直查，
 // 第一个冷启动请求仍可能拿到空结果；缓存命中后后续请求不再依赖数据库抖动。
-const accessCache = new Map<string, { expireAt: number; roles: string[]; permissions: string[] }>();
+const accessCache = new Map<string, { expireAt: number; roles: string[]; permissions: string[]; warehouseIds: string[] | null }>();
 const CACHE_TTL_MS = 60 * 1000;
 
-// 单次完整加载：user_roles -> roles -> role_permissions -> permissions。
+// 单次完整加载：user_roles -> roles -> role_permissions -> permissions，以及
+// user_roles -> roles -> role_warehouses -> 可见仓库并集。
 // 查询失败必须显性报错，禁止静默当成"无角色"（否则会误报 403 无权限）。
+// 仓库隔离口径：super_admin 返回 warehouseIds=null（全量可见，不受仓库限制）；
+// 其余账号可见仓库 = 其全部角色 role_warehouses 的并集（可为空数组 = 无可见仓库）。
+// 兼容降级：role_warehouses 表尚未部署（迁移未执行）时，仓库维度降级为全量空集，
+// 不阻断认证；业务侧需待迁移完成后才有隔离效果。
 async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAccess> {
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
+  const warehouseSet = new Set<string>();
 
   // 嵌套关联查询：一次拿到 user_roles + 角色名（替代原来 4 次串行查询）
   const { data: userRoles, error: userRolesErr } = await supabase
@@ -43,9 +53,29 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   if (userRolesErr) throw new Error('加载用户角色失败: ' + userRolesErr.message);
 
   const roleIds = (userRoles || []).map((r: any) => r.role_id);
+  let isSuperAdmin = false;
   for (const r of userRoles || []) {
     const name = r.roles?.name;
-    if (name) roles.push(name);
+    if (name) {
+      roles.push(name);
+      if (name === 'super_admin') isSuperAdmin = true;
+    }
+  }
+
+  // super_admin 不需要仓库绑定：null 表示全量，不再查绑仓
+  if (!isSuperAdmin && roleIds.length) {
+    const { data: rwData, error: rwErr } = await supabase
+      .from('role_warehouses')
+      .select('warehouse_id')
+      .in('role_id', roleIds);
+    // 迁移未上线（表不存在等）时降级为空集，不阻断认证
+    if (!rwErr) {
+      for (const rw of rwData || []) {
+        if (rw?.warehouse_id) warehouseSet.add(rw.warehouse_id);
+      }
+    } else {
+      console.warn('[auth] role_warehouses load skipped (migration not applied?):', rwErr.message);
+    }
   }
 
   if (roleIds.length) {
@@ -64,6 +94,8 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   return {
     roles,
     permissions: Array.from(permissionsSet),
+    // super_admin 不需要仓库绑定：null 表示全量
+    warehouseIds: isSuperAdmin ? null : Array.from(warehouseSet),
   };
 }
 
@@ -74,11 +106,11 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
 export async function loadUserAccess(supabase: any, userId: string): Promise<UserAccess> {
   const cached = accessCache.get(userId);
   if (cached && cached.expireAt > Date.now()) {
-    return { roles: cached.roles, permissions: cached.permissions };
+    return { roles: cached.roles, permissions: cached.permissions, warehouseIds: cached.warehouseIds };
   }
 
   const retryDelays = [0, 1000, 3000, 6000];
-  let last: UserAccess = { roles: [], permissions: [] };
+  let last: UserAccess = { roles: [], permissions: [], warehouseIds: [] };
   for (const delay of retryDelays) {
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     last = await loadUserAccessOnce(supabase, userId);
@@ -93,6 +125,7 @@ export async function loadUserAccess(supabase: any, userId: string): Promise<Use
       expireAt: Date.now() + CACHE_TTL_MS,
       roles: last.roles,
       permissions: last.permissions,
+      warehouseIds: last.warehouseIds,
     });
   }
   return last;
@@ -121,7 +154,7 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     .maybeSingle();
 
   // 加载角色与权限（带缓存 + 空结果抖动退避重试，见 loadUserAccess）
-  const { roles, permissions } = await loadUserAccess(supabase, userId);
+  const { roles, permissions, warehouseIds } = await loadUserAccess(supabase, userId);
 
   return {
     userId,
@@ -130,5 +163,6 @@ export async function requireAuth(req: VercelRequest): Promise<AuthContext> {
     avatarUrl: (profile as any)?.avatar_url || '',
     roles,
     permissions: Array.from(permissions),
+    warehouseIds,
   };
 }

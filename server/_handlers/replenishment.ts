@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -34,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('replenishment_orders')
         .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))', { count: 'exact' })
         .is('deleted_at', null);
+      query = applyWarehouseFilter(query, ctx, 'warehouse_id');
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status === 'PROCESSING') {
         // 采购中：兼容存量 DRAFT/SUBMITTED/APPROVED/PROCESSING 各状态
@@ -110,6 +111,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'replenishment.write');
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+
+      // 仓库级隔离：只能为本账号可见仓库创建补货单
+      assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
+      // 明细商品须属于可见仓库（超管放行）
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const itemIds = body.items.map((it: any) => it.product_id);
+        const { data: itemProds, error: ipErr } = await supabase
+          .from('products')
+          .select('id, warehouse_id')
+          .in('id', itemIds)
+          .is('deleted_at', null);
+        if (ipErr) throw ipErr;
+        const visible = new Set(ctx.warehouseIds || []);
+        const denied = (itemProds || []).filter((p: any) => !visible.has(p.warehouse_id));
+        if (denied.length) throw Errors.forbidden('补货明细包含无权访问的仓库商品');
+      }
 
       const totalQty = body.items.reduce((s: number, it: any) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase

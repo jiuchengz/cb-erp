@@ -43,6 +43,9 @@
         <el-option label="启用" value="active" />
         <el-option label="停用" value="inactive" />
       </el-select>
+      <el-select v-if="warehouses.length > 1" v-model="query.warehouse_id" placeholder="仓库" clearable style="width: 160px" @change="load">
+        <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
+      </el-select>
       <el-dropdown trigger="click" @command="onSalesRangeCommand">
         <el-button>
           {{ salesRangeLabel }}
@@ -77,6 +80,11 @@
     <el-table :resizable="false" v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
+      <el-table-column label="仓库" width="130" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-tag size="small" effect="plain">{{ warehouseName(row.warehouse_id) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="图片" width="90">
         <template #default="{ row }">
           <el-tooltip v-if="isImageUrl(row.image_text)" :show-after="200" :offset="10">
@@ -260,6 +268,12 @@
 
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
       <el-form :model="form" label-width="110px">
+        <el-form-item label="所属仓库" required>
+          <el-select v-model="form.warehouse_id" filterable placeholder="选择商品归属仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+          <div class="form-tip">同款商品跨仓销售请分别建档，各自维护成本与售价</div>
+        </el-form-item>
         <el-form-item label="SKU">
           <el-input v-model="form.sku" placeholder="选填，可后续补充" />
         </el-form-item>
@@ -396,6 +410,21 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="importWhVisible" title="选择导入仓库" width="460px" destroy-on-close>
+      <el-alert type="info" :closable="false" show-icon title="批量导入将把商品全部归入所选仓库，同一产品编号已在目标仓库存在时将跳过" style="margin-bottom: 16px" />
+      <el-form label-width="90px">
+        <el-form-item label="目标仓库" required>
+          <el-select v-model="importTargetWarehouseId" filterable placeholder="选择导入目标仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importWhVisible = false">取消</el-button>
+        <el-button type="primary" @click="chooseFileForImport">下一步：选择文件</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="importResultVisible" title="导入结果明细" width="680px" destroy-on-close>
       <div style="max-height: 420px; overflow: auto; font-size: 13px; line-height: 1.8">
         <div
@@ -444,8 +473,27 @@ const total = ref(0)
 const loading = ref(false)
 const previewVisible = ref(false)
 const previewUrl = ref('')
-const query = reactive({ page: 1, pageSize: 200, search: '', status: '' })
+const query = reactive({ page: 1, pageSize: 200, search: '', status: '', warehouse_id: '' })
 const rate = ref(0.38)
+
+// 可见仓库：普通账号由后端按角色绑定过滤，super_admin 全量
+const warehouses = ref<any[]>([])
+const warehousesLoading = ref(false)
+async function loadWarehouses() {
+  warehousesLoading.value = true
+  try {
+    const { data } = await api.get('/warehouses')
+    warehouses.value = data.data ?? []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载仓库列表失败')
+  } finally {
+    warehousesLoading.value = false
+  }
+}
+function warehouseName(id: string | null | undefined): string {
+  if (!id) return '—'
+  return warehouses.value.find((w: any) => w.id === id)?.name || id.slice(0, 8)
+}
 
 // 多列排序状态：数组顺序即排序优先级（先点击的为主排序），支持多列同时排序
 const sortStates = ref<{ prop: string; order: 'ascending' | 'descending' }[]>([])
@@ -661,6 +709,7 @@ async function load() {
   try {
     // pageSize 固定传 0：一次拉取全量商品，排序与分页在前端完成（与销售统计模块一致）
     const params: Record<string, any> = { ...query, pageSize: 0 }
+    if (query.warehouse_id) params.warehouse_id = query.warehouse_id
     if (salesFrom.value) params.sales_from = salesFrom.value
     if (salesTo.value) params.sales_to = salesTo.value
     const { data } = await api.get('/products', { params })
@@ -728,6 +777,7 @@ const editing = ref<Product | null>(null)
 const imageInput = ref<HTMLInputElement>()
 
 const emptyForm = () => ({
+  warehouse_id: '',
   sku: '',
   name: '',
   code: '',
@@ -754,12 +804,15 @@ const form = reactive(emptyForm())
 function openCreate() {
   editing.value = null
   Object.assign(form, emptyForm())
+  // 若当前可见仓库唯一则默认选中，减少误归属
+  if (warehouses.value.length === 1) form.warehouse_id = warehouses.value[0].id
   dialogVisible.value = true
 }
 
 function openEdit(row: Product) {
   editing.value = row
   Object.assign(form, emptyForm(), {
+    warehouse_id: (row as any).warehouse_id || '',
     sku: row.sku || '',
     name: row.name || '',
     code: row.code || '',
@@ -801,6 +854,10 @@ function onImageFileChange(e: Event) {
 async function save() {
   if (!form.name.trim()) {
     ElMessage.warning('请填写名称')
+    return
+  }
+  if (!form.warehouse_id) {
+    ElMessage.warning('请选择所属仓库')
     return
   }
   saving.value = true
@@ -993,6 +1050,9 @@ const importing = ref(false)
 const importFile = ref<HTMLInputElement>()
 const importResultVisible = ref(false)
 const importResultLines = ref<string[]>([])
+// 批量导入目标仓库：仅当前账号可见仓库 >1 时需用户先选，单一仓库自动使用
+const importWhVisible = ref(false)
+const importTargetWarehouseId = ref('')
 
 function downloadImportResult() {
   const content = '\ufeff' + importResultLines.value.join('\n')
@@ -1033,6 +1093,25 @@ function downloadTpl() {
 }
 
 function triggerImport() {
+  if (!warehouses.value.length) {
+    ElMessage.error('当前无可用的仓库，请先到「系统设置-仓库管理」创建仓库后再导入')
+    return
+  }
+  if (warehouses.value.length > 1) {
+    importTargetWarehouseId.value = ''
+    importWhVisible.value = true
+    return
+  }
+  importTargetWarehouseId.value = warehouses.value[0].id
+  importFile.value?.click()
+}
+
+function chooseFileForImport() {
+  if (!importTargetWarehouseId.value) {
+    ElMessage.warning('请先选择目标仓库')
+    return
+  }
+  importWhVisible.value = false
   importFile.value?.click()
 }
 
@@ -1041,6 +1120,10 @@ async function onImportFile(e: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
+  if (!importTargetWarehouseId.value) {
+    ElMessage.error('未选择导入目标仓库，请重新点击「批量导入」')
+    return
+  }
   importing.value = true
   try {
     const fileAb = await file.arrayBuffer()
@@ -1071,11 +1154,12 @@ async function onImportFile(e: Event) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编号"和"名称"列')
       return
     }
-    // 拉取全量已存在产品编码，避免重复创建
+    // 拉取目标仓库已存在产品编码，避免重复创建（编码同仓内唯一）
+    const whId = importTargetWarehouseId.value
     const exist = new Set<string>()
     let page = 1
     for (;;) {
-      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
+      const { data } = await api.get('/products', { params: { page, pageSize: 200, warehouse_id: whId } })
       ;(data.data ?? []).forEach((p: any) => {
         if (p.code) exist.add(p.code)
       })
@@ -1114,6 +1198,7 @@ async function onImportFile(e: Event) {
       const floatImg = cellImages?.[idx + 1] ? Object.values(cellImages[idx + 1])[0] : ''
       items.push({
         payload: {
+          warehouse_id: whId,
           sku: sku || null,
           name,
           code,
@@ -1186,6 +1271,7 @@ onMounted(() => {
   const kw = typeof route.query.search === 'string' ? route.query.search : ''
   if (kw) query.search = kw
   load()
+  loadWarehouses()
 })
 </script>
 

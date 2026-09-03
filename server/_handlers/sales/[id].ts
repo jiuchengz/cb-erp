@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -18,6 +18,19 @@ const SALES_FLOW: Record<string, string[]> = {
   CANCELLED: [],
 };
 
+// 抓取销售单并对当前账号做仓库可见性校验（不可见按不存在处理，防越权枚举）
+async function fetchOrderVisible(supabase: any, ctx: any, id: string) {
+  const { data, error } = await supabase.from('sales_orders').select('*').eq('id', id).is('deleted_at', null).single();
+  if (error) {
+    if (error.code === 'PGRST116') throw Errors.notFound('销售单不存在');
+    throw error;
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
+    throw Errors.notFound('销售单不存在');
+  }
+  return data;
+}
+
 const updateSchema = z.object({
   status: z.enum(['DRAFT', 'CONFIRMED', 'PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']).optional(),
   currency: z.string().max(8).optional(),
@@ -32,21 +45,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'sales.read');
-      const { data, error } = await supabase.from('sales_orders').select('*, sales_order_items(*)').eq('id', id).is('deleted_at', null).single();
-      if (error) {
-        if (error.code === 'PGRST116') throw Errors.notFound('订单不存在');
-        throw error;
-      }
+      const order = await fetchOrderVisible(supabase, ctx, id);
+      const { data, error } = await supabase.from('sales_orders').select('*, sales_order_items(*)').eq('id', order.id).is('deleted_at', null).single();
+      if (error) throw error;
       return res.status(200).json({ data });
     }
 
     if (req.method === 'PATCH') {
       const body = parse(updateSchema, req.body || {});
-      const { data: before, error: getErr } = await supabase.from('sales_orders').select('*').eq('id', id).is('deleted_at', null).single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('订单不存在');
-        throw getErr;
-      }
+      const before = await fetchOrderVisible(supabase, ctx, id);
 
       if (body.status && body.status === 'CANCELLED') {
         requirePermission(ctx, 'sales.cancel');
@@ -71,11 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'sales.write');
-      const { data: before, error: getErr } = await supabase.from('sales_orders').select('*').eq('id', id).single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('销售单不存在');
-        throw getErr;
-      }
+      const before = await fetchOrderVisible(supabase, ctx, id);
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('sales_orders').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

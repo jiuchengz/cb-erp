@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, assertWarehouseVisible, hasUnrestrictedWarehouse } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -16,6 +16,8 @@ const updateSchema = z.object({
   unit_price: z.coerce.number().min(0).optional(),
   currency: z.string().max(8).optional(),
   status: z.enum(['active', 'inactive']).optional(),
+  // 迁移仓库（同款记录从 A 仓改归 B 仓，需同步校验同仓编码唯一）
+  warehouse_id: z.string().uuid().optional(),
   // 老系统 listings 业务字段
   code: z.string().max(255).nullable().optional(),
   listing_time: z.string().max(255).nullable().optional(),
@@ -33,6 +35,19 @@ const updateSchema = z.object({
   safety_stock: z.coerce.number().min(0).optional(),
 });
 
+// 抓取商品并对当前账号做仓库可见性校验（不可见按不存在处理，防越权枚举）
+async function fetchProductVisible(supabase: any, ctx: any, id: string) {
+  const { data, error } = await supabase.from('products').select('*').eq('id', id).is('deleted_at', null).single();
+  if (error) {
+    if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
+    throw error;
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
+    throw Errors.notFound('商品不存在');
+  }
+  return data;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
@@ -42,11 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'products.read');
-      const { data, error } = await supabase.from('products').select('*').eq('id', id).is('deleted_at', null).single();
-      if (error) {
-        if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
-        throw error;
-      }
+      const data = await fetchProductVisible(supabase, ctx, id);
       return res.status(200).json({ data });
     }
 
@@ -65,14 +76,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           normalized[k] = v === '' && nullableKeys.includes(k) ? null : v;
         }
       }
-      const { data: before } = await supabase.from('products').select('*').eq('id', id).is('deleted_at', null).single();
+      const before = await fetchProductVisible(supabase, ctx, id);
+      // 仓库可见性：跨仓迁移同样校验目标仓在可见范围内
+      const targetWarehouseId = body.warehouse_id !== undefined ? body.warehouse_id : before.warehouse_id;
+      if (body.warehouse_id !== undefined) assertWarehouseVisible(ctx, body.warehouse_id, '目标仓库');
+      // 同仓编码唯一性（改了 code 或 warehouse_id 时前置校验；null code 不受限）
+      if (body.code && (body.code !== before.code || body.warehouse_id !== undefined)) {
+        const { data: dup } = await supabase
+          .from('products')
+          .select('id')
+          .eq('warehouse_id', targetWarehouseId)
+          .eq('code', body.code)
+          .neq('id', id)
+          .is('deleted_at', null)
+          .limit(1);
+        if (dup && dup.length) throw Errors.conflict(`产品编码已存在：${body.code}`);
+      }
       const { data, error } = await supabase.from('products').update(body).eq('id', id).select().single();
       if (error) {
         if (error.code === '23505') {
-          const msg = String(error.message || '');
-          throw Errors.conflict(
-            msg.includes('idx_products_code_unique') ? '产品编码已存在' : 'SKU 已存在'
-          );
+          // code 冲突已前置校验，此处兜底仅剩 SKU 冲突
+          throw Errors.conflict(`SKU 已存在：${body.sku || ''}`);
         }
         if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
         throw error;
@@ -83,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'products.delete');
-      const { data: before } = await supabase.from('products').select('*').eq('id', id).single();
+      const before = await fetchProductVisible(supabase, ctx, id);
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

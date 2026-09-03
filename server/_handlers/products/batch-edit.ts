@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse } from '../_lib/rbac';
 import { parse } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
-import { handleError } from '../_lib/error';
+import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 
 const batchEditSchema = z.object({
@@ -36,11 +36,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: before, error: selErr } = await supabase
       .from('products')
-      .select('id, sku, name, unit_price, category, status, safety_stock')
+      .select('id, sku, name, unit_price, category, status, safety_stock, warehouse_id')
       .in('id', ids)
       .is('deleted_at', null);
     if (selErr) throw selErr;
     const found = before || [];
+    // 仓库级隔离：普通账号只能编辑本账号可见仓库的商品，含越权仓库则整批取消
+    if (!hasUnrestrictedWarehouse(ctx)) {
+      const visible = new Set(ctx.warehouseIds || []);
+      const denied = found.filter((p: any) => !visible.has(p.warehouse_id));
+      if (denied.length) throw Errors.forbidden('批量编辑包含无权访问的仓库商品，已取消');
+    }
     const foundIds = found.map((p: any) => p.id);
     if (!foundIds.length) {
       return res.status(200).json({ ok: true, updated: 0, missing: ids.length });

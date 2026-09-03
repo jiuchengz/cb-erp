@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -16,6 +16,8 @@ const createSchema = z.object({
   unit_price: z.coerce.number().min(0).optional().default(0),
   currency: z.string().max(8).optional().default('MXN'),
   status: z.enum(['active', 'inactive']).optional().default('active'),
+  // 仓库级隔离：产品必须归属某个仓库；同款跨仓=多条独立产品记录
+  warehouse_id: z.string().uuid(),
   // 老系统 listings 业务字段
   code: z.string().max(255).nullable().optional(),
   listing_time: z.string().max(255).nullable().optional(),
@@ -102,6 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const s = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+      // 仓库精确过滤（可选）：导入存在性校验 / 仓库视角查看时传；普通账号结果仍受可见仓库约束
+      const warehouseId = typeof req.query.warehouse_id === 'string' && req.query.warehouse_id.trim() ? req.query.warehouse_id.trim() : '';
       // 销量时间范围（可选）：sales_from / sales_to，格式 YYYY-MM-DD 或 ISO
       const salesFrom = typeof req.query.sales_from === 'string' && req.query.sales_from.trim() ? req.query.sales_from.trim() : '';
       const salesTo = typeof req.query.sales_to === 'string' && req.query.sales_to.trim() ? req.query.sales_to.trim() : '';
@@ -111,9 +115,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const supabase = getAdminClient();
       let query: any = supabase.from('products').select('*', { count: 'exact' }).is('deleted_at', null);
+      // 仓库级隔离：普通账号仅能看其角色绑定仓库的商品；super_admin 看全部
+      query = applyWarehouseFilter(query, ctx, 'warehouse_id');
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
+      if (warehouseId) query = query.eq('warehouse_id', warehouseId);
       if (linkIds.length) query = query.in('link_id', linkIds);
       query = query.order('created_at', { ascending: false });
       if (q.pageSize > 0) {
@@ -230,11 +237,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           body[k] = v === '' && nullableKeys.includes(k) ? null : v;
         }
       }
-      // 产品编码唯一性兜底（前端已去重，此处防止并发/绕过前端直连）
+      // 仓库归属校验：创建方对该仓库必须有可见权（super_admin 放行）
+      assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
+      // 产品编码唯一性兜底（同仓内唯一；前端已去重，此处防止并发/绕过前端直连）
       if (body.code) {
         const { data: dup } = await supabase
           .from('products')
           .select('id')
+          .eq('warehouse_id', body.warehouse_id)
           .eq('code', body.code)
           .is('deleted_at', null)
           .limit(1);
@@ -253,10 +263,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data, error } = await supabase.from('products').insert(body).select().single();
       if (error) {
         if (error.code === '23505') {
-          const msg = String(error.message || '');
-          throw Errors.conflict(
-            msg.includes('idx_products_code_unique') ? `产品编码已存在：${body.code}` : `SKU 已存在：${body.sku || ''}`
-          );
+          // code 唯一冲突已在上面显式校验；此处兜底仅剩 SKU 冲突
+          throw Errors.conflict(`SKU 已存在：${body.sku || ''}`);
         }
         throw error;
       }

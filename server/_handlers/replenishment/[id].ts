@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, assertWarehouseVisible } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -22,6 +22,27 @@ const itemSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.coerce.number().positive(),
 });
+
+// 抓取补货单并对当前账号做仓库可见性校验（不可见按不存在处理，防越权枚举）
+async function fetchRepVisible(supabase: any, ctx: any, id: string, opts?: { items?: boolean }) {
+  const sel = opts?.items
+    ? '*, replenishment_order_items(*)'
+    : '*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))';
+  const { data, error } = await supabase
+    .from('replenishment_orders')
+    .select(sel)
+    .eq('id', id)
+    .is('deleted_at', null)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') throw Errors.notFound('补货单不存在');
+    throw error;
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
+    throw Errors.notFound('补货单不存在');
+  }
+  return data;
+}
 
 const updateSchema = z
   .object({
@@ -52,32 +73,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       requirePermission(ctx, 'replenishment.read');
-      const { data, error } = await supabase
-        .from('replenishment_orders')
-        .select('*, replenishment_order_items(product_id, quantity, products(sku, code, name, image_text))')
-        .eq('id', id)
-        .is('deleted_at', null)
-        .single();
-      if (error) {
-        if (error.code === 'PGRST116') throw Errors.notFound('补货单不存在');
-        throw error;
-      }
+      const data = await fetchRepVisible(supabase, ctx, id);
       return res.status(200).json({ data });
     }
 
     if (req.method === 'PATCH') {
       const body = parse(updateSchema, req.body || {});
-      const { data: before, error: getErr } = await supabase
-        .from('replenishment_orders')
-        .select('*, replenishment_order_items(*)')
-        .eq('id', id)
-        .is('deleted_at', null)
-        .single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('补货单不存在');
-        throw getErr;
-      }
       requirePermission(ctx, 'replenishment.write');
+      const before = await fetchRepVisible(supabase, ctx, id, { items: true });
+      // 仓库级隔离：改仓需新仓库对当前账号可见
+      if (body.warehouse_id !== undefined) assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
 
       const isStatusUpdate = body.status !== undefined;
       if (isStatusUpdate) {
@@ -100,6 +105,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 明细替换：整单明细重建
       if (body.items !== undefined) {
+        // 仓库级隔离：明细商品须属于当前账号可见仓库
+        if (!hasUnrestrictedWarehouse(ctx)) {
+          const itemIds = body.items.map((it: any) => it.product_id);
+          const { data: itemProds, error: ipErr } = await supabase
+            .from('products')
+            .select('id, warehouse_id')
+            .in('id', itemIds)
+            .is('deleted_at', null);
+          if (ipErr) throw ipErr;
+          const visible = new Set(ctx.warehouseIds || []);
+          const denied = (itemProds || []).filter((p: any) => !visible.has(p.warehouse_id));
+          if (denied.length) throw Errors.forbidden('补货明细包含无权访问的仓库商品');
+        }
         const { error: delErr } = await supabase
           .from('replenishment_order_items')
           .delete()
@@ -141,11 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'replenishment.write');
-      const { data: before, error: getErr } = await supabase.from('replenishment_orders').select('*').eq('id', id).single();
-      if (getErr) {
-        if (getErr.code === 'PGRST116') throw Errors.notFound('补货单不存在');
-        throw getErr;
-      }
+      const before = await fetchRepVisible(supabase, ctx, id);
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('replenishment_orders').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

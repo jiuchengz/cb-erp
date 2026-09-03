@@ -258,8 +258,20 @@
           <el-table-column label="权限数" width="100" align="right">
             <template #default="{ row }">{{ (row.permissions || []).length }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
+          <el-table-column label="可见仓库" min-width="180">
             <template #default="{ row }">
+              <el-tag v-if="row.name === 'super_admin'" size="small" type="warning">全部（超级管理员）</el-tag>
+              <template v-else>
+                <el-tag v-for="wid in (row.warehouse_ids || [])" :key="wid" size="small" style="margin-right: 4px">
+                  {{ warehouseName(wid) }}
+                </el-tag>
+                <span v-if="!(row.warehouse_ids || []).length" style="color: #909399">未绑定</span>
+              </template>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="160" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="canManage && row.is_system && row.name !== 'super_admin'" link type="primary" @click="openRoleEdit(row)">绑定仓库</el-button>
               <el-button v-if="canManage && !row.is_system" link type="primary" @click="openRoleEdit(row)">编辑</el-button>
               <el-button v-if="canManage && !row.is_system" link type="danger" @click="removeRole(row)">删除</el-button>
             </template>
@@ -381,18 +393,32 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="roleVisible" :title="roleEditing ? '编辑角色' : '新增角色'" width="560px" destroy-on-close>
+    <el-dialog v-model="roleVisible" :title="roleEditing?.is_system ? '绑定可见仓库' : roleEditing ? '编辑角色' : '新增角色'" width="560px" destroy-on-close>
       <el-form :model="roleForm" label-width="90px">
-        <el-form-item label="角色名" required>
-          <el-input v-model="roleForm.name" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="roleForm.description" type="textarea" :rows="2" maxlength="256" />
-        </el-form-item>
-        <el-form-item label="权限">
-          <el-select v-model="roleForm.permissions" multiple filterable placeholder="选择权限" style="width: 100%">
-            <el-option v-for="p in permissions" :key="p.code" :label="`${p.code} - ${p.name}`" :value="p.code" />
+        <template v-if="!roleEditing?.is_system">
+          <el-form-item label="角色名" required>
+            <el-input v-model="roleForm.name" />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input v-model="roleForm.description" type="textarea" :rows="2" maxlength="256" />
+          </el-form-item>
+          <el-form-item label="权限">
+            <el-select v-model="roleForm.permissions" multiple filterable placeholder="选择权限" style="width: 100%">
+              <el-option v-for="p in permissions" :key="p.code" :label="`${p.code} - ${p.name}`" :value="p.code" />
+            </el-select>
+          </el-form-item>
+        </template>
+        <el-form-item v-if="!roleEditing?.is_system" label="可见仓库">
+          <el-select v-model="roleForm.warehouse_ids" multiple filterable clearable placeholder="不选则该角色默认无仓库可见（建议至少绑定一个）" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
           </el-select>
+          <div class="form-tip">该角色下的账号只能查看绑定仓库的数据（超级管理员除外）</div>
+        </el-form-item>
+        <el-form-item v-else label="可见仓库">
+          <el-select v-model="roleForm.warehouse_ids" multiple filterable clearable placeholder="选择该角色可访问的仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+          <div class="form-tip">内置角色仅可调整仓库可见范围，名称/描述/权限不可修改</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1131,6 +1157,7 @@ const roleForm = reactive({
   name: '',
   description: '',
   permissions: [] as string[],
+  warehouse_ids: [] as string[],
 })
 
 function openRoleCreate() {
@@ -1138,8 +1165,10 @@ function openRoleCreate() {
   roleForm.name = ''
   roleForm.description = ''
   roleForm.permissions = []
+  roleForm.warehouse_ids = []
   roleVisible.value = true
   loadPermissions()
+  loadWarehouses()
 }
 
 function openRoleEdit(row: any) {
@@ -1147,21 +1176,28 @@ function openRoleEdit(row: any) {
   roleForm.name = row.name
   roleForm.description = row.description || ''
   roleForm.permissions = (row.permissions || []).map((p: any) => (typeof p === 'string' ? p : p.code))
+  roleForm.warehouse_ids = [...((row as any).warehouse_ids || [])]
   roleVisible.value = true
   loadPermissions()
+  loadWarehouses()
+}
+
+function warehouseName(id: string): string {
+  return warehouses.value.find((w: any) => w.id === id)?.name || id.slice(0, 8)
 }
 
 async function saveRole() {
-  if (!roleForm.name.trim()) {
+  if (!roleEditing.value?.is_system && !roleForm.name.trim()) {
     ElMessage.warning('请填写角色名')
     return
   }
   saving.value = true
   try {
-    const payload = {
-      name: roleForm.name,
-      description: roleForm.description,
-      permissions: roleForm.permissions,
+    const payload: any = { warehouses: roleForm.warehouse_ids }
+    if (!roleEditing.value?.is_system) {
+      payload.name = roleForm.name
+      payload.description = roleForm.description
+      payload.permissions = roleForm.permissions
     }
     if (roleEditing.value) {
       await api.patch(`/roles/${roleEditing.value.id}`, payload)
@@ -1611,5 +1647,11 @@ onMounted(() => {
 .db-usage-warn {
   font-size: 13px;
   color: #e5484d;
+}
+.form-tip {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  margin-top: 2px;
 }
 </style>

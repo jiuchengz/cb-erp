@@ -9,6 +9,8 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const roles = ref<string[]>([])
   const permissions = ref<string[]>([])
+  // 可见仓库范围：null = 不受限（super_admin 全量）；string[] = 角色绑定仓库并集
+  const warehouseIds = ref<string[] | null>(null)
   const profile = ref<any>(null)
   async function init() {
     console.log('[auth:init] 开始, ts=' + new Date().toISOString())
@@ -63,6 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await api.get('/auth/me')
       roles.value = data.roles ?? []
       permissions.value = data.permissions ?? []
+      warehouseIds.value = data.warehouseIds !== undefined ? data.warehouseIds : null
       profile.value = data.profile ?? null
       console.log('[auth:loadProfile] /auth/me 返回: roles=' + (data.roles ?? []).length + ' perms=' + (data.permissions ?? []).length)
       user.value = { ...user.value, email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } }
@@ -85,6 +88,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.session?.user ?? null
     roles.value = data.roles ?? []
     permissions.value = data.permissions ?? []
+    warehouseIds.value = data.warehouseIds !== undefined ? data.warehouseIds : null
     profile.value = data.profile ?? null
     user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } }
   }
@@ -102,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     roles.value = []
     permissions.value = []
+    warehouseIds.value = null
     profile.value = null
     // 2. 通知 Supabase 服务端销毁会话（fire-and-forget，失败不影响本地登出与页面跳转）
     supabase.auth.signOut().catch(() => {
@@ -120,6 +125,11 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(perm)
   }
 
+  // 是否不受仓库范围限制（super_admin / warehouseIds 为 null 时全量可见）
+  function hasFullWarehouseAccess(): boolean {
+    return warehouseIds.value === null
+  }
+
   // 个人中心保存后同步本地用户信息（姓名/头像），右上角即时生效
   function applyProfile(p: { name?: string; avatar?: string | null }) {
     const meta = { ...(user.value?.user_metadata ?? {}) }
@@ -134,5 +144,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { session, user, roles, permissions, profile, init, signIn, signOut, hasPermission, applyProfile }
+  return { session, user, roles, permissions, warehouseIds, profile, init, signIn, signOut, hasPermission, hasFullWarehouseAccess, applyProfile }
 })

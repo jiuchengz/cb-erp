@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .is('deleted_at', null);
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
+      query = applyWarehouseFilter(query, ctx, 'warehouse_id');
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
       const { data, error, count } = await query;
       if (error) throw error;
@@ -52,6 +53,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 校验类型存在于自定义字典
       const { data: typeMeta } = await supabase.from('after_sale_types').select('value').eq('value', body.type).maybeSingle();
       if (!typeMeta) throw Errors.badRequest(`未知售后类型：${body.type}`);
+
+      // 仓库级隔离：明细商品必须属于账号可见仓库；指定退货入库仓时亦须可见。
+      // 超管不受限；商品暂无仓库归属（存量未归仓）时仅放行超管。
+      const prodIds = body.items.map((it) => it.product_id);
+      const { data: prods } = await supabase.from('products').select('id, warehouse_id').in('id', prodIds).is('deleted_at', null);
+      const prodMap: Record<string, string | null | undefined> = {};
+      (prods || []).forEach((p: any) => { prodMap[p.id] = p.warehouse_id ?? null; });
+      for (const pid of prodIds) {
+        const wh = prodMap[pid];
+        if (wh === undefined) throw Errors.badRequest('售后明细存在无效商品');
+        if (wh) assertWarehouseVisible(ctx, wh, '该仓库的商品');
+        else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden('售后明细商品缺少仓库归属');
+      }
+      if (body.warehouse_id) assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
 
       const { data: order, error } = await supabase
         .from('after_sales')

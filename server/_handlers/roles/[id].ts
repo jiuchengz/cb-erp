@@ -15,14 +15,20 @@ const updateSchema = z.object({
   name: z.string().min(1).max(50).optional(),
   description: z.string().max(256).nullable().optional(),
   permissions: z.array(z.string().min(1).max(100)).optional(),
+  // 角色绑定的可见仓库 id（仓库级行级隔离）
+  warehouses: z.array(z.string().uuid()).optional(),
 });
 
-// 前后端字段归一：role_permissions -> 顶层 permissions:[code]，并标记 is_system
+// 前后端字段归一：role_permissions -> 顶层 permissions:[code]；
+// role_warehouses -> 顶层 warehouse_ids:[仓库id]；并标记 is_system
 function normalizeRole(row: any) {
   const perms = (row.role_permissions || []).map((rp: any) => rp.permissions?.code).filter(Boolean);
+  const whIds = (row.role_warehouses || []).map((rw: any) => rw.warehouse_id).filter(Boolean);
+  const { role_warehouses, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     permissions: perms,
+    warehouse_ids: whIds,
     is_system: SYSTEM_ROLES.has(row.name),
   };
 }
@@ -30,7 +36,7 @@ function normalizeRole(row: any) {
 async function fetchRole(supabase: any, id: string) {
   const { data, error } = await supabase
     .from('roles')
-    .select('*, role_permissions(permission_id, permissions(code))')
+    .select('*, role_permissions(permission_id, permissions(code)), role_warehouses(warehouse_id)')
     .eq('id', id)
     .single();
   if (error) {
@@ -55,6 +61,29 @@ async function resolvePermissionIds(supabase: any, codes: string[]) {
   return found.map((p: any) => p.id);
 }
 
+// 校验仓库 id 均存在，返回去重后的合法 id 列表
+async function resolveWarehouseIds(supabase: any, ids: string[]) {
+  if (!ids || ids.length === 0) return [] as string[];
+  const uniqueIds = Array.from(new Set(ids));
+  const { data, error } = await supabase.from('warehouses').select('id').in('id', uniqueIds);
+  if (error) throw error;
+  const found = new Set((data || []).map((w: any) => w.id));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw Errors.badRequest('存在无效仓库 ID');
+  return uniqueIds;
+}
+
+// 全量覆盖写角色的仓库绑定（role_warehouses）
+async function replaceRoleWarehouses(supabase: any, roleId: string, warehouseIds: string[]) {
+  const { error: delErr } = await supabase.from('role_warehouses').delete().eq('role_id', roleId);
+  if (delErr) throw delErr;
+  if (warehouseIds.length > 0) {
+    const rows = warehouseIds.map((warehouse_id) => ({ role_id: roleId, warehouse_id }));
+    const { error: insErr } = await supabase.from('role_warehouses').insert(rows);
+    if (insErr) throw insErr;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
@@ -67,7 +96,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parse(updateSchema, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest('无更新字段');
       const before = await fetchRole(supabase, id);
-      if (SYSTEM_ROLES.has(before.name)) throw Errors.badRequest('内置角色不可修改');
+      const isSystem = SYSTEM_ROLES.has(before.name);
+
+      // 系统字段（名称/描述/权限）只允许非内置角色修改；仓库绑定对所有角色开放
+      const hasProfileFields = body.name !== undefined || body.description !== undefined || body.permissions !== undefined;
+      if (isSystem && hasProfileFields) throw Errors.badRequest('内置角色不可修改名称、描述或权限');
 
       // 名称唯一（排除自身）
       let newName = before.name;
@@ -103,6 +136,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { error: insErr } = await supabase.from('role_permissions').insert(rows);
           if (insErr) throw insErr;
         }
+      }
+
+      if (body.warehouses !== undefined) {
+        const whIds = await resolveWarehouseIds(supabase, body.warehouses);
+        await replaceRoleWarehouses(supabase, id, whIds);
       }
 
       const after = await fetchRole(supabase, id);

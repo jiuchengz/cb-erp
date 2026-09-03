@@ -31,6 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
         roles: ctx.roles,
         permissions: ctx.permissions,
+        // 可见仓库范围：super_admin 为 null（全量）；其余为绑仓并集
+        warehouseIds: ctx.warehouseIds,
       });
     }
 
