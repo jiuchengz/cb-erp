@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission, assertWarehouseVisible, hasUnrestrictedWarehouse } from '../_lib/rbac';
+import { requirePermission, assertWarehouseVisible, hasUnrestrictedWarehouse, loadProductBindings } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -40,17 +40,20 @@ async function fetchAfterVisible(supabase: any, ctx: any, id: string) {
   return data;
 }
 
-// 明细商品仓库归属校验（超管放行存量无仓商品）
+// 明细商品绑定校验（一货多仓 054）：商品须有效且绑定任一当前账号可见仓库
 async function assertItemsWarehouseVisible(supabase: any, ctx: any, items: { product_id: string }[]) {
   const prodIds = [...new Set(items.map((it) => it.product_id))];
-  const { data: prods } = await supabase.from('products').select('id, warehouse_id').in('id', prodIds).is('deleted_at', null);
-  const prodMap: Record<string, string | null | undefined> = {};
-  (prods || []).forEach((p: any) => { prodMap[p.id] = p.warehouse_id ?? null; });
+  const { data: prods } = await supabase.from('products').select('id').in('id', prodIds).is('deleted_at', null);
+  const prodSet = new Set((prods || []).map((p: any) => p.id));
+  const bindMap = await loadProductBindings(supabase, prodIds);
+  const visWh = new Set(ctx.warehouseIds || []);
   for (const pid of prodIds) {
-    const wh = prodMap[pid];
-    if (wh === undefined) throw Errors.badRequest('售后明细存在无效商品');
-    if (wh) assertWarehouseVisible(ctx, wh, '该仓库的商品');
-    else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden('售后明细商品缺少仓库归属');
+    if (!prodSet.has(pid)) throw Errors.badRequest('售后明细存在无效商品');
+    const binds = bindMap.get(pid) || [];
+    const ok = hasUnrestrictedWarehouse(ctx)
+      ? binds.length > 0
+      : binds.some((b) => visWh.has(b.warehouse_id));
+    if (!ok) throw Errors.forbidden('售后明细商品未绑定当前账号可见仓库');
   }
 }
 

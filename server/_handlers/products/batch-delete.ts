@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission, hasUnrestrictedWarehouse } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, loadProductBindings } from '../_lib/rbac';
 import { parse } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -26,18 +26,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: before, error: selErr } = await supabase
       .from('products')
-      .select('id, sku, name, warehouse_id')
+      .select('id, sku, name')
       .in('id', ids)
       .is('deleted_at', null);
     if (selErr) throw selErr;
-    const found = before || [];
-    // 仓库级隔离：普通账号只能删除本账号可见仓库的商品，含越权仓库则整批取消
-    if (!hasUnrestrictedWarehouse(ctx)) {
-      const visible = new Set(ctx.warehouseIds || []);
-      const denied = found.filter((p: any) => !visible.has(p.warehouse_id));
-      if (denied.length) throw Errors.forbidden('批量删除包含无权访问的仓库商品，已取消');
+    const found = (before || []) as any[];
+    const foundIds = found.map((p) => p.id);
+    // 一货多仓：商品为公司级主档。受限账号仅当其"全部"绑定仓均可见时才可删除整档，
+    // 含任一不可见绑定仓则整批取消（防 A 仓用户删除同时绑定了其它仓的主档）。
+    if (foundIds.length && !hasUnrestrictedWarehouse(ctx)) {
+      const bindMap = await loadProductBindings(supabase, foundIds);
+      const visWh = new Set(ctx.warehouseIds || []);
+      const denied = found.filter((p) => {
+        const binds = bindMap.get(p.id) || [];
+        return binds.length === 0 || binds.some((b) => !visWh.has(b.warehouse_id));
+      });
+      if (denied.length) throw Errors.forbidden('批量删除包含同时绑定其它仓库的商品，已取消');
     }
-    const foundIds = found.map((p: any) => p.id);
     if (foundIds.length) {
       // 软删除：置 deleted_at，数据进入回收站
       const { error: delErr } = await supabase.from('products').update({ deleted_at: new Date().toISOString() }).in('id', foundIds);

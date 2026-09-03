@@ -1,23 +1,32 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission, applyWarehouseFilter, assertWarehouseVisible } from './_lib/rbac';
+import { requirePermission, assertWarehouseVisible, bindProductWarehouseFilter, ProductBinding } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
 import { handleError, Errors } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
 
+// 仓库绑定行：一货多仓（054）后售价按仓存绑定行 sale_price
+const bindingItemSchema = z.object({
+  warehouse_id: z.string().uuid(),
+  sale_price: z.coerce.number().min(0).optional().default(0),
+});
+
 const createSchema = z.object({
   sku: z.string().max(200).nullable().optional(),
   name: z.string().min(1).max(200),
   barcode: z.string().max(64).nullable().optional(),
   category: z.string().max(100).nullable().optional(),
+  // 主档默认售价/兼容字段；多仓售价以 warehouse_bindings 绑定行为准
   unit_price: z.coerce.number().min(0).optional().default(0),
   currency: z.string().max(8).optional().default('MXN'),
   status: z.enum(['active', 'inactive']).optional().default('active'),
-  // 仓库级隔离：产品必须归属某个仓库；同款跨仓=多条独立产品记录
-  warehouse_id: z.string().uuid(),
+  // 一货多仓：创建须至少绑定一个仓库（前端默认绑定总仓）；售价按仓存绑定行。
+  // 兼容旧调用：仅传 warehouse_id 时视为绑定该仓且 sale_price=unit_price。
+  warehouse_id: z.string().uuid().optional(),
+  warehouse_bindings: z.array(bindingItemSchema).min(1).optional(),
   // 老系统 listings 业务字段
   code: z.string().max(255).nullable().optional(),
   listing_time: z.string().max(255).nullable().optional(),
@@ -114,13 +123,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const linkIds = linkIdsParam ? Array.from(new Set(linkIdsParam.split(',').map((x: string) => x.trim()).filter(Boolean))).slice(0, 500) : [];
 
       const supabase = getAdminClient();
-      let query: any = supabase.from('products').select('*', { count: 'exact' }).is('deleted_at', null);
-      // 仓库级隔离：普通账号仅能看其角色绑定仓库的商品；super_admin 看全部
-      query = applyWarehouseFilter(query, ctx, 'warehouse_id');
+      // 一货多仓可见性：商品绑定任一可见仓即可见；嵌入返回可见绑定(warehouse_id+sale_price)
+      const bindFilter = bindProductWarehouseFilter(ctx, warehouseId);
+      let query: any = supabase
+        .from('products')
+        .select(`*, ${bindFilter.selectBind}`, { count: 'exact' })
+        .is('deleted_at', null);
+      query = bindFilter.filter(query);
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq('category', category);
       if (status) query = query.eq('status', status);
-      if (warehouseId) query = query.eq('warehouse_id', warehouseId);
       if (linkIds.length) query = query.in('link_id', linkIds);
       query = query.order('created_at', { ascending: false });
       if (q.pageSize > 0) {
@@ -129,7 +141,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      const rows = data || [];
+      const rows = (data || []).map((r: any) => {
+        const embBindings = Array.isArray(r.product_warehouses) ? r.product_warehouses : [];
+        delete r.product_warehouses; // 嵌入绑定已平铺为 warehouse_ids/sale_price，避免载荷冗余
+        const bindings: { warehouse_id: string; sale_price: number }[] = embBindings.map((b: any) => ({
+          warehouse_id: b.warehouse_id,
+          sale_price: Number(b.sale_price ?? 0),
+        }));
+        // 售价展示：指定仓库则取该仓绑定售价，否则取首条可见绑定售价；未绑定回退主档 unit_price
+        let salePrice = Number(r.unit_price ?? 0);
+        if (bindings.length) {
+          const hit = warehouseId ? bindings.find((b) => b.warehouse_id === warehouseId) : undefined;
+          salePrice = hit ? Number(hit.sale_price ?? 0) : Number(bindings[0].sale_price ?? 0);
+        }
+        return {
+          ...r,
+          warehouse_ids: bindings.map((b) => b.warehouse_id),
+          warehouse_count: bindings.length,
+          sale_price: salePrice,
+        };
+      });
       const pageIds = rows.map((r: any) => r.id);
       // 链接ID映射：daily_sales 按 link_id 关联商品
       const pageLinkIds = rows.map((r: any) => String(r.link_id || '').trim()).filter(Boolean);
@@ -237,14 +268,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           body[k] = v === '' && nullableKeys.includes(k) ? null : v;
         }
       }
-      // 仓库归属校验：创建方对该仓库必须有可见权（super_admin 放行）
-      assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
-      // 产品编码唯一性兜底（同仓内唯一；前端已去重，此处防止并发/绕过前端直连）
+      // 一货多仓：解析绑定列表（warehouse_bindings 优先；兼容旧 warehouse_id 调用）
+      let bindings: ProductBinding[] = Array.isArray(body.warehouse_bindings)
+        ? body.warehouse_bindings.map((b: any) => ({ warehouse_id: b.warehouse_id, sale_price: Number(b.sale_price ?? 0) }))
+        : [];
+      delete body.warehouse_bindings;
+      if (!bindings.length && body.warehouse_id) {
+        bindings = [{ warehouse_id: body.warehouse_id, sale_price: Number(body.unit_price ?? 0) }];
+      }
+      if (!bindings.length) throw Errors.badRequest('请至少绑定一个仓库');
+      // 同仓重复提交时后者覆盖（前端兜底）
+      const deduped = new Map<string, ProductBinding>();
+      for (const b of bindings) deduped.set(b.warehouse_id, b);
+      bindings = Array.from(deduped.values());
+      // 绑定仓库可见性校验（super_admin 放行）
+      for (const b of bindings) assertWarehouseVisible(ctx, b.warehouse_id, '该仓库');
+      // 产品编码全库唯一兜底（054 起 code 全库唯一；此处防止并发/绕过前端直连）
       if (body.code) {
         const { data: dup } = await supabase
           .from('products')
           .select('id')
-          .eq('warehouse_id', body.warehouse_id)
           .eq('code', body.code)
           .is('deleted_at', null)
           .limit(1);
@@ -260,6 +303,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.error('[products] inline image upload failed:', imgErr?.message || imgErr);
         }
       }
+      // 主档写入：warehouse_id 存首绑定仓（兼容旧字段），unit_price 与首绑定仓售价保持一致（兼容兜底展示）
+      const primary = bindings[0];
+      body.warehouse_id = primary.warehouse_id;
+      body.unit_price = primary.sale_price;
       const { data, error } = await supabase.from('products').insert(body).select().single();
       if (error) {
         if (error.code === '23505') {
@@ -268,8 +315,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         throw error;
       }
-      await writeAudit(ctx, req, 'create', 'product', data.id, null, data);
-      return res.status(201).json({ data });
+      // 绑定行写入（售价按仓）
+      const bindRows = bindings.map((b) => ({ product_id: data.id, warehouse_id: b.warehouse_id, sale_price: b.sale_price }));
+      const { error: bindErr } = await supabase.from('product_warehouses').upsert(bindRows);
+      if (bindErr) throw bindErr;
+      await writeAudit(ctx, req, 'create', 'product', data.id, null, { ...data, bindings });
+      return res.status(201).json({ data: { ...data, warehouse_ids: bindings.map((b) => b.warehouse_id), sale_price: primary.sale_price } });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });

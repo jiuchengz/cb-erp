@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, applyWarehouseFilter } from '../_lib/rbac';
 import { getAdminClient } from '../_lib/db';
 import { handleError } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
@@ -20,12 +20,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     requirePermission(ctx, 'inventory.read');
     const supabase = getAdminClient();
 
-    const [productsRes, invRes] = await Promise.all([
-      supabase
+    const NULL_UUID = '00000000-0000-0000-0000-000000000000';
+    const productsSelect = 'id, sku, name, code, category, safety_stock, overseas_stock, unit_price';
+    let productsQ: any;
+    if (hasUnrestrictedWarehouse(ctx)) {
+      productsQ = supabase.from('products').select(productsSelect).is('deleted_at', null);
+    } else {
+      // 仓库级隔离（054 一货多仓）：仅对绑定任一当前可见仓库的商品做预警
+      const ids = ctx.warehouseIds || [];
+      productsQ = supabase
         .from('products')
-        .select('id, sku, name, code, category, safety_stock, overseas_stock, unit_price')
-        .is('deleted_at', null),
-      supabase.from('inventory').select('product_id, quantity'),
+        .select(productsSelect + ', product_warehouses!inner(warehouse_id)')
+        .in('product_warehouses.warehouse_id', ids.length ? ids : [NULL_UUID])
+        .is('deleted_at', null);
+    }
+    const [productsRes, invRes] = await Promise.all([
+      productsQ,
+      applyWarehouseFilter(supabase.from('inventory').select('product_id, warehouse_id, quantity'), ctx, 'warehouse_id'),
     ]);
     if (productsRes.error) throw productsRes.error;
     if (invRes.error) throw invRes.error;

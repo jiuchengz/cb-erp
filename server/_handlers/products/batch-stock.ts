@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission, hasUnrestrictedWarehouse } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, loadProductBindings } from '../_lib/rbac';
 import { parse } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -35,19 +35,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ids = Array.from(new Set(items.map((it: any) => it.id)));
     const { data: found, error: selErr } = await supabase
       .from('products')
-      .select('id, sku, name, overseas_stock, warehouse_id')
+      .select('id, sku, name, overseas_stock')
       .in('id', ids)
       .is('deleted_at', null);
     if (selErr) throw selErr;
+    const foundRows = (found || []) as any[];
 
-    // 仓库级隔离：普通账号只能更新本账号可见仓库的商品库存，含越权仓库则整批取消
+    // 一货多仓：以绑定表判定可见性，受限账号至少拥有 1 个可见绑定仓才可更新该商品主档库存
     if (!hasUnrestrictedWarehouse(ctx)) {
-      const visible = new Set(ctx.warehouseIds || []);
-      const denied = (found || []).filter((p: any) => !visible.has(p.warehouse_id));
+      const bindMap = await loadProductBindings(supabase, foundRows.map((p) => p.id));
+      const visWh = new Set(ctx.warehouseIds || []);
+      const denied = foundRows.filter((p) => !(bindMap.get(p.id) || []).some((b) => visWh.has(b.warehouse_id)));
       if (denied.length) throw Errors.forbidden('批量更新库存包含无权访问的仓库商品，已取消');
     }
 
-    const foundIds = new Set((found || []).map((p: any) => p.id));
+    const foundIds = new Set(foundRows.map((p: any) => p.id));
     const now = new Date().toISOString();
     const updates = items
       .filter((it: any) => foundIds.has(it.id))

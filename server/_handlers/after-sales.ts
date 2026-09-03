@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse, loadProductBindings } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -54,17 +54,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: typeMeta } = await supabase.from('after_sale_types').select('value').eq('value', body.type).maybeSingle();
       if (!typeMeta) throw Errors.badRequest(`未知售后类型：${body.type}`);
 
-      // 仓库级隔离：明细商品必须属于账号可见仓库；指定退货入库仓时亦须可见。
-      // 超管不受限；商品暂无仓库归属（存量未归仓）时仅放行超管。
-      const prodIds = body.items.map((it) => it.product_id);
-      const { data: prods } = await supabase.from('products').select('id, warehouse_id').in('id', prodIds).is('deleted_at', null);
-      const prodMap: Record<string, string | null | undefined> = {};
-      (prods || []).forEach((p: any) => { prodMap[p.id] = p.warehouse_id ?? null; });
+      // 仓库级隔离：一货多仓（054）后商品为公司级主档，明细商品经 product_warehouses
+      // 绑定表判断——至少绑定 1 个当前账号可见仓库；未绑定任何仓库视为异常商品。
+      // 指定退货入库仓时该仓亦须在当前账号可见范围。
+      const prodIds = [...new Set(body.items.map((it) => it.product_id))];
+      const { data: prods } = await supabase.from('products').select('id').in('id', prodIds).is('deleted_at', null);
+      const prodSet = new Set((prods || []).map((p: any) => p.id));
+      const bindMap = await loadProductBindings(supabase, prodIds);
+      const visWh = new Set(ctx.warehouseIds || []);
       for (const pid of prodIds) {
-        const wh = prodMap[pid];
-        if (wh === undefined) throw Errors.badRequest('售后明细存在无效商品');
-        if (wh) assertWarehouseVisible(ctx, wh, '该仓库的商品');
-        else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden('售后明细商品缺少仓库归属');
+        if (!prodSet.has(pid)) throw Errors.badRequest('售后明细存在无效商品');
+        const binds = bindMap.get(pid) || [];
+        const ok = hasUnrestrictedWarehouse(ctx)
+          ? binds.length > 0
+          : binds.some((b) => visWh.has(b.warehouse_id));
+        if (!ok) throw Errors.forbidden('售后明细商品未绑定当前账号可见仓库');
       }
       if (body.warehouse_id) assertWarehouseVisible(ctx, body.warehouse_id, '该仓库');
 

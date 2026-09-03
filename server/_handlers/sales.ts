@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission, applyWarehouseFilter, assertWarehouseVisible } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse, loadProductBindings } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -85,36 +85,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
 
-      const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
-      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name, warehouse_id').in('id', prodIds).is('deleted_at', null);
+      const prodIds = [...new Set(body.items.map((it) => it.product_id).filter((x): x is string => !!x))];
+      const { data: prods, error: prodErr } = await supabase.from('products').select('id, sku, name').in('id', prodIds).is('deleted_at', null);
       if (prodErr) throw prodErr;
-      const prodMap: Record<string, { sku: string; name: string; warehouse_id: string | null }> = {};
-      (prods || []).forEach((p: any) => { prodMap[p.id] = { sku: p.sku, name: p.name, warehouse_id: p.warehouse_id }; });
+      const prodMap: Record<string, { sku: string; name: string }> = {};
+      (prods || []).forEach((p: any) => { prodMap[p.id] = { sku: p.sku, name: p.name }; });
       if (prodIds.some((id) => !prodMap[id as string])) throw Errors.badRequest('存在无效商品 ID');
 
-      // 仓库归属：明细商品必须同仓；未显式传仓时取唯一商品仓
-      const linkedWhs = new Set<string>();
+      // 一货多仓（054）：商品为公司级主档，明细商品按 product_warehouses 绑定校验。
+      // 单据仓库 = 显式 warehouse_id，或明细可见绑定仓交集唯一时自动推导。
+      const bindMap = await loadProductBindings(supabase, prodIds);
+      const visWh = new Set(ctx.warehouseIds || []);
+      const visibleBindsOf = (pid: string) => {
+        const all = bindMap.get(pid) || [];
+        return hasUnrestrictedWarehouse(ctx) ? all : all.filter((b) => visWh.has(b.warehouse_id));
+      };
       for (const id of prodIds) {
-        const wh = prodMap[id as string]?.warehouse_id;
-        if (wh) {
-          // 明细商品仓库必须在账号可见范围内
-          assertWarehouseVisible(ctx, wh, '该仓库的商品');
-          linkedWhs.add(wh);
+        if (visibleBindsOf(id as string).length === 0) {
+          throw Errors.forbidden('销售明细商品未绑定当前账号可见仓库');
         }
       }
-      if (linkedWhs.size > 1) throw Errors.badRequest('销售单明细商品分属多个仓库，请按仓库拆单');
-      const linkedWh = linkedWhs.values().next().value as string | undefined;
-      let orderWarehouseId = body.warehouse_id ?? linkedWh ?? null;
-      if (body.warehouse_id && linkedWh && body.warehouse_id !== linkedWh) {
-        throw Errors.badRequest('销售单仓库与明细商品仓库不一致');
+
+      let orderWarehouseId = body.warehouse_id ?? null;
+      if (!orderWarehouseId) {
+        // 无显式仓：取所有明细商品可见绑定仓的交集，交集唯一才可自动归属
+        let commonSet: Set<string> | null = null;
+        for (const id of prodIds) {
+          const ws = new Set(visibleBindsOf(id as string).map((b) => b.warehouse_id));
+          if (ws.size === 0) {
+            commonSet = new Set<string>();
+            break;
+          }
+          const next = new Set<string>();
+          for (const wh of ws) {
+            if (commonSet === null || commonSet.has(wh)) next.add(wh);
+          }
+          commonSet = next;
+          if (commonSet.size === 0) break;
+        }
+        if (commonSet && commonSet.size === 1) orderWarehouseId = [...commonSet][0];
+        else if (commonSet && commonSet.size > 1) {
+          throw Errors.badRequest('明细商品可归属多个共同仓库，请显式指定销售单仓库');
+        }
       }
-      if (!orderWarehouseId) throw Errors.badRequest('销售单缺少仓库归属，请关联商品或指定仓库');
+      if (!orderWarehouseId) throw Errors.badRequest('销售单缺少仓库归属，请指定仓库');
       assertWarehouseVisible(ctx, orderWarehouseId, '该仓库');
+      // 单据仓库确定后，所有明细商品必须绑定该仓（多仓模型下单仓销售单）
+      for (const id of prodIds) {
+        const all = bindMap.get(id as string) || [];
+        if (!all.some((b) => b.warehouse_id === orderWarehouseId)) {
+          throw Errors.badRequest('销售单仓库与明细商品仓库不一致');
+        }
+      }
+
+      // 售价按仓存于绑定行 sale_price：明细未显式传价时兜底取单据仓绑定价
+      const salePriceMap: Record<string, number> = {};
+      for (const [pid, binds] of bindMap) {
+        const b = binds.find((x) => x.warehouse_id === orderWarehouseId);
+        if (b) salePriceMap[pid] = b.sale_price;
+      }
 
       let total = 0;
       const items = body.items.map((it) => {
         const qty = it.quantity;
-        const price = it.unit_price ?? 0;
+        const price = it.unit_price ?? salePriceMap[it.product_id as string] ?? 0;
         const disc = it.discount ?? 0;
         const subtotal = Math.max(0, qty * price - disc);
         total += subtotal;

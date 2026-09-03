@@ -46,12 +46,19 @@ export interface Product extends BaseEntity {
   ml_commission_rate: number | null
   safety_stock: number
   remark: string | null
+  // 一货多仓（054）：商品为公司级主档，可见仓/按仓售价由 product_warehouses 绑定行推导
+  warehouse_id: UUID | null
+  warehouse_ids?: UUID[]
+  warehouse_count?: number
+  sale_price?: number
+  bindings?: { warehouse_id: UUID; sale_price: number }[]
 }
 
 export interface Warehouse extends BaseEntity {
   code: string
   name: string
   address: string | null
+  wh_type?: 'domestic' | 'overseas' | string | null
 }
 
 export interface InventoryTransaction {

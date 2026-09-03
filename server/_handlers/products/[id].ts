@@ -1,12 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission, assertWarehouseVisible, hasUnrestrictedWarehouse } from '../_lib/rbac';
+import { requirePermission, assertWarehouseVisible, fetchProductBindingsVisible, loadProductBindings, hasUnrestrictedWarehouse } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
+
+const bindingItemSchema = z.object({
+  warehouse_id: z.string().uuid(),
+  sale_price: z.coerce.number().min(0).optional().default(0),
+});
 
 const updateSchema = z.object({
   sku: z.string().max(64).nullable().optional(),
@@ -16,8 +21,11 @@ const updateSchema = z.object({
   unit_price: z.coerce.number().min(0).optional(),
   currency: z.string().max(8).optional(),
   status: z.enum(['active', 'inactive']).optional(),
-  // 迁移仓库（同款记录从 A 仓改归 B 仓，需同步校验同仓编码唯一）
+  // [deprecated] 一货多仓后不再"迁移仓库"：仅传 warehouse_id 时按"改绑为该仓"兼容旧调用
   warehouse_id: z.string().uuid().optional(),
+  // 一货多仓：传 warehouse_bindings 时全量替换"当前账号可见"的绑定（可空数组=解绑全部可见绑定）；
+  // 未传则仅更新主档字段（可见绑定由前端在编辑弹窗内显式提交）。
+  warehouse_bindings: z.array(bindingItemSchema).optional(),
   // 老系统 listings 业务字段
   code: z.string().max(255).nullable().optional(),
   listing_time: z.string().max(255).nullable().optional(),
@@ -35,17 +43,14 @@ const updateSchema = z.object({
   safety_stock: z.coerce.number().min(0).optional(),
 });
 
-// 抓取商品并对当前账号做仓库可见性校验（不可见按不存在处理，防越权枚举）
+// 抓取商品并校验当前账号经绑定表可见（不可见按不存在处理，防越权枚举）
 async function fetchProductVisible(supabase: any, ctx: any, id: string) {
-  const { data, error } = await supabase.from('products').select('*').eq('id', id).is('deleted_at', null).single();
-  if (error) {
-    if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
-    throw error;
-  }
-  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
-    throw Errors.notFound('商品不存在');
-  }
-  return data;
+  const { row, bindings } = await fetchProductBindingsVisible(supabase, ctx, id);
+  row.bindings = bindings; // 编辑回显：可见绑定明细（超管为全量）
+  row.warehouse_ids = bindings.map((b) => b.warehouse_id);
+  row.warehouse_count = bindings.length;
+  row.sale_price = bindings.length ? bindings[0].sale_price : Number(row.unit_price ?? 0);
+  return row;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -77,37 +82,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       const before = await fetchProductVisible(supabase, ctx, id);
-      // 仓库可见性：跨仓迁移同样校验目标仓在可见范围内
-      const targetWarehouseId = body.warehouse_id !== undefined ? body.warehouse_id : before.warehouse_id;
-      if (body.warehouse_id !== undefined) assertWarehouseVisible(ctx, body.warehouse_id, '目标仓库');
-      // 同仓编码唯一性（改了 code 或 warehouse_id 时前置校验；null code 不受限）
-      if (body.code && (body.code !== before.code || body.warehouse_id !== undefined)) {
+      // ===== 一货多仓绑定维护 =====
+      // 规则：提交的 warehouse_bindings 只允许包含当前账号可见仓（super_admin 全量）；
+      // 受限账号提交绑定全量替换"可见仓"旧绑定，其它仓旧绑定自动保留（防越权解绑）；super_admin 全量替换。
+      const fullBeforeBindings = (await loadProductBindings(supabase, [id])).get(id) || [];
+      const visibleOldIds: string[] = [];
+      const keptInvisible: { warehouse_id: string; sale_price: number }[] = [];
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const visWh = new Set(ctx.warehouseIds || []);
+        for (const b of fullBeforeBindings) {
+          if (visWh.has(b.warehouse_id)) visibleOldIds.push(b.warehouse_id);
+          else keptInvisible.push(b);
+        }
+      } else {
+        for (const b of fullBeforeBindings) visibleOldIds.push(b.warehouse_id);
+      }
+
+      let nextBindings: { warehouse_id: string; sale_price: number }[] | null = null;
+
+      if (Array.isArray((normalized as any).warehouse_bindings)) {
+        const submitted: { warehouse_id: string; sale_price: number }[] = Array.from(
+          new Map(
+            ((normalized as any).warehouse_bindings as any[]).map((b: any) => [
+              b.warehouse_id,
+              { warehouse_id: b.warehouse_id, sale_price: Number(b.sale_price ?? 0) },
+            ])
+          ).values()
+        );
+        delete (normalized as any).warehouse_bindings;
+        // 提交绑定仓库可见性校验（super_admin 放行）
+        for (const b of submitted) assertWarehouseVisible(ctx, b.warehouse_id, '该仓库');
+        nextBindings = [...keptInvisible, ...submitted];
+        if (!nextBindings.length) throw Errors.badRequest('商品至少需保留一个绑定仓库（解绑请先在商品详情内加绑其它仓库）');
+      } else if ((normalized as any).warehouse_id !== undefined) {
+        // [deprecated] 旧调用迁移仓：改绑为该仓（054 后前端不应再触发）
+        const targetWh = (normalized as any).warehouse_id as string;
+        delete (normalized as any).warehouse_id;
+        assertWarehouseVisible(ctx, targetWh, '该仓库');
+        nextBindings = [
+          ...keptInvisible.filter((b) => b.warehouse_id !== targetWh),
+          { warehouse_id: targetWh, sale_price: Number((normalized as any).unit_price ?? before.unit_price ?? 0) },
+        ];
+      }
+
+      // 产品编码全库唯一（054：code 不再按仓唯一）
+      if ((normalized as any).code && (normalized as any).code !== before.code) {
         const { data: dup } = await supabase
           .from('products')
           .select('id')
-          .eq('warehouse_id', targetWarehouseId)
-          .eq('code', body.code)
+          .eq('code', (normalized as any).code)
           .neq('id', id)
           .is('deleted_at', null)
           .limit(1);
-        if (dup && dup.length) throw Errors.conflict(`产品编码已存在：${body.code}`);
+        if (dup && dup.length) throw Errors.conflict(`产品编码已存在：${(normalized as any).code}`);
       }
-      const { data, error } = await supabase.from('products').update(body).eq('id', id).select().single();
+
+      // 绑定变更时主档兼容字段与"主绑定仓"保持一致（主绑定=提交首仓，未提交则首条保留绑定）
+      const appliedBindings: { warehouse_id: string; sale_price: number }[] = nextBindings ?? fullBeforeBindings;
+      if (nextBindings) {
+        const primary = nextBindings.find((b) => !keptInvisible.some((k) => k.warehouse_id === b.warehouse_id)) || nextBindings[0];
+        (normalized as any).warehouse_id = primary.warehouse_id;
+        (normalized as any).unit_price = primary.sale_price;
+      }
+
+      const { data, error } = await supabase.from('products').update(normalized).eq('id', id).select().single();
       if (error) {
         if (error.code === '23505') {
           // code 冲突已前置校验，此处兜底仅剩 SKU 冲突
-          throw Errors.conflict(`SKU 已存在：${body.sku || ''}`);
+          throw Errors.conflict(`SKU 已存在：${(normalized as any).sku || ''}`);
         }
         if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
         throw error;
       }
-      await writeAudit(ctx, req, 'update', 'product', id, before, data);
-      return res.status(200).json({ data });
+
+      // 绑定行落库：先删被替换的可见旧绑定，再 upsert 合并后绑定
+      if (nextBindings) {
+        if (visibleOldIds.length) {
+          const { error: delErr } = await supabase
+            .from('product_warehouses')
+            .delete()
+            .eq('product_id', id)
+            .in('warehouse_id', visibleOldIds);
+          if (delErr) throw delErr;
+        }
+        const bindRows = nextBindings.map((b) => ({ product_id: id, warehouse_id: b.warehouse_id, sale_price: b.sale_price }));
+        const { error: insErr } = await supabase.from('product_warehouses').upsert(bindRows);
+        if (insErr) throw insErr;
+      }
+
+      await writeAudit(ctx, req, 'update', 'product', id, before, { ...data, bindings: appliedBindings });
+      return res.status(200).json({ data: { ...data, bindings: appliedBindings } });
     }
 
     if (req.method === 'DELETE') {
       requirePermission(ctx, 'products.delete');
       const before = await fetchProductVisible(supabase, ctx, id);
+      // 一货多仓下商品为公司级主档：普通账号仅当其"全部"绑定仓均可见时才允许删除整档，
+      // 防止 A 仓用户删除同时绑定其它不可见仓的主档（超管不受限）。
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const fullBindings = (await loadProductBindings(supabase, [id])).get(id) || [];
+        const whSet = new Set(ctx.warehouseIds || []);
+        const allVisible = fullBindings.every((b) => whSet.has(b.warehouse_id));
+        if (!allVisible) {
+          throw Errors.forbidden('商品已绑定其它仓库，仅可解绑当前仓库，不能删除整档商品');
+        }
+      }
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

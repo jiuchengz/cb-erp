@@ -97111,14 +97111,14 @@ async function loadUserAccessOnce(supabase, userId) {
       if (name === "super_admin") isSuperAdmin = true;
     }
   }
-  if (!isSuperAdmin && roleIds.length) {
-    const { data: rwData, error: rwErr } = await supabase.from("role_warehouses").select("warehouse_id").in("role_id", roleIds);
-    if (!rwErr) {
-      for (const rw of rwData || []) {
-        if (rw?.warehouse_id) warehouseSet.add(rw.warehouse_id);
+  if (!isSuperAdmin) {
+    const { data: uwData, error: uwErr } = await supabase.from("user_warehouses").select("warehouse_id").eq("user_id", userId);
+    if (!uwErr) {
+      for (const uw of uwData || []) {
+        if (uw?.warehouse_id) warehouseSet.add(uw.warehouse_id);
       }
     } else {
-      console.warn("[auth] role_warehouses load skipped (migration not applied?):", rwErr.message);
+      console.warn("[auth] user_warehouses load skipped (migration not applied?):", uwErr.message);
     }
   }
   if (roleIds.length) {
@@ -101583,22 +101583,96 @@ function applyWarehouseFilter(query, ctx, column = "warehouse_id") {
   }
   return query.in(column, ids);
 }
+var NULL_UUID = "00000000-0000-0000-0000-000000000000";
+var BIND_CHUNK = 500;
+async function loadProductBindings(supabase, productIds) {
+  const out = /* @__PURE__ */ new Map();
+  const uniq = Array.from(new Set(productIds.filter(Boolean)));
+  if (uniq.length === 0) return out;
+  for (let i = 0; i < uniq.length; i += BIND_CHUNK) {
+    const chunk = uniq.slice(i, i + BIND_CHUNK);
+    const { data, error } = await supabase.from("product_warehouses").select("product_id, warehouse_id, sale_price").in("product_id", chunk);
+    if (error) throw error;
+    for (const r of data || []) {
+      const arr = out.get(r.product_id) || [];
+      arr.push({ warehouse_id: r.warehouse_id, sale_price: Number(r.sale_price ?? 0) });
+      out.set(r.product_id, arr);
+    }
+  }
+  return out;
+}
 var WH_PAGE = 1e3;
-async function loadVisibleLinkIds(supabase, ctx) {
+async function loadVisibleProductIds(supabase, ctx) {
   if (hasUnrestrictedWarehouse(ctx)) return null;
   const ids = ctx.warehouseIds || [];
-  const linkIds = /* @__PURE__ */ new Set();
-  if (ids.length === 0) return linkIds;
+  const productIds = /* @__PURE__ */ new Set();
+  if (ids.length === 0) return productIds;
   for (let page = 0; ; page++) {
-    const { data, error } = await supabase.from("products").select("link_id").in("warehouse_id", ids).is("deleted_at", null).not("link_id", "is", null).neq("link_id", "").range(page * WH_PAGE, (page + 1) * WH_PAGE - 1);
+    const { data, error } = await supabase.from("product_warehouses").select("product_id").in("warehouse_id", ids).range(page * WH_PAGE, (page + 1) * WH_PAGE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    rows.forEach((r) => {
+      if (r.product_id) productIds.add(String(r.product_id));
+    });
+    if (rows.length < WH_PAGE) break;
+  }
+  return productIds;
+}
+async function loadVisibleLinkIds(supabase, ctx) {
+  if (hasUnrestrictedWarehouse(ctx)) return null;
+  const visibleProductIds = await loadVisibleProductIds(supabase, ctx);
+  if (!visibleProductIds) return null;
+  const linkIds = /* @__PURE__ */ new Set();
+  if (visibleProductIds.size === 0) return linkIds;
+  const ids = Array.from(visibleProductIds);
+  for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+    const chunk = ids.slice(i, i + BIND_CHUNK);
+    const { data, error } = await supabase.from("products").select("link_id").in("id", chunk).is("deleted_at", null).not("link_id", "is", null).neq("link_id", "");
     if (error) throw error;
     const rows = data || [];
     rows.forEach((p) => {
       if (p.link_id) linkIds.add(String(p.link_id));
     });
-    if (rows.length < WH_PAGE) break;
   }
   return linkIds;
+}
+async function fetchProductBindingsVisible(supabase, ctx, productId) {
+  const { data: row, error } = await supabase.from("products").select("*").eq("id", productId).is("deleted_at", null).single();
+  if (error) {
+    if (error.code === "PGRST116") throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
+    throw error;
+  }
+  const allBindings = (await loadProductBindings(supabase, [productId])).get(productId) || [];
+  let visible;
+  if (hasUnrestrictedWarehouse(ctx)) {
+    visible = allBindings;
+  } else {
+    const whSet = new Set(ctx.warehouseIds || []);
+    visible = allBindings.filter((b) => whSet.has(b.warehouse_id));
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && visible.length === 0) {
+    throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
+  }
+  return { row, bindings: visible };
+}
+function bindProductWarehouseFilter(ctx, filterWarehouseId = "") {
+  if (hasUnrestrictedWarehouse(ctx)) {
+    const selectBind2 = "product_warehouses(warehouse_id, sale_price)";
+    const filter2 = (q) => {
+      if (filterWarehouseId) return q.eq("product_warehouses.warehouse_id", filterWarehouseId);
+      return q;
+    };
+    return { selectBind: selectBind2, filter: filter2 };
+  }
+  const ids = ctx.warehouseIds || [];
+  const selectBind = "product_warehouses!inner(warehouse_id, sale_price)";
+  const filter = (q) => {
+    let x = q;
+    x = x.in("product_warehouses.warehouse_id", ids.length ? ids : [NULL_UUID]);
+    if (filterWarehouseId) x = x.eq("product_warehouses.warehouse_id", filterWarehouseId);
+    return x;
+  };
+  return { selectBind, filter };
 }
 
 // server/_handlers/export-xlsx.ts
@@ -101783,17 +101857,16 @@ async function handler6(req, res) {
       const supabase = getAdminClient();
       const { data: typeMeta } = await supabase.from("after_sale_types").select("value").eq("value", body.type).maybeSingle();
       if (!typeMeta) throw Errors.badRequest(`\u672A\u77E5\u552E\u540E\u7C7B\u578B\uFF1A${body.type}`);
-      const prodIds = body.items.map((it) => it.product_id);
-      const { data: prods } = await supabase.from("products").select("id, warehouse_id").in("id", prodIds).is("deleted_at", null);
-      const prodMap = {};
-      (prods || []).forEach((p) => {
-        prodMap[p.id] = p.warehouse_id ?? null;
-      });
+      const prodIds = [...new Set(body.items.map((it) => it.product_id))];
+      const { data: prods } = await supabase.from("products").select("id").in("id", prodIds).is("deleted_at", null);
+      const prodSet = new Set((prods || []).map((p) => p.id));
+      const bindMap = await loadProductBindings(supabase, prodIds);
+      const visWh = new Set(ctx.warehouseIds || []);
       for (const pid of prodIds) {
-        const wh = prodMap[pid];
-        if (wh === void 0) throw Errors.badRequest("\u552E\u540E\u660E\u7EC6\u5B58\u5728\u65E0\u6548\u5546\u54C1");
-        if (wh) assertWarehouseVisible(ctx, wh, "\u8BE5\u4ED3\u5E93\u7684\u5546\u54C1");
-        else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden("\u552E\u540E\u660E\u7EC6\u5546\u54C1\u7F3A\u5C11\u4ED3\u5E93\u5F52\u5C5E");
+        if (!prodSet.has(pid)) throw Errors.badRequest("\u552E\u540E\u660E\u7EC6\u5B58\u5728\u65E0\u6548\u5546\u54C1");
+        const binds = bindMap.get(pid) || [];
+        const ok = hasUnrestrictedWarehouse(ctx) ? binds.length > 0 : binds.some((b) => visWh.has(b.warehouse_id));
+        if (!ok) throw Errors.forbidden("\u552E\u540E\u660E\u7EC6\u5546\u54C1\u672A\u7ED1\u5B9A\u5F53\u524D\u8D26\u53F7\u53EF\u89C1\u4ED3\u5E93");
       }
       if (body.warehouse_id) assertWarehouseVisible(ctx, body.warehouse_id, "\u8BE5\u4ED3\u5E93");
       const { data: order, error } = await supabase.from("after_sales").insert({
@@ -101885,6 +101958,7 @@ async function handler8(req, res) {
 }
 
 // server/_handlers/inventory.ts
+var NULL_UUID2 = "00000000-0000-0000-0000-000000000000";
 async function handler9(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -101900,7 +101974,15 @@ async function handler9(req, res) {
     const whType = typeof req.query.wh_type === "string" ? req.query.wh_type.trim() : "";
     const supabase = getAdminClient();
     if (whType === "overseas") {
-      let pq = supabase.from("products").select("id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at", { count: "exact" }).gt("overseas_stock", 0).is("deleted_at", null);
+      const baseSelect = "id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at";
+      let pq;
+      if (hasUnrestrictedWarehouse(ctx)) {
+        pq = supabase.from("products").select(baseSelect, { count: "exact" });
+      } else {
+        const ids = ctx.warehouseIds || [];
+        pq = supabase.from("products").select(baseSelect + ", product_warehouses!inner(warehouse_id)", { count: "exact" }).in("product_warehouses.warehouse_id", ids.length ? ids : [NULL_UUID2]);
+      }
+      pq = pq.gt("overseas_stock", 0).is("deleted_at", null);
       if (productId) pq = pq.eq("id", productId);
       if (sku) pq = pq.ilike("sku", `%${sku}%`);
       pq = pq.order("updated_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -101932,6 +102014,7 @@ async function handler9(req, res) {
       else return res.status(200).json({ data: [], total: 0, page: q.page, pageSize: q.pageSize });
     }
     if (warehouseId) query = query.eq("warehouse_id", warehouseId);
+    query = applyWarehouseFilter(query, ctx, "warehouse_id");
     query = query.order("updated_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
     const { data, error, count } = await query;
     if (error) throw error;
@@ -102219,16 +102302,23 @@ async function handler11(req, res) {
 }
 
 // server/_handlers/products.ts
+var bindingItemSchema = external_exports.object({
+  warehouse_id: external_exports.string().uuid(),
+  sale_price: external_exports.coerce.number().min(0).optional().default(0)
+});
 var createSchema3 = external_exports.object({
   sku: external_exports.string().max(200).nullable().optional(),
   name: external_exports.string().min(1).max(200),
   barcode: external_exports.string().max(64).nullable().optional(),
   category: external_exports.string().max(100).nullable().optional(),
+  // 主档默认售价/兼容字段；多仓售价以 warehouse_bindings 绑定行为准
   unit_price: external_exports.coerce.number().min(0).optional().default(0),
   currency: external_exports.string().max(8).optional().default("MXN"),
   status: external_exports.enum(["active", "inactive"]).optional().default("active"),
-  // 仓库级隔离：产品必须归属某个仓库；同款跨仓=多条独立产品记录
-  warehouse_id: external_exports.string().uuid(),
+  // 一货多仓：创建须至少绑定一个仓库（前端默认绑定总仓）；售价按仓存绑定行。
+  // 兼容旧调用：仅传 warehouse_id 时视为绑定该仓且 sale_price=unit_price。
+  warehouse_id: external_exports.string().uuid().optional(),
+  warehouse_bindings: external_exports.array(bindingItemSchema).min(1).optional(),
   // 老系统 listings 业务字段
   code: external_exports.string().max(255).nullable().optional(),
   listing_time: external_exports.string().max(255).nullable().optional(),
@@ -102304,12 +102394,12 @@ async function handler12(req, res) {
       const linkIdsParam = typeof req.query.link_ids === "string" && req.query.link_ids.trim() ? req.query.link_ids.trim() : "";
       const linkIds = linkIdsParam ? Array.from(new Set(linkIdsParam.split(",").map((x) => x.trim()).filter(Boolean))).slice(0, 500) : [];
       const supabase = getAdminClient();
-      let query = supabase.from("products").select("*", { count: "exact" }).is("deleted_at", null);
-      query = applyWarehouseFilter(query, ctx, "warehouse_id");
+      const bindFilter = bindProductWarehouseFilter(ctx, warehouseId);
+      let query = supabase.from("products").select(`*, ${bindFilter.selectBind}`, { count: "exact" }).is("deleted_at", null);
+      query = bindFilter.filter(query);
       if (s) query = query.or(`sku.ilike.%${s}%,name.ilike.%${s}%,barcode.ilike.%${s}%,code.ilike.%${s}%,link_id.ilike.%${s}%`);
       if (category) query = query.eq("category", category);
       if (status) query = query.eq("status", status);
-      if (warehouseId) query = query.eq("warehouse_id", warehouseId);
       if (linkIds.length) query = query.in("link_id", linkIds);
       query = query.order("created_at", { ascending: false });
       if (q.pageSize > 0) {
@@ -102317,7 +102407,25 @@ async function handler12(req, res) {
       }
       const { data, error, count } = await query;
       if (error) throw error;
-      const rows = data || [];
+      const rows = (data || []).map((r) => {
+        const embBindings = Array.isArray(r.product_warehouses) ? r.product_warehouses : [];
+        delete r.product_warehouses;
+        const bindings = embBindings.map((b) => ({
+          warehouse_id: b.warehouse_id,
+          sale_price: Number(b.sale_price ?? 0)
+        }));
+        let salePrice = Number(r.unit_price ?? 0);
+        if (bindings.length) {
+          const hit = warehouseId ? bindings.find((b) => b.warehouse_id === warehouseId) : void 0;
+          salePrice = hit ? Number(hit.sale_price ?? 0) : Number(bindings[0].sale_price ?? 0);
+        }
+        return {
+          ...r,
+          warehouse_ids: bindings.map((b) => b.warehouse_id),
+          warehouse_count: bindings.length,
+          sale_price: salePrice
+        };
+      });
       const pageIds = rows.map((r) => r.id);
       const pageLinkIds = rows.map((r) => String(r.link_id || "").trim()).filter(Boolean);
       const linkToProduct = /* @__PURE__ */ new Map();
@@ -102411,9 +102519,18 @@ async function handler12(req, res) {
           body[k] = v === "" && nullableKeys.includes(k) ? null : v;
         }
       }
-      assertWarehouseVisible(ctx, body.warehouse_id, "\u8BE5\u4ED3\u5E93");
+      let bindings = Array.isArray(body.warehouse_bindings) ? body.warehouse_bindings.map((b) => ({ warehouse_id: b.warehouse_id, sale_price: Number(b.sale_price ?? 0) })) : [];
+      delete body.warehouse_bindings;
+      if (!bindings.length && body.warehouse_id) {
+        bindings = [{ warehouse_id: body.warehouse_id, sale_price: Number(body.unit_price ?? 0) }];
+      }
+      if (!bindings.length) throw Errors.badRequest("\u8BF7\u81F3\u5C11\u7ED1\u5B9A\u4E00\u4E2A\u4ED3\u5E93");
+      const deduped = /* @__PURE__ */ new Map();
+      for (const b of bindings) deduped.set(b.warehouse_id, b);
+      bindings = Array.from(deduped.values());
+      for (const b of bindings) assertWarehouseVisible(ctx, b.warehouse_id, "\u8BE5\u4ED3\u5E93");
       if (body.code) {
-        const { data: dup } = await supabase.from("products").select("id").eq("warehouse_id", body.warehouse_id).eq("code", body.code).is("deleted_at", null).limit(1);
+        const { data: dup } = await supabase.from("products").select("id").eq("code", body.code).is("deleted_at", null).limit(1);
         if (dup && dup.length) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${body.code}`);
       }
       const imgB64 = body.image_base64;
@@ -102425,6 +102542,9 @@ async function handler12(req, res) {
           console.error("[products] inline image upload failed:", imgErr?.message || imgErr);
         }
       }
+      const primary = bindings[0];
+      body.warehouse_id = primary.warehouse_id;
+      body.unit_price = primary.sale_price;
       const { data, error } = await supabase.from("products").insert(body).select().single();
       if (error) {
         if (error.code === "23505") {
@@ -102432,8 +102552,11 @@ async function handler12(req, res) {
         }
         throw error;
       }
-      await writeAudit(ctx, req, "create", "product", data.id, null, data);
-      return res.status(201).json({ data });
+      const bindRows = bindings.map((b) => ({ product_id: data.id, warehouse_id: b.warehouse_id, sale_price: b.sale_price }));
+      const { error: bindErr } = await supabase.from("product_warehouses").upsert(bindRows);
+      if (bindErr) throw bindErr;
+      await writeAudit(ctx, req, "create", "product", data.id, null, { ...data, bindings });
+      return res.status(201).json({ data: { ...data, warehouse_ids: bindings.map((b) => b.warehouse_id), sale_price: primary.sale_price } });
     }
     return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
   } catch (e) {
@@ -102707,15 +102830,19 @@ async function handler15(req, res) {
     requirePermission(ctx, "products.delete");
     const { ids } = parse(batchDeleteSchema, req.body || {});
     const supabase = getAdminClient();
-    const { data: before, error: selErr } = await supabase.from("products").select("id, sku, name, warehouse_id").in("id", ids).is("deleted_at", null);
+    const { data: before, error: selErr } = await supabase.from("products").select("id, sku, name").in("id", ids).is("deleted_at", null);
     if (selErr) throw selErr;
     const found = before || [];
-    if (!hasUnrestrictedWarehouse(ctx)) {
-      const visible = new Set(ctx.warehouseIds || []);
-      const denied = found.filter((p) => !visible.has(p.warehouse_id));
-      if (denied.length) throw Errors.forbidden("\u6279\u91CF\u5220\u9664\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1\uFF0C\u5DF2\u53D6\u6D88");
-    }
     const foundIds = found.map((p) => p.id);
+    if (foundIds.length && !hasUnrestrictedWarehouse(ctx)) {
+      const bindMap = await loadProductBindings(supabase, foundIds);
+      const visWh = new Set(ctx.warehouseIds || []);
+      const denied = found.filter((p) => {
+        const binds = bindMap.get(p.id) || [];
+        return binds.length === 0 || binds.some((b) => !visWh.has(b.warehouse_id));
+      });
+      if (denied.length) throw Errors.forbidden("\u6279\u91CF\u5220\u9664\u5305\u542B\u540C\u65F6\u7ED1\u5B9A\u5176\u5B83\u4ED3\u5E93\u7684\u5546\u54C1\uFF0C\u5DF2\u53D6\u6D88");
+    }
     if (foundIds.length) {
       const { error: delErr } = await supabase.from("products").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).in("id", foundIds);
       if (delErr) throw delErr;
@@ -102737,7 +102864,10 @@ var batchEditSchema = external_exports.object({
     safety_stock: external_exports.coerce.number().min(0).optional()
   }).refine((p) => Object.keys(p).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u8981\u4FEE\u6539\u7684\u5B57\u6BB5" }),
   // 改价方式：fixed=直接设为该值；percent=在现价基础上按百分比调整（如 10 表示上涨 10%，-5 表示下调 5%）
-  price_mode: external_exports.enum(["fixed", "percent"]).optional().default("fixed")
+  price_mode: external_exports.enum(["fixed", "percent"]).optional().default("fixed"),
+  // 一货多仓：改价目标仓（售价按仓存于 product_warehouses.sale_price）。
+  // 不传=对每个商品的“全部可见绑定仓”改价；传了则仅对该绑定行改价（未绑定该仓的商品改价被跳过，主档其它字段照常）。
+  warehouse_id: external_exports.string().uuid().optional()
 });
 async function handler16(req, res) {
   try {
@@ -102747,44 +102877,66 @@ async function handler16(req, res) {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
     requirePermission(ctx, "products.write");
-    const { ids, patch, price_mode } = parse(batchEditSchema, req.body || {});
+    const { ids, patch, price_mode, warehouse_id } = parse(batchEditSchema, req.body || {});
     const supabase = getAdminClient();
-    const { data: before, error: selErr } = await supabase.from("products").select("id, sku, name, unit_price, category, status, safety_stock, warehouse_id").in("id", ids).is("deleted_at", null);
+    const { data: before, error: selErr } = await supabase.from("products").select("id, sku, name, unit_price, category, status, safety_stock").in("id", ids).is("deleted_at", null);
     if (selErr) throw selErr;
     const found = before || [];
-    if (!hasUnrestrictedWarehouse(ctx)) {
-      const visible = new Set(ctx.warehouseIds || []);
-      const denied = found.filter((p) => !visible.has(p.warehouse_id));
-      if (denied.length) throw Errors.forbidden("\u6279\u91CF\u7F16\u8F91\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1\uFF0C\u5DF2\u53D6\u6D88");
-    }
     const foundIds = found.map((p) => p.id);
     if (!foundIds.length) {
       return res.status(200).json({ ok: true, updated: 0, missing: ids.length });
     }
+    const bindMap = await loadProductBindings(supabase, foundIds);
+    const visWh = hasUnrestrictedWarehouse(ctx) ? null : new Set(ctx.warehouseIds || []);
+    if (warehouse_id) assertWarehouseVisible(ctx, warehouse_id, "\u8BE5\u4ED3\u5E93");
+    const allVisibleBindingsOf = (pid) => {
+      const all = bindMap.get(pid) || [];
+      return visWh ? all.filter((b) => visWh.has(b.warehouse_id)) : all;
+    };
+    const visibleBindingsOf = (pid) => {
+      const out = allVisibleBindingsOf(pid);
+      return warehouse_id ? out.filter((b) => b.warehouse_id === warehouse_id) : out;
+    };
+    if (!hasUnrestrictedWarehouse(ctx)) {
+      const denied = found.filter((p) => allVisibleBindingsOf(p.id).length === 0);
+      if (denied.length) throw Errors.forbidden("\u6279\u91CF\u7F16\u8F91\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1\uFF0C\u5DF2\u53D6\u6D88");
+    }
     const now = (/* @__PURE__ */ new Date()).toISOString();
-    const updates = found.map((p) => {
+    const mainRows = [];
+    const priceRows = [];
+    for (const p of found) {
+      const binds = visibleBindingsOf(p.id);
       const row = {};
+      let primaryPrice = null;
       if (patch.unit_price !== void 0) {
-        if (price_mode === "percent") {
-          row.unit_price = Math.max(0, Math.round(Number(p.unit_price || 0) * (1 + patch.unit_price / 100) * 100) / 100);
-        } else {
-          row.unit_price = patch.unit_price;
+        const allBinds = allVisibleBindingsOf(p.id);
+        const touchesPrimary = !warehouse_id || allBinds[0]?.warehouse_id === warehouse_id;
+        for (const b of binds) {
+          const base = Number(b.sale_price ?? p.unit_price ?? 0);
+          const np = price_mode === "percent" ? Math.max(0, Math.round(base * (1 + patch.unit_price / 100) * 100) / 100) : Math.max(0, patch.unit_price);
+          priceRows.push({ product_id: p.id, warehouse_id: b.warehouse_id, newPrice: np });
+          if (primaryPrice === null && touchesPrimary) primaryPrice = np;
         }
+        if (primaryPrice !== null) row.unit_price = primaryPrice;
       }
       if (patch.category !== void 0) row.category = patch.category;
       if (patch.status !== void 0) row.status = patch.status;
       if (patch.safety_stock !== void 0) row.safety_stock = patch.safety_stock;
-      if (Object.keys(row).length === 0) return null;
+      if (Object.keys(row).length === 0) continue;
       row.updated_at = now;
-      return { id: p.id, ...row };
-    }).filter(Boolean);
-    let updatedCount = 0;
-    if (updates.length) {
-      const { error: upErr } = await supabase.from("products").upsert(updates, { onConflict: "id" });
-      if (upErr) throw upErr;
-      updatedCount = updates.length;
+      mainRows.push({ id: p.id, ...row });
     }
-    await writeAudit(ctx, req, "batch_edit", "product", void 0, found, updates);
+    let updatedCount = 0;
+    if (mainRows.length) {
+      const { error: upErr } = await supabase.from("products").upsert(mainRows, { onConflict: "id" });
+      if (upErr) throw upErr;
+      updatedCount = mainRows.length;
+    }
+    for (const pr of priceRows) {
+      const { error: bErr } = await supabase.from("product_warehouses").update({ sale_price: pr.newPrice, updated_at: now }).eq("product_id", pr.product_id).eq("warehouse_id", pr.warehouse_id);
+      if (bErr) throw bErr;
+    }
+    await writeAudit(ctx, req, "batch_edit", "product", void 0, found, { mainRows, priceRows });
     return res.status(200).json({ ok: true, updated: updatedCount, missing: ids.length - foundIds.length });
   } catch (e) {
     return handleError2(res, e);
@@ -102811,14 +102963,16 @@ async function handler17(req, res) {
     const { items } = parse(batchStockSchema, req.body || {});
     const supabase = getAdminClient();
     const ids = Array.from(new Set(items.map((it) => it.id)));
-    const { data: found, error: selErr } = await supabase.from("products").select("id, sku, name, overseas_stock, warehouse_id").in("id", ids).is("deleted_at", null);
+    const { data: found, error: selErr } = await supabase.from("products").select("id, sku, name, overseas_stock").in("id", ids).is("deleted_at", null);
     if (selErr) throw selErr;
+    const foundRows = found || [];
     if (!hasUnrestrictedWarehouse(ctx)) {
-      const visible = new Set(ctx.warehouseIds || []);
-      const denied = (found || []).filter((p) => !visible.has(p.warehouse_id));
+      const bindMap = await loadProductBindings(supabase, foundRows.map((p) => p.id));
+      const visWh = new Set(ctx.warehouseIds || []);
+      const denied = foundRows.filter((p) => !(bindMap.get(p.id) || []).some((b) => visWh.has(b.warehouse_id)));
       if (denied.length) throw Errors.forbidden("\u6279\u91CF\u66F4\u65B0\u5E93\u5B58\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1\uFF0C\u5DF2\u53D6\u6D88");
     }
-    const foundIds = new Set((found || []).map((p) => p.id));
+    const foundIds = new Set(foundRows.map((p) => p.id));
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const updates = items.filter((it) => foundIds.has(it.id)).map((it) => ({ id: it.id, overseas_stock: it.overseas_stock, updated_at: now }));
     let updatedCount = 0;
@@ -102853,9 +103007,18 @@ async function handler18(req, res) {
     }
     requirePermission(ctx, "inventory.read");
     const supabase = getAdminClient();
+    const NULL_UUID3 = "00000000-0000-0000-0000-000000000000";
+    const productsSelect = "id, sku, name, code, category, safety_stock, overseas_stock, unit_price";
+    let productsQ;
+    if (hasUnrestrictedWarehouse(ctx)) {
+      productsQ = supabase.from("products").select(productsSelect).is("deleted_at", null);
+    } else {
+      const ids = ctx.warehouseIds || [];
+      productsQ = supabase.from("products").select(productsSelect + ", product_warehouses!inner(warehouse_id)").in("product_warehouses.warehouse_id", ids.length ? ids : [NULL_UUID3]).is("deleted_at", null);
+    }
     const [productsRes, invRes] = await Promise.all([
-      supabase.from("products").select("id, sku, name, code, category, safety_stock, overseas_stock, unit_price").is("deleted_at", null),
-      supabase.from("inventory").select("product_id, quantity")
+      productsQ,
+      applyWarehouseFilter(supabase.from("inventory").select("product_id, warehouse_id, quantity"), ctx, "warehouse_id")
     ]);
     if (productsRes.error) throw productsRes.error;
     if (invRes.error) throw invRes.error;
@@ -103471,12 +103634,14 @@ async function handler24(req, res) {
       const supabase = getAdminClient();
       assertWarehouseVisible(ctx, body.warehouse_id, "\u8BE5\u4ED3\u5E93");
       if (!hasUnrestrictedWarehouse(ctx)) {
-        const itemIds = body.items.map((it) => it.product_id);
-        const { data: itemProds, error: ipErr } = await supabase.from("products").select("id, warehouse_id").in("id", itemIds).is("deleted_at", null);
-        if (ipErr) throw ipErr;
+        const itemIds = [...new Set(body.items.map((it) => it.product_id))];
+        const bindMap = await loadProductBindings(supabase, itemIds);
         const visible = new Set(ctx.warehouseIds || []);
-        const denied = (itemProds || []).filter((p) => !visible.has(p.warehouse_id));
-        if (denied.length) throw Errors.forbidden("\u8865\u8D27\u660E\u7EC6\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1");
+        for (const pid of itemIds) {
+          const binds = bindMap.get(pid) || [];
+          const ok = binds.some((b) => visible.has(b.warehouse_id));
+          if (!ok) throw Errors.forbidden("\u8865\u8D27\u660E\u7EC6\u5305\u542B\u65E0\u6743\u8BBF\u95EE\u7684\u4ED3\u5E93\u5546\u54C1");
+        }
       }
       const totalQty = body.items.reduce((s, it) => s + Number(it.quantity), 0);
       const { data: order, error } = await supabase.from("replenishment_orders").insert({
@@ -103509,18 +103674,14 @@ var SYSTEM_ROLES = /* @__PURE__ */ new Set(["super_admin", "admin", "manager", "
 var createSchema6 = external_exports.object({
   name: external_exports.string().min(1).max(50),
   description: external_exports.string().max(256).nullable().optional(),
-  permissions: external_exports.array(external_exports.string().min(1).max(100)).optional(),
-  // 角色绑定的可见仓库 id（仓库级行级隔离）
-  warehouses: external_exports.array(external_exports.string().uuid()).optional()
+  permissions: external_exports.array(external_exports.string().min(1).max(100)).optional()
 });
 function normalizeRole(row) {
   const perms = (row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean);
-  const whIds = (row.role_warehouses || []).map((rw) => rw.warehouse_id).filter(Boolean);
-  const { role_warehouses, ...rest } = row;
+  const { role_permissions, ...rest } = row;
   return {
     ...rest,
     permissions: perms,
-    warehouse_ids: whIds,
     is_system: SYSTEM_ROLES.has(row.name)
   };
 }
@@ -103534,25 +103695,6 @@ async function resolvePermissionIds(supabase, codes) {
   if (missing.length > 0) throw Errors.badRequest(`\u6743\u9650\u4E0D\u5B58\u5728\uFF1A${missing.join(", ")}`);
   return found.map((p) => p.id);
 }
-async function resolveWarehouseIds(supabase, ids) {
-  if (!ids || ids.length === 0) return [];
-  const uniqueIds = Array.from(new Set(ids));
-  const { data, error } = await supabase.from("warehouses").select("id").in("id", uniqueIds);
-  if (error) throw error;
-  const found = new Set((data || []).map((w) => w.id));
-  const missing = uniqueIds.filter((id) => !found.has(id));
-  if (missing.length > 0) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u4ED3\u5E93 ID");
-  return uniqueIds;
-}
-async function replaceRoleWarehouses(supabase, roleId, warehouseIds) {
-  const { error: delErr } = await supabase.from("role_warehouses").delete().eq("role_id", roleId);
-  if (delErr) throw delErr;
-  if (warehouseIds.length > 0) {
-    const rows = warehouseIds.map((warehouse_id) => ({ role_id: roleId, warehouse_id }));
-    const { error: insErr } = await supabase.from("role_warehouses").insert(rows);
-    if (insErr) throw insErr;
-  }
-}
 async function handler25(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
@@ -103560,7 +103702,7 @@ async function handler25(req, res) {
     if (req.method === "GET") {
       requirePermission(ctx, "user.read");
       const supabase = getAdminClient();
-      const { data, error } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code)), role_warehouses(warehouse_id)").order("name", { ascending: true });
+      const { data, error } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code))").order("name", { ascending: true });
       if (error) throw error;
       return res.status(200).json({ data: (data || []).map(normalizeRole) });
     }
@@ -103572,7 +103714,6 @@ async function handler25(req, res) {
       if (exErr) throw exErr;
       if (existing) throw Errors.conflict("\u89D2\u8272\u540D\u79F0\u5DF2\u5B58\u5728");
       const permIds = await resolvePermissionIds(supabase, body.permissions || []);
-      const whIds = await resolveWarehouseIds(supabase, body.warehouses || []);
       const { data: created, error: insErr } = await supabase.from("roles").insert({ name: body.name, description: body.description ?? null }).select().single();
       if (insErr) {
         if (insErr.code === "23505") throw Errors.conflict("\u89D2\u8272\u540D\u79F0\u5DF2\u5B58\u5728");
@@ -103583,10 +103724,7 @@ async function handler25(req, res) {
         const { error: rpErr } = await supabase.from("role_permissions").insert(rows);
         if (rpErr) throw rpErr;
       }
-      if (whIds.length > 0) {
-        await replaceRoleWarehouses(supabase, created.id, whIds);
-      }
-      const { data: full, error: fullErr } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code)), role_warehouses(warehouse_id)").eq("id", created.id).single();
+      const { data: full, error: fullErr } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code))").eq("id", created.id).single();
       if (fullErr) throw fullErr;
       await writeAudit(ctx, req, "create", "role", created.id, null, full);
       return res.status(201).json({ data: normalizeRole(full) });
@@ -103602,23 +103740,19 @@ var SYSTEM_ROLES2 = /* @__PURE__ */ new Set(["super_admin", "admin", "manager", 
 var updateSchema2 = external_exports.object({
   name: external_exports.string().min(1).max(50).optional(),
   description: external_exports.string().max(256).nullable().optional(),
-  permissions: external_exports.array(external_exports.string().min(1).max(100)).optional(),
-  // 角色绑定的可见仓库 id（仓库级行级隔离）
-  warehouses: external_exports.array(external_exports.string().uuid()).optional()
+  permissions: external_exports.array(external_exports.string().min(1).max(100)).optional()
 });
 function normalizeRole2(row) {
   const perms = (row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean);
-  const whIds = (row.role_warehouses || []).map((rw) => rw.warehouse_id).filter(Boolean);
-  const { role_warehouses, ...rest } = row;
+  const { role_permissions, ...rest } = row;
   return {
     ...rest,
     permissions: perms,
-    warehouse_ids: whIds,
     is_system: SYSTEM_ROLES2.has(row.name)
   };
 }
 async function fetchRole(supabase, id) {
-  const { data, error } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code)), role_warehouses(warehouse_id)").eq("id", id).single();
+  const { data, error } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code))").eq("id", id).single();
   if (error) {
     if (error.code === "PGRST116") throw Errors.notFound("\u89D2\u8272\u4E0D\u5B58\u5728");
     throw error;
@@ -103634,25 +103768,6 @@ async function resolvePermissionIds2(supabase, codes) {
   const missing = codes.filter((c) => !foundCodes.has(c));
   if (missing.length > 0) throw Errors.badRequest(`\u6743\u9650\u4E0D\u5B58\u5728\uFF1A${missing.join(", ")}`);
   return found.map((p) => p.id);
-}
-async function resolveWarehouseIds2(supabase, ids) {
-  if (!ids || ids.length === 0) return [];
-  const uniqueIds = Array.from(new Set(ids));
-  const { data, error } = await supabase.from("warehouses").select("id").in("id", uniqueIds);
-  if (error) throw error;
-  const found = new Set((data || []).map((w) => w.id));
-  const missing = uniqueIds.filter((id) => !found.has(id));
-  if (missing.length > 0) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u4ED3\u5E93 ID");
-  return uniqueIds;
-}
-async function replaceRoleWarehouses2(supabase, roleId, warehouseIds) {
-  const { error: delErr } = await supabase.from("role_warehouses").delete().eq("role_id", roleId);
-  if (delErr) throw delErr;
-  if (warehouseIds.length > 0) {
-    const rows = warehouseIds.map((warehouse_id) => ({ role_id: roleId, warehouse_id }));
-    const { error: insErr } = await supabase.from("role_warehouses").insert(rows);
-    if (insErr) throw insErr;
-  }
 }
 async function handler26(req, res) {
   try {
@@ -103694,10 +103809,6 @@ async function handler26(req, res) {
           const { error: insErr } = await supabase.from("role_permissions").insert(rows);
           if (insErr) throw insErr;
         }
-      }
-      if (body.warehouses !== void 0) {
-        const whIds = await resolveWarehouseIds2(supabase, body.warehouses);
-        await replaceRoleWarehouses2(supabase, id, whIds);
       }
       const after = await fetchRole(supabase, id);
       await writeAudit(ctx, req, "update", "role", id, before, after);
@@ -103778,34 +103889,63 @@ async function handler27(req, res) {
       requirePermission(ctx, "sales.write");
       const body = parse(createSchema7, req.body || {});
       const supabase = getAdminClient();
-      const prodIds = [...new Set(body.items.map((it) => it.product_id).filter(Boolean))];
-      const { data: prods, error: prodErr } = await supabase.from("products").select("id, sku, name, warehouse_id").in("id", prodIds).is("deleted_at", null);
+      const prodIds = [...new Set(body.items.map((it) => it.product_id).filter((x) => !!x))];
+      const { data: prods, error: prodErr } = await supabase.from("products").select("id, sku, name").in("id", prodIds).is("deleted_at", null);
       if (prodErr) throw prodErr;
       const prodMap = {};
       (prods || []).forEach((p) => {
-        prodMap[p.id] = { sku: p.sku, name: p.name, warehouse_id: p.warehouse_id };
+        prodMap[p.id] = { sku: p.sku, name: p.name };
       });
       if (prodIds.some((id) => !prodMap[id])) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u5546\u54C1 ID");
-      const linkedWhs = /* @__PURE__ */ new Set();
+      const bindMap = await loadProductBindings(supabase, prodIds);
+      const visWh = new Set(ctx.warehouseIds || []);
+      const visibleBindsOf = (pid) => {
+        const all = bindMap.get(pid) || [];
+        return hasUnrestrictedWarehouse(ctx) ? all : all.filter((b) => visWh.has(b.warehouse_id));
+      };
       for (const id of prodIds) {
-        const wh = prodMap[id]?.warehouse_id;
-        if (wh) {
-          assertWarehouseVisible(ctx, wh, "\u8BE5\u4ED3\u5E93\u7684\u5546\u54C1");
-          linkedWhs.add(wh);
+        if (visibleBindsOf(id).length === 0) {
+          throw Errors.forbidden("\u9500\u552E\u660E\u7EC6\u5546\u54C1\u672A\u7ED1\u5B9A\u5F53\u524D\u8D26\u53F7\u53EF\u89C1\u4ED3\u5E93");
         }
       }
-      if (linkedWhs.size > 1) throw Errors.badRequest("\u9500\u552E\u5355\u660E\u7EC6\u5546\u54C1\u5206\u5C5E\u591A\u4E2A\u4ED3\u5E93\uFF0C\u8BF7\u6309\u4ED3\u5E93\u62C6\u5355");
-      const linkedWh = linkedWhs.values().next().value;
-      let orderWarehouseId = body.warehouse_id ?? linkedWh ?? null;
-      if (body.warehouse_id && linkedWh && body.warehouse_id !== linkedWh) {
-        throw Errors.badRequest("\u9500\u552E\u5355\u4ED3\u5E93\u4E0E\u660E\u7EC6\u5546\u54C1\u4ED3\u5E93\u4E0D\u4E00\u81F4");
+      let orderWarehouseId = body.warehouse_id ?? null;
+      if (!orderWarehouseId) {
+        let commonSet = null;
+        for (const id of prodIds) {
+          const ws = new Set(visibleBindsOf(id).map((b) => b.warehouse_id));
+          if (ws.size === 0) {
+            commonSet = /* @__PURE__ */ new Set();
+            break;
+          }
+          const next = /* @__PURE__ */ new Set();
+          for (const wh of ws) {
+            if (commonSet === null || commonSet.has(wh)) next.add(wh);
+          }
+          commonSet = next;
+          if (commonSet.size === 0) break;
+        }
+        if (commonSet && commonSet.size === 1) orderWarehouseId = [...commonSet][0];
+        else if (commonSet && commonSet.size > 1) {
+          throw Errors.badRequest("\u660E\u7EC6\u5546\u54C1\u53EF\u5F52\u5C5E\u591A\u4E2A\u5171\u540C\u4ED3\u5E93\uFF0C\u8BF7\u663E\u5F0F\u6307\u5B9A\u9500\u552E\u5355\u4ED3\u5E93");
+        }
       }
-      if (!orderWarehouseId) throw Errors.badRequest("\u9500\u552E\u5355\u7F3A\u5C11\u4ED3\u5E93\u5F52\u5C5E\uFF0C\u8BF7\u5173\u8054\u5546\u54C1\u6216\u6307\u5B9A\u4ED3\u5E93");
+      if (!orderWarehouseId) throw Errors.badRequest("\u9500\u552E\u5355\u7F3A\u5C11\u4ED3\u5E93\u5F52\u5C5E\uFF0C\u8BF7\u6307\u5B9A\u4ED3\u5E93");
       assertWarehouseVisible(ctx, orderWarehouseId, "\u8BE5\u4ED3\u5E93");
+      for (const id of prodIds) {
+        const all = bindMap.get(id) || [];
+        if (!all.some((b) => b.warehouse_id === orderWarehouseId)) {
+          throw Errors.badRequest("\u9500\u552E\u5355\u4ED3\u5E93\u4E0E\u660E\u7EC6\u5546\u54C1\u4ED3\u5E93\u4E0D\u4E00\u81F4");
+        }
+      }
+      const salePriceMap = {};
+      for (const [pid, binds] of bindMap) {
+        const b = binds.find((x) => x.warehouse_id === orderWarehouseId);
+        if (b) salePriceMap[pid] = b.sale_price;
+      }
       let total = 0;
       const items = body.items.map((it) => {
         const qty = it.quantity;
-        const price = it.unit_price ?? 0;
+        const price = it.unit_price ?? salePriceMap[it.product_id] ?? 0;
         const disc = it.discount ?? 0;
         const subtotal = Math.max(0, qty * price - disc);
         total += subtotal;
@@ -104108,7 +104248,9 @@ var updateSchema3 = external_exports.object({
   name: external_exports.string().min(1).max(100).optional(),
   password: external_exports.string().min(6).max(72).optional(),
   is_active: external_exports.boolean().optional(),
-  role_ids: external_exports.array(external_exports.string().uuid()).optional()
+  role_ids: external_exports.array(external_exports.string().uuid()).optional(),
+  // 用户直接绑定的可见仓库 id（仓库级行级隔离：用户维度）
+  warehouse_ids: external_exports.array(external_exports.string().uuid()).optional()
 });
 var MANAGE_CODES = ["user.manage", "system.manage"];
 async function collectRoleCodes(supabase, roleIds) {
@@ -104118,19 +104260,44 @@ async function collectRoleCodes(supabase, roleIds) {
   return (data || []).map((rp) => rp.permissions?.code).filter(Boolean);
 }
 function normalizeUserRoles(row) {
+  const userRoles = row?.user_roles || [];
+  const userWarehouses = row?.user_warehouses || [];
+  const rolesArr = userRoles.map((ur) => ur?.roles).filter(Boolean);
+  const { user_roles, user_warehouses, ...rest } = row || {};
   return {
-    ...row,
-    name: row.display_name ?? "",
-    roles: (row.user_roles || []).map((ur) => ur?.roles).filter(Boolean)
+    ...rest,
+    name: row?.display_name ?? "",
+    roles: rolesArr,
+    warehouse_ids: userWarehouses.map((uw) => uw?.warehouse_id).filter(Boolean),
+    is_super_admin: rolesArr.some((r) => r?.name === "super_admin")
   };
 }
 async function getProfileWithRoles(supabase, id) {
-  const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name))").eq("id", id).single();
+  const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)").eq("id", id).single();
   if (error) {
     if (error.code === "PGRST116") throw Errors.notFound("\u7528\u6237\u4E0D\u5B58\u5728");
     throw error;
   }
   return normalizeUserRoles(data);
+}
+async function resolveWarehouseIds(supabase, ids) {
+  if (!ids || ids.length === 0) return [];
+  const uniqueIds = Array.from(new Set(ids));
+  const { data, error } = await supabase.from("warehouses").select("id").in("id", uniqueIds);
+  if (error) throw error;
+  const found = new Set((data || []).map((w) => w.id));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u4ED3\u5E93 ID");
+  return uniqueIds;
+}
+async function replaceUserWarehouses(supabase, userId, warehouseIds) {
+  const { error: delErr } = await supabase.from("user_warehouses").delete().eq("user_id", userId);
+  if (delErr) throw delErr;
+  if (warehouseIds.length > 0) {
+    const rows = warehouseIds.map((warehouse_id) => ({ user_id: userId, warehouse_id }));
+    const { error: insErr } = await supabase.from("user_warehouses").insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 async function handler30(req, res) {
   try {
@@ -104180,6 +104347,10 @@ async function handler30(req, res) {
           if (insErr) throw insErr;
         }
       }
+      if (body.warehouse_ids !== void 0) {
+        const whIds = await resolveWarehouseIds(supabase, body.warehouse_ids);
+        await replaceUserWarehouses(supabase, id, whIds);
+      }
       const after = await getProfileWithRoles(supabase, id);
       await writeAudit(ctx, req, "update", "user", id, null, after);
       return res.status(200).json({ data: after });
@@ -104188,7 +104359,7 @@ async function handler30(req, res) {
       requirePermission(ctx, "user.manage");
       if (id === ctx.userId) throw Errors.badRequest("\u4E0D\u80FD\u5220\u9664\u5F53\u524D\u767B\u5F55\u8D26\u53F7");
       const before = await getProfileWithRoles(supabase, id);
-      const isSuperAdmin = (before.user_roles || []).some((ur) => ur.roles?.name === "super_admin");
+      const isSuperAdmin = (before.roles || []).some((r) => r?.name === "super_admin");
       if (isSuperAdmin) throw Errors.badRequest("\u8D85\u7EA7\u7BA1\u7406\u5458\u4E0D\u53EF\u5220\u9664");
       const { error: authErr } = await supabase.auth.admin.deleteUser(id);
       if (authErr) throw authErr;
@@ -104206,15 +104377,36 @@ var createSchema10 = external_exports.object({
   email: external_exports.string().email(),
   name: external_exports.string().min(1).max(100),
   password: external_exports.string().min(6).max(72),
-  role_ids: external_exports.array(external_exports.string().uuid()).optional()
+  role_ids: external_exports.array(external_exports.string().uuid()).optional(),
+  // 用户直接绑定的可见仓库 id（仓库级行级隔离：用户维度）
+  warehouse_ids: external_exports.array(external_exports.string().uuid()).optional()
 });
 async function getProfileWithRoles2(supabase, id) {
-  const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name))").eq("id", id).single();
+  const { data, error } = await supabase.from("profiles").select("*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)").eq("id", id).single();
   if (error) {
     if (error.code === "PGRST116") throw Errors.notFound("\u7528\u6237\u4E0D\u5B58\u5728");
     throw error;
   }
-  return data;
+  return normalizeUserRoles(data);
+}
+async function resolveWarehouseIds2(supabase, ids) {
+  if (!ids || ids.length === 0) return [];
+  const uniqueIds = Array.from(new Set(ids));
+  const { data, error } = await supabase.from("warehouses").select("id").in("id", uniqueIds);
+  if (error) throw error;
+  const found = new Set((data || []).map((w) => w.id));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw Errors.badRequest("\u5B58\u5728\u65E0\u6548\u4ED3\u5E93 ID");
+  return uniqueIds;
+}
+async function replaceUserWarehouses2(supabase, userId, warehouseIds) {
+  const { error: delErr } = await supabase.from("user_warehouses").delete().eq("user_id", userId);
+  if (delErr) throw delErr;
+  if (warehouseIds.length > 0) {
+    const rows = warehouseIds.map((warehouse_id) => ({ user_id: userId, warehouse_id }));
+    const { error: insErr } = await supabase.from("user_warehouses").insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 async function handler31(req, res) {
   try {
@@ -104244,6 +104436,10 @@ async function handler31(req, res) {
         const { error: roleErr } = await supabase.from("user_roles").insert(rows);
         if (roleErr) throw roleErr;
       }
+      if (body.warehouse_ids !== void 0 && body.warehouse_ids.length > 0) {
+        const whIds = await resolveWarehouseIds2(supabase, body.warehouse_ids);
+        await replaceUserWarehouses2(supabase, newId, whIds);
+      }
       const after = await getProfileWithRoles2(supabase, newId);
       await writeAudit(ctx, req, "create", "user", newId, null, after);
       return res.status(201).json({ data: after });
@@ -104252,7 +104448,7 @@ async function handler31(req, res) {
       requirePermission(ctx, "user.read");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
-      let query = supabase.from("profiles").select("*, user_roles(role_id, roles(id, name))", { count: "exact" });
+      let query = supabase.from("profiles").select("*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)", { count: "exact" });
       const email = typeof req.query.email === "string" ? req.query.email.trim() : "";
       if (email) query = query.ilike("email", `%${email}%`);
       query = query.order("created_at", { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -105051,7 +105247,7 @@ async function handler36(req, res) {
     const end = to || fmtD(today);
     const createdAtFrom = `${start}T00:00:00`;
     const createdAtTo = `${end}T23:59:59`;
-    const CACHE_KEY = `dashboard:v1:${start}:${end}`;
+    const CACHE_KEY = `dashboard:v1:${start}:${end}:${ctx.userId}`;
     const cached2 = cacheGet(CACHE_KEY);
     if (cached2) {
       return res.status(200).json({ data: cached2, fromCache: true });
@@ -105062,17 +105258,49 @@ async function handler36(req, res) {
       if (error) throw error;
       return count ?? 0;
     };
+    const countAllProductsVisible = async () => {
+      if (hasUnrestrictedWarehouse(ctx)) return countAll("products");
+      const pids = await loadVisibleProductIds(supabase, ctx);
+      if (!pids || pids.size === 0) return 0;
+      const arr = [...pids];
+      let n = 0;
+      for (let i = 0; i < arr.length; i += 500) {
+        const { count, error } = await supabase.from("products").select("*", { count: "exact", head: true }).in("id", arr.slice(i, i + 500)).is("deleted_at", null);
+        if (error) throw error;
+        n += count ?? 0;
+      }
+      return n;
+    };
     const countSince = async (table) => {
       const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true }).is("deleted_at", null).gte("created_at", createdAtFrom).lte("created_at", createdAtTo);
       if (error) throw error;
       return count ?? 0;
     };
+    const fetchOverseasRows = async () => {
+      if (hasUnrestrictedWarehouse(ctx)) {
+        return supabase.from("products").select("id, overseas_stock").is("deleted_at", null);
+      }
+      const pids = await loadVisibleProductIds(supabase, ctx);
+      if (!pids || pids.size === 0) return { data: [], error: null };
+      const arr = [...pids];
+      const out = [];
+      for (let i = 0; i < arr.length; i += 500) {
+        const r = await supabase.from("products").select("id, overseas_stock").is("deleted_at", null).in("id", arr.slice(i, i + 500));
+        if (r.error) return r;
+        out.push(...r.data || []);
+      }
+      return { data: out, error: null };
+    };
     const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] = await Promise.all([
-      countAll("products"),
-      // 全部库存（含仓库类型，区分国内/海外仓）
-      supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)"),
+      countAllProductsVisible(),
+      // 全部库存（含仓库类型，区分国内/海外仓）；受限账号按可见仓过滤
+      applyWarehouseFilter(
+        supabase.from("inventory").select("product_id, quantity, warehouses!inner(wh_type)"),
+        ctx,
+        "warehouse_id"
+      ),
       // 产品海外库存快照（用于国外库存统计）
-      supabase.from("products").select("id, overseas_stock").is("deleted_at", null),
+      fetchOverseasRows(),
       // 在途库存：调拨发货（国内→海外）且未入仓的明细数量
       supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at)"),
       countSince("shipments"),
@@ -105859,16 +106087,15 @@ async function fetchAfterVisible(supabase, ctx, id) {
 }
 async function assertItemsWarehouseVisible(supabase, ctx, items) {
   const prodIds = [...new Set(items.map((it) => it.product_id))];
-  const { data: prods } = await supabase.from("products").select("id, warehouse_id").in("id", prodIds).is("deleted_at", null);
-  const prodMap = {};
-  (prods || []).forEach((p) => {
-    prodMap[p.id] = p.warehouse_id ?? null;
-  });
+  const { data: prods } = await supabase.from("products").select("id").in("id", prodIds).is("deleted_at", null);
+  const prodSet = new Set((prods || []).map((p) => p.id));
+  const bindMap = await loadProductBindings(supabase, prodIds);
+  const visWh = new Set(ctx.warehouseIds || []);
   for (const pid of prodIds) {
-    const wh = prodMap[pid];
-    if (wh === void 0) throw Errors.badRequest("\u552E\u540E\u660E\u7EC6\u5B58\u5728\u65E0\u6548\u5546\u54C1");
-    if (wh) assertWarehouseVisible(ctx, wh, "\u8BE5\u4ED3\u5E93\u7684\u5546\u54C1");
-    else if (!hasUnrestrictedWarehouse(ctx)) throw Errors.forbidden("\u552E\u540E\u660E\u7EC6\u5546\u54C1\u7F3A\u5C11\u4ED3\u5E93\u5F52\u5C5E");
+    if (!prodSet.has(pid)) throw Errors.badRequest("\u552E\u540E\u660E\u7EC6\u5B58\u5728\u65E0\u6548\u5546\u54C1");
+    const binds = bindMap.get(pid) || [];
+    const ok = hasUnrestrictedWarehouse(ctx) ? binds.length > 0 : binds.some((b) => visWh.has(b.warehouse_id));
+    if (!ok) throw Errors.forbidden("\u552E\u540E\u660E\u7EC6\u5546\u54C1\u672A\u7ED1\u5B9A\u5F53\u524D\u8D26\u53F7\u53EF\u89C1\u4ED3\u5E93");
   }
 }
 var updateSchema7 = external_exports.object({
@@ -106071,6 +106298,10 @@ async function handler49(req, res) {
 }
 
 // server/_handlers/products/[id].ts
+var bindingItemSchema2 = external_exports.object({
+  warehouse_id: external_exports.string().uuid(),
+  sale_price: external_exports.coerce.number().min(0).optional().default(0)
+});
 var updateSchema8 = external_exports.object({
   sku: external_exports.string().max(64).nullable().optional(),
   name: external_exports.string().min(1).max(200).optional(),
@@ -106079,8 +106310,11 @@ var updateSchema8 = external_exports.object({
   unit_price: external_exports.coerce.number().min(0).optional(),
   currency: external_exports.string().max(8).optional(),
   status: external_exports.enum(["active", "inactive"]).optional(),
-  // 迁移仓库（同款记录从 A 仓改归 B 仓，需同步校验同仓编码唯一）
+  // [deprecated] 一货多仓后不再"迁移仓库"：仅传 warehouse_id 时按"改绑为该仓"兼容旧调用
   warehouse_id: external_exports.string().uuid().optional(),
+  // 一货多仓：传 warehouse_bindings 时全量替换"当前账号可见"的绑定（可空数组=解绑全部可见绑定）；
+  // 未传则仅更新主档字段（可见绑定由前端在编辑弹窗内显式提交）。
+  warehouse_bindings: external_exports.array(bindingItemSchema2).optional(),
   // 老系统 listings 业务字段
   code: external_exports.string().max(255).nullable().optional(),
   listing_time: external_exports.string().max(255).nullable().optional(),
@@ -106098,15 +106332,12 @@ var updateSchema8 = external_exports.object({
   safety_stock: external_exports.coerce.number().min(0).optional()
 });
 async function fetchProductVisible(supabase, ctx, id) {
-  const { data, error } = await supabase.from("products").select("*").eq("id", id).is("deleted_at", null).single();
-  if (error) {
-    if (error.code === "PGRST116") throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
-    throw error;
-  }
-  if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(data.warehouse_id)) {
-    throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
-  }
-  return data;
+  const { row, bindings } = await fetchProductBindingsVisible(supabase, ctx, id);
+  row.bindings = bindings;
+  row.warehouse_ids = bindings.map((b) => b.warehouse_id);
+  row.warehouse_count = bindings.length;
+  row.sale_price = bindings.length ? bindings[0].sale_price : Number(row.unit_price ?? 0);
+  return row;
 }
 async function handler50(req, res) {
   try {
@@ -106134,26 +106365,82 @@ async function handler50(req, res) {
         }
       }
       const before = await fetchProductVisible(supabase, ctx, id);
-      const targetWarehouseId = body.warehouse_id !== void 0 ? body.warehouse_id : before.warehouse_id;
-      if (body.warehouse_id !== void 0) assertWarehouseVisible(ctx, body.warehouse_id, "\u76EE\u6807\u4ED3\u5E93");
-      if (body.code && (body.code !== before.code || body.warehouse_id !== void 0)) {
-        const { data: dup } = await supabase.from("products").select("id").eq("warehouse_id", targetWarehouseId).eq("code", body.code).neq("id", id).is("deleted_at", null).limit(1);
-        if (dup && dup.length) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${body.code}`);
+      const fullBeforeBindings = (await loadProductBindings(supabase, [id])).get(id) || [];
+      const visibleOldIds = [];
+      const keptInvisible = [];
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const visWh = new Set(ctx.warehouseIds || []);
+        for (const b of fullBeforeBindings) {
+          if (visWh.has(b.warehouse_id)) visibleOldIds.push(b.warehouse_id);
+          else keptInvisible.push(b);
+        }
+      } else {
+        for (const b of fullBeforeBindings) visibleOldIds.push(b.warehouse_id);
       }
-      const { data, error } = await supabase.from("products").update(body).eq("id", id).select().single();
+      let nextBindings = null;
+      if (Array.isArray(normalized.warehouse_bindings)) {
+        const submitted = Array.from(
+          new Map(
+            normalized.warehouse_bindings.map((b) => [
+              b.warehouse_id,
+              { warehouse_id: b.warehouse_id, sale_price: Number(b.sale_price ?? 0) }
+            ])
+          ).values()
+        );
+        delete normalized.warehouse_bindings;
+        for (const b of submitted) assertWarehouseVisible(ctx, b.warehouse_id, "\u8BE5\u4ED3\u5E93");
+        nextBindings = [...keptInvisible, ...submitted];
+        if (!nextBindings.length) throw Errors.badRequest("\u5546\u54C1\u81F3\u5C11\u9700\u4FDD\u7559\u4E00\u4E2A\u7ED1\u5B9A\u4ED3\u5E93\uFF08\u89E3\u7ED1\u8BF7\u5148\u5728\u5546\u54C1\u8BE6\u60C5\u5185\u52A0\u7ED1\u5176\u5B83\u4ED3\u5E93\uFF09");
+      } else if (normalized.warehouse_id !== void 0) {
+        const targetWh = normalized.warehouse_id;
+        delete normalized.warehouse_id;
+        assertWarehouseVisible(ctx, targetWh, "\u8BE5\u4ED3\u5E93");
+        nextBindings = [
+          ...keptInvisible.filter((b) => b.warehouse_id !== targetWh),
+          { warehouse_id: targetWh, sale_price: Number(normalized.unit_price ?? before.unit_price ?? 0) }
+        ];
+      }
+      if (normalized.code && normalized.code !== before.code) {
+        const { data: dup } = await supabase.from("products").select("id").eq("code", normalized.code).neq("id", id).is("deleted_at", null).limit(1);
+        if (dup && dup.length) throw Errors.conflict(`\u4EA7\u54C1\u7F16\u7801\u5DF2\u5B58\u5728\uFF1A${normalized.code}`);
+      }
+      const appliedBindings = nextBindings ?? fullBeforeBindings;
+      if (nextBindings) {
+        const primary = nextBindings.find((b) => !keptInvisible.some((k) => k.warehouse_id === b.warehouse_id)) || nextBindings[0];
+        normalized.warehouse_id = primary.warehouse_id;
+        normalized.unit_price = primary.sale_price;
+      }
+      const { data, error } = await supabase.from("products").update(normalized).eq("id", id).select().single();
       if (error) {
         if (error.code === "23505") {
-          throw Errors.conflict(`SKU \u5DF2\u5B58\u5728\uFF1A${body.sku || ""}`);
+          throw Errors.conflict(`SKU \u5DF2\u5B58\u5728\uFF1A${normalized.sku || ""}`);
         }
         if (error.code === "PGRST116") throw Errors.notFound("\u5546\u54C1\u4E0D\u5B58\u5728");
         throw error;
       }
-      await writeAudit(ctx, req, "update", "product", id, before, data);
-      return res.status(200).json({ data });
+      if (nextBindings) {
+        if (visibleOldIds.length) {
+          const { error: delErr } = await supabase.from("product_warehouses").delete().eq("product_id", id).in("warehouse_id", visibleOldIds);
+          if (delErr) throw delErr;
+        }
+        const bindRows = nextBindings.map((b) => ({ product_id: id, warehouse_id: b.warehouse_id, sale_price: b.sale_price }));
+        const { error: insErr } = await supabase.from("product_warehouses").upsert(bindRows);
+        if (insErr) throw insErr;
+      }
+      await writeAudit(ctx, req, "update", "product", id, before, { ...data, bindings: appliedBindings });
+      return res.status(200).json({ data: { ...data, bindings: appliedBindings } });
     }
     if (req.method === "DELETE") {
       requirePermission(ctx, "products.delete");
       const before = await fetchProductVisible(supabase, ctx, id);
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const fullBindings = (await loadProductBindings(supabase, [id])).get(id) || [];
+        const whSet = new Set(ctx.warehouseIds || []);
+        const allVisible = fullBindings.every((b) => whSet.has(b.warehouse_id));
+        if (!allVisible) {
+          throw Errors.forbidden("\u5546\u54C1\u5DF2\u7ED1\u5B9A\u5176\u5B83\u4ED3\u5E93\uFF0C\u4EC5\u53EF\u89E3\u7ED1\u5F53\u524D\u4ED3\u5E93\uFF0C\u4E0D\u80FD\u5220\u9664\u6574\u6863\u5546\u54C1");
+        }
+      }
       const { error } = await supabase.from("products").update({ deleted_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
       if (error) throw error;
       await writeAudit(ctx, req, "delete", "product", id, before, null);

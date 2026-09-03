@@ -1,10 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, applyWarehouseFilter, hasUnrestrictedWarehouse } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
+
+const NULL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -26,10 +28,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 海外库存统一来自 products.overseas_stock（平台可用库存快照，销售统计导入写入）。
     // wh_type=overseas 时直接查产品快照列表，返回结构与库存列表兼容（仓库显示"海外仓"占位）。
     if (whType === 'overseas') {
-      let pq: any = supabase.from('products')
-        .select('id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at', { count: 'exact' })
-        .gt('overseas_stock', 0)
-        .is('deleted_at', null);
+      const baseSelect = 'id, sku, name, code, image_text, safety_stock, overseas_stock, updated_at';
+      let pq: any;
+      if (hasUnrestrictedWarehouse(ctx)) {
+        pq = supabase.from('products').select(baseSelect, { count: 'exact' });
+      } else {
+        // 仓库级隔离（054 一货多仓）：仅返回绑定任一当前可见仓库的商品海外库存快照
+        const ids = ctx.warehouseIds || [];
+        pq = supabase
+          .from('products')
+          .select(baseSelect + ', product_warehouses!inner(warehouse_id)', { count: 'exact' })
+          .in('product_warehouses.warehouse_id', ids.length ? ids : [NULL_UUID]);
+      }
+      pq = pq.gt('overseas_stock', 0).is('deleted_at', null);
       if (productId) pq = pq.eq('id', productId);
       if (sku) pq = pq.ilike('sku', `%${sku}%`);
       pq = pq.order('updated_at', { ascending: false })
@@ -66,6 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       else return res.status(200).json({ data: [], total: 0, page: q.page, pageSize: q.pageSize });
     }
     if (warehouseId) query = query.eq('warehouse_id', warehouseId);
+
+    // 仓库级隔离：普通账号仅能看到可见仓库的库存行（super_admin 全量）
+    query = applyWarehouseFilter(query, ctx, 'warehouse_id');
 
     query = query.order('updated_at', { ascending: false })
       .range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);

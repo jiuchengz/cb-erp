@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
-import { requireAnyPermission } from './_lib/rbac';
+import { requireAnyPermission, hasUnrestrictedWarehouse, applyWarehouseFilter, loadVisibleProductIds } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
@@ -50,9 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const createdAtFrom = `${start}T00:00:00`;
     const createdAtTo = `${end}T23:59:59`;
 
-    // 全量聚合结果短期缓存（key 含时间参数，避免不同口径串缓存）。
-    // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
-    const CACHE_KEY = `dashboard:v1:${start}:${end}`;
+    // 仓库级隔离：缓存按用户隔离，避免受限账号命中全量缓存/他仓缓存
+    const CACHE_KEY = `dashboard:v1:${start}:${end}:${ctx.userId}`;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) {
       return res.status(200).json({ data: cached, fromCache: true });
@@ -65,6 +64,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (error) throw error;
       return count ?? 0;
     };
+    const countAllProductsVisible = async () => {
+      // 054 一货多仓：受限账号仅统计其可见绑定仓内的商品（公司级主档以绑定仓判定可见范围）
+      if (hasUnrestrictedWarehouse(ctx)) return countAll('products');
+      const pids = await loadVisibleProductIds(supabase, ctx);
+      if (!pids || pids.size === 0) return 0;
+      const arr = [...pids];
+      let n = 0;
+      for (let i = 0; i < arr.length; i += 500) {
+        const { count, error } = await supabase
+          .from('products')
+          .select('*', { count: 'exact', head: true })
+          .in('id', arr.slice(i, i + 500))
+          .is('deleted_at', null);
+        if (error) throw error;
+        n += count ?? 0;
+      }
+      return n;
+    };
     const countSince = async (table: string) => {
       const { count, error } = await supabase
         .from(table)
@@ -76,13 +93,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return count ?? 0;
     };
 
+    // 054 一货多仓：海外库存快照（products.overseas_stock）无仓库维度，受限账号仅统计其可见绑定仓内的商品
+    const fetchOverseasRows = async () => {
+      if (hasUnrestrictedWarehouse(ctx)) {
+        return supabase.from('products').select('id, overseas_stock').is('deleted_at', null);
+      }
+      const pids = await loadVisibleProductIds(supabase, ctx);
+      if (!pids || pids.size === 0) return { data: [], error: null };
+      const arr = [...pids];
+      const out: any[] = [];
+      for (let i = 0; i < arr.length; i += 500) {
+        const r = await supabase
+          .from('products')
+          .select('id, overseas_stock')
+          .is('deleted_at', null)
+          .in('id', arr.slice(i, i + 500));
+        if (r.error) return r;
+        out.push(...(r.data || []));
+      }
+      return { data: out, error: null };
+    };
+
     const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] =
       await Promise.all([
-        countAll('products'),
-        // 全部库存（含仓库类型，区分国内/海外仓）
-        supabase.from('inventory').select('product_id, quantity, warehouses!inner(wh_type)'),
+        countAllProductsVisible(),
+        // 全部库存（含仓库类型，区分国内/海外仓）；受限账号按可见仓过滤
+        applyWarehouseFilter(
+          supabase.from('inventory').select('product_id, quantity, warehouses!inner(wh_type)'),
+          ctx,
+          'warehouse_id'
+        ),
         // 产品海外库存快照（用于国外库存统计）
-        supabase.from('products').select('id, overseas_stock').is('deleted_at', null),
+        fetchOverseasRows(),
         // 在途库存：调拨发货（国内→海外）且未入仓的明细数量
         supabase
           .from('shipment_items')

@@ -80,9 +80,12 @@
     <el-table :resizable="false" v-loading="loading" :data="pagedRows" border stripe height="100%" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="46" />
       <el-table-column prop="code" label="产品编号" min-width="140" show-overflow-tooltip />
-      <el-table-column label="仓库" width="130" show-overflow-tooltip>
+      <el-table-column label="仓库" min-width="160" show-overflow-tooltip>
         <template #default="{ row }">
-          <el-tag size="small" effect="plain">{{ warehouseName(row.warehouse_id) }}</el-tag>
+          <template v-if="(row.warehouse_ids || []).length">
+            <el-tag v-for="wid in row.warehouse_ids" :key="wid" size="small" effect="plain" style="margin: 1px 4px 1px 0">{{ warehouseName(wid) }}</el-tag>
+          </template>
+          <span v-else class="form-tip">未绑定</span>
         </template>
       </el-table-column>
       <el-table-column label="图片" width="90">
@@ -143,7 +146,7 @@
         </template>
       </el-table-column>
       <el-table-column label="售价" width="120" align="right">
-        <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
+        <template #default="{ row }">{{ formatMoney(row.sale_price ?? row.unit_price) }}</template>
       </el-table-column>
       <el-table-column :label="'不含税采购成本(' + getCurrencyCode() + ')'" width="130" align="right">
         <template #default="{ row }">{{ formatMoneyFrom(row.purchase_cost, row.currency || 'MXN') }}</template>
@@ -268,11 +271,28 @@
 
     <el-dialog v-model="dialogVisible" :title="editing ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
       <el-form :model="form" label-width="110px">
-        <el-form-item label="所属仓库" required>
-          <el-select v-model="form.warehouse_id" filterable placeholder="选择商品归属仓库" style="width: 100%">
-            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
-          </el-select>
-          <div class="form-tip">同款商品跨仓销售请分别建档，各自维护成本与售价</div>
+        <el-form-item label="可售仓库" required>
+          <div style="width: 100%">
+            <div
+              v-for="(b, bi) in form.bindings"
+              :key="b.key"
+              style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center; width: 100%"
+            >
+              <el-select v-model="b.warehouse_id" filterable placeholder="选择仓库" style="flex: 1.4">
+                <el-option
+                  v-for="w in warehouses"
+                  :key="w.id"
+                  :label="`${w.name}（${w.code}）${w.wh_type === 'overseas' ? '·海外' : ''}`"
+                  :value="w.id"
+                  :disabled="form.bindings.some((o: any) => o.key !== b.key && o.warehouse_id === w.id)"
+                />
+              </el-select>
+              <el-input-number v-model="b.sale_price" :min="0" :precision="2" :step="1" placeholder="该仓售价" style="width: 180px" />
+              <el-button v-if="form.bindings.length > 1" type="danger" link @click="removeBinding(bi)">移除</el-button>
+            </div>
+            <el-button type="primary" link @click="addBinding">+ 加绑仓库</el-button>
+            <div class="form-tip">商品为公司级主档、编码全库唯一；同一商品可绑定多个仓库售卖，售价按仓库分别维护，采购成本等不区分仓库</div>
+          </div>
         </el-form-item>
         <el-form-item label="SKU">
           <el-input v-model="form.sku" placeholder="选填，可后续补充" />
@@ -310,9 +330,6 @@
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="选填，商品备注说明" />
-        </el-form-item>
-        <el-form-item label="售价">
-          <el-input-number v-model="form.unit_price" :min="0" :precision="2" :step="1" />
         </el-form-item>
         <el-form-item label="采购成本">
           <el-input-number v-model="form.purchase_cost" :min="0" :precision="2" :step="1" />
@@ -368,7 +385,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="将同时对选中的商品应用以下修改，未填写的字段保持不变"
+        title="将同时对选中的商品应用以下修改，未填写的字段保持不变。售价按仓库维护：列表筛选了仓库则仅作用于该仓库售价，否则作用于商品全部可见绑定仓"
         style="margin-bottom: 16px"
       />
       <el-form label-width="110px">
@@ -667,7 +684,7 @@ function pct(v: unknown) {
 // 总成本比索 = 货值 + 尾程 + 仓储 + 实操 + 佣金 + 广告 + 扣税 + 补偿
 function profit(row: Product) {
   const r = rate.value || 0.38
-  const sellingPeso = Number(row.unit_price ?? 0)
+  const sellingPeso = Number((row as any).sale_price ?? row.unit_price ?? 0)
   const purchase = Number(row.purchase_cost ?? 0)
   const freight = Number(row.first_leg_freight ?? 0)
   const lastMile = Number(row.last_mile_delivery_peso ?? 0)
@@ -777,7 +794,7 @@ const editing = ref<Product | null>(null)
 const imageInput = ref<HTMLInputElement>()
 
 const emptyForm = () => ({
-  warehouse_id: '',
+  bindings: [] as { key: string; warehouse_id: string; sale_price: number }[],
   sku: '',
   name: '',
   code: '',
@@ -786,7 +803,6 @@ const emptyForm = () => ({
   listing_time: '',
   unit: '套',
   remark: '',
-  unit_price: 0,
   purchase_cost: 0,
   first_leg_freight: 0,
   last_mile_delivery_peso: 0,
@@ -801,40 +817,76 @@ const emptyForm = () => ({
 })
 const form = reactive(emptyForm())
 
+// ===== 一货多仓绑定编辑器 =====
+let bindKeySeq = 0
+function makeBinding(warehouseId = '', salePrice = 0) {
+  return { key: `b${++bindKeySeq}`, warehouse_id: warehouseId, sale_price: salePrice }
+}
+// 默认绑定主仓：优先国内仓中名称含「总仓/中心仓/主仓」，否则首个国内仓；无国内仓取首个可见仓
+function primaryMainWarehouseId(): string {
+  const ws: any[] = warehouses.value
+  const domestic = ws.filter((w) => w.wh_type !== 'overseas')
+  const named = domestic.find((w) => /总仓|中心仓|主仓/.test(String(w.name || '')))
+  return (named || domestic[0] || ws[0])?.id || ''
+}
+function addBinding() {
+  form.bindings.push(makeBinding('', 0))
+}
+function removeBinding(i: number) {
+  form.bindings.splice(i, 1)
+}
+function loadBindingsFromDetail(row: Product) {
+  // 后端 GET /products/:id 回显 bindings（含按仓 sale_price）；列表行无明细时兜底 warehouse_ids
+  const r = row as any
+  if (Array.isArray(r.bindings) && r.bindings.length) {
+    form.bindings = r.bindings.map((b: any) => makeBinding(b.warehouse_id, Number(b.sale_price ?? 0)))
+    return
+  }
+  const ids = Array.isArray(r.warehouse_ids) && r.warehouse_ids.length ? r.warehouse_ids : r.warehouse_id ? [r.warehouse_id] : []
+  form.bindings = ids.map((wid: string) => makeBinding(wid, 0))
+}
+
 function openCreate() {
   editing.value = null
   Object.assign(form, emptyForm())
-  // 若当前可见仓库唯一则默认选中，减少误归属
-  if (warehouses.value.length === 1) form.warehouse_id = warehouses.value[0].id
+  // 创建默认绑定总仓（主仓）；列表若正筛选某仓库则优先绑定该仓，保证创建后立即可见
+  const defWh = query.warehouse_id || primaryMainWarehouseId()
+  if (defWh) form.bindings = [makeBinding(defWh, 0)]
   dialogVisible.value = true
 }
 
-function openEdit(row: Product) {
+async function openEdit(row: Product) {
   editing.value = row
-  Object.assign(form, emptyForm(), {
-    warehouse_id: (row as any).warehouse_id || '',
-    sku: row.sku || '',
-    name: row.name || '',
-    code: row.code || '',
-    barcode: row.barcode || '',
-    category: row.category || '',
-    listing_time: row.listing_time || '',
-    unit: row.unit || '套',
-    remark: row.remark || '',
-    unit_price: row.unit_price ?? 0,
-    purchase_cost: row.purchase_cost ?? 0,
-    first_leg_freight: row.first_leg_freight ?? 0,
-    last_mile_delivery_peso: row.last_mile_delivery_peso ?? 0,
-    ml_commission_rate: row.ml_commission_rate ?? 0.165,
-    shipping_mode: row.shipping_mode || '海运',
-    link_id: row.link_id || '',
-    competitor_id: row.competitor_id || '',
-    currency: row.currency || 'MXN',
-    status: row.status || 'active',
-    image_text: row.image_text || '',
-    safety_stock: row.safety_stock ?? 0,
-  })
-  dialogVisible.value = true
+  Object.assign(form, emptyForm())
+  try {
+    const { data } = await api.get(`/products/${row.id}`)
+    const detail = (data as any)?.data ?? data
+    Object.assign(form, {
+      sku: detail.sku || '',
+      name: detail.name || '',
+      code: detail.code || '',
+      barcode: detail.barcode || '',
+      category: detail.category || '',
+      listing_time: detail.listing_time || '',
+      unit: detail.unit || '套',
+      remark: detail.remark || '',
+      purchase_cost: detail.purchase_cost ?? 0,
+      first_leg_freight: detail.first_leg_freight ?? 0,
+      last_mile_delivery_peso: detail.last_mile_delivery_peso ?? 0,
+      ml_commission_rate: detail.ml_commission_rate ?? 0.165,
+      shipping_mode: detail.shipping_mode || '海运',
+      link_id: detail.link_id || '',
+      competitor_id: detail.competitor_id || '',
+      currency: detail.currency || 'MXN',
+      status: detail.status || 'active',
+      image_text: detail.image_text || '',
+      safety_stock: detail.safety_stock ?? 0,
+    })
+    loadBindingsFromDetail(detail)
+    dialogVisible.value = true
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载商品详情失败')
+  }
 }
 
 function onImageFileChange(e: Event) {
@@ -856,8 +908,9 @@ async function save() {
     ElMessage.warning('请填写名称')
     return
   }
-  if (!form.warehouse_id) {
-    ElMessage.warning('请选择所属仓库')
+  const validBinds = form.bindings.filter((b) => b.warehouse_id)
+  if (!validBinds.length) {
+    ElMessage.warning('请至少绑定一个可售仓库')
     return
   }
   saving.value = true
@@ -872,9 +925,29 @@ async function save() {
         // 上传失败则保留原值，由后端 schema 长度校验兜底提示
       }
     }
-    const payload: Record<string, unknown> = { ...form, image_text: imageText }
-    // SKU 未填时以 null 入库（数据库已允许空 SKU），避免空字符串歧义
-    if (!payload.sku) payload.sku = null
+    const payload: Record<string, unknown> = {
+      sku: form.sku || null,
+      name: form.name.trim(),
+      code: form.code.trim() || null,
+      barcode: form.barcode.trim() || null,
+      category: form.category.trim() || null,
+      listing_time: form.listing_time.trim() || null,
+      unit: form.unit || '套',
+      remark: form.remark.trim() || null,
+      purchase_cost: form.purchase_cost,
+      first_leg_freight: form.first_leg_freight,
+      last_mile_delivery_peso: form.last_mile_delivery_peso,
+      ml_commission_rate: form.ml_commission_rate,
+      shipping_mode: form.shipping_mode,
+      link_id: form.link_id.trim() || null,
+      competitor_id: form.competitor_id.trim() || null,
+      currency: form.currency,
+      status: form.status,
+      image_text: imageText,
+      safety_stock: form.safety_stock,
+      // 一货多仓：售价按仓存于绑定行；成本字段留在主档
+      warehouse_bindings: validBinds.map((b) => ({ warehouse_id: b.warehouse_id, sale_price: b.sale_price ?? 0 })),
+    }
     if (editing.value) {
       await api.patch(`/products/${editing.value.id}`, payload)
       addLog('success', '编辑商品', form.name)
@@ -960,6 +1033,8 @@ async function submitBatchEdit() {
       ids: selected.value.map((r) => r.id),
       patch,
       price_mode: patch.unit_price !== undefined ? batchEdit.priceMode : 'fixed',
+      // 列表已筛选仓库时，改价仅作用于该仓库的绑定行售价
+      warehouse_id: query.warehouse_id || undefined,
     })
     ElMessage.success(
       `批量编辑完成：成功 ${data.updated} 条${data.missing ? `，未找到 ${data.missing} 条` : ''}`
@@ -992,7 +1067,7 @@ async function exportRows(withImages = false) {
     { key: 'overseas_stock', label: '国外库存' },
     { key: 'in_transit_qty', label: '在途数量' },
     { key: 'sales_qty', label: '销量' },
-    { key: 'unit_price', label: '售价', value: (r: Product) => formatMoney(r.unit_price) },
+    { key: 'unit_price', label: '售价', value: (r: Product) => formatMoney((r as any).sale_price ?? r.unit_price) },
     { key: 'purchase_cost', label: '不含税采购成本', value: (r: Product) => formatMoneyFrom(r.purchase_cost, r.currency || 'MXN') },
     { key: 'first_leg_freight', label: '头程运费', value: (r: Product) => formatMoneyFrom(r.first_leg_freight, r.currency || 'MXN') },
     { key: 'last_mile_delivery_peso', label: '尾程派送(比索)', value: (r: Product) => formatMoney(r.last_mile_delivery_peso) },
@@ -1154,12 +1229,12 @@ async function onImportFile(e: Event) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编号"和"名称"列')
       return
     }
-    // 拉取目标仓库已存在产品编码，避免重复创建（编码同仓内唯一）
+    // 054 编码全库唯一：拉取当前账号可见商品编码全集（不再按目标仓过滤），避免重复创建；后端冲突仍有兜底
     const whId = importTargetWarehouseId.value
     const exist = new Set<string>()
     let page = 1
     for (;;) {
-      const { data } = await api.get('/products', { params: { page, pageSize: 200, warehouse_id: whId } })
+      const { data } = await api.get('/products', { params: { page, pageSize: 200 } })
       ;(data.data ?? []).forEach((p: any) => {
         if (p.code) exist.add(p.code)
       })
@@ -1198,7 +1273,6 @@ async function onImportFile(e: Event) {
       const floatImg = cellImages?.[idx + 1] ? Object.values(cellImages[idx + 1])[0] : ''
       items.push({
         payload: {
-          warehouse_id: whId,
           sku: sku || null,
           name,
           code,
@@ -1207,7 +1281,10 @@ async function onImportFile(e: Event) {
           listing_time: cut(cellStr(row, col.listing_time), 255),
           unit: cut(cellStr(row, col.unit) || '套', 50),
           remark: cut(cellStr(row, col.remark), 1000),
-          unit_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0,
+          // 一货多仓：售价按仓存于绑定行，导入商品默认绑定目标仓并按表内售价定价
+          warehouse_bindings: [
+            { warehouse_id: whId, sale_price: col.unit_price !== undefined ? cellNum(row, col.unit_price) : 0 },
+          ],
           purchase_cost: col.purchase_cost !== undefined ? cellNum(row, col.purchase_cost) : 0,
           first_leg_freight: col.first_leg_freight !== undefined ? cellNum(row, col.first_leg_freight) : 0,
           last_mile_delivery_peso:

@@ -52,32 +52,147 @@ export function applyWarehouseFilter(query: any, ctx: AuthContext, column = 'war
   return query.in(column, ids);
 }
 
-// ===== 无仓库归属表的可见链接映射（如 daily_sales 以 link_id 关联产品） =====
-// 通过 products(link_id, warehouse_id) 推导当前账号可见的链接集合。
-// super_admin 返回 null（不做过滤）；受限账号返回链接集合（空集合 = 无可见数据）。
+// ===== 一货多仓（054 product_warehouses 绑定表） =====
+// 商品为公司级主档：可见性不再由 products.warehouse_id（单仓归属）决定，
+// 而是由 product_warehouses 绑定行推导——商品只要绑定任一可见仓即可见；
+// 售价按仓存于绑定行 sale_price，成本（purchase_cost 等）留在主档不区分。
+
+const NULL_UUID = '00000000-0000-0000-0000-000000000000';
+
+// 批量加载商品绑定（product_id -> 绑定仓库+售价 列表）。
+// 供销售/补货/售后/批量操作等模块在多仓模型下做"商品-仓库"校验。
+const BIND_CHUNK = 500;
+export interface ProductBinding {
+  warehouse_id: string;
+  sale_price: number;
+}
+export async function loadProductBindings(
+  supabase: any,
+  productIds: string[]
+): Promise<Map<string, ProductBinding[]>> {
+  const out = new Map<string, ProductBinding[]>();
+  const uniq = Array.from(new Set(productIds.filter(Boolean)));
+  if (uniq.length === 0) return out;
+  for (let i = 0; i < uniq.length; i += BIND_CHUNK) {
+    const chunk = uniq.slice(i, i + BIND_CHUNK);
+    const { data, error } = await supabase
+      .from('product_warehouses')
+      .select('product_id, warehouse_id, sale_price')
+      .in('product_id', chunk);
+    if (error) throw error;
+    for (const r of data || []) {
+      const arr = out.get(r.product_id) || [];
+      arr.push({ warehouse_id: r.warehouse_id, sale_price: Number(r.sale_price ?? 0) });
+      out.set(r.product_id, arr);
+    }
+  }
+  return out;
+}
+
+// 当前账号可见的 product_id 集合（经绑定表推导）：
+// super_admin 返回 null（全量）；受限账号返回 product 集合（空集合 = 无可见商品）。
+// 分页扫描绑定表（绑定表可能大于一次 URL 上限），返回前自动去重。
 const WH_PAGE = 1000;
 
-export async function loadVisibleLinkIds(supabase: any, ctx: AuthContext): Promise<Set<string> | null> {
+export async function loadVisibleProductIds(supabase: any, ctx: AuthContext): Promise<Set<string> | null> {
   if (hasUnrestrictedWarehouse(ctx)) return null;
   const ids = ctx.warehouseIds || [];
-  const linkIds = new Set<string>();
-  if (ids.length === 0) return linkIds;
+  const productIds = new Set<string>();
+  if (ids.length === 0) return productIds;
   for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('product_warehouses')
+      .select('product_id')
+      .in('warehouse_id', ids)
+      .range(page * WH_PAGE, (page + 1) * WH_PAGE - 1);
+    if (error) throw error;
+    const rows: any[] = data || [];
+    rows.forEach((r: any) => {
+      if (r.product_id) productIds.add(String(r.product_id));
+    });
+    if (rows.length < WH_PAGE) break;
+  }
+  return productIds;
+}
+
+// ===== 无仓库归属表的可见链接映射（如 daily_sales 以 link_id 关联产品） =====
+// 一货多仓后通过 product_warehouses(warehouse_id -> product_id) + products.link_id 推导
+// 当前账号可见的链接集合。
+// super_admin 返回 null（不做过滤）；受限账号返回链接集合（空集合 = 无可见数据）。
+export async function loadVisibleLinkIds(supabase: any, ctx: AuthContext): Promise<Set<string> | null> {
+  if (hasUnrestrictedWarehouse(ctx)) return null;
+  const visibleProductIds = await loadVisibleProductIds(supabase, ctx);
+  if (!visibleProductIds) return null;
+  const linkIds = new Set<string>();
+  if (visibleProductIds.size === 0) return linkIds;
+  const ids = Array.from(visibleProductIds);
+  for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+    const chunk = ids.slice(i, i + BIND_CHUNK);
     const { data, error } = await supabase
       .from('products')
       .select('link_id')
-      .in('warehouse_id', ids)
+      .in('id', chunk)
       .is('deleted_at', null)
       .not('link_id', 'is', null)
-      .neq('link_id', '')
-      .range(page * WH_PAGE, (page + 1) * WH_PAGE - 1);
+      .neq('link_id', '');
     if (error) throw error;
     const rows: any[] = data || [];
     rows.forEach((p: any) => {
       if (p.link_id) linkIds.add(String(p.link_id));
     });
-    if (rows.length < WH_PAGE) break;
   }
   return linkIds;
+}
+
+// 校验商品是否存在（且未删除）且绑定任一可见仓库；不可见按不存在处理（防越权枚举）。
+// 返回 { row, bindings }（bindings 仅含当前账号可见绑定；超管返回全部绑定）。
+export async function fetchProductBindingsVisible(
+  supabase: any,
+  ctx: AuthContext,
+  productId: string
+): Promise<{ row: any; bindings: ProductBinding[] }> {
+  const { data: row, error } = await supabase.from('products').select('*').eq('id', productId).is('deleted_at', null).single();
+  if (error) {
+    if (error.code === 'PGRST116') throw Errors.notFound('商品不存在');
+    throw error;
+  }
+  const allBindings = (await loadProductBindings(supabase, [productId])).get(productId) || [];
+  let visible: ProductBinding[];
+  if (hasUnrestrictedWarehouse(ctx)) {
+    visible = allBindings;
+  } else {
+    const whSet = new Set(ctx.warehouseIds || []);
+    visible = allBindings.filter((b) => whSet.has(b.warehouse_id));
+  }
+  if (!hasUnrestrictedWarehouse(ctx) && visible.length === 0) {
+    throw Errors.notFound('商品不存在');
+  }
+  return { row, bindings: visible };
+}
+
+// 受限账号列表查询附加"绑定任一可见仓"过滤：
+// 返回 select 串与附加过滤函数，由调用方拼到 products 主查询上。
+// super_admin 不做限制（bindings 全量返回）。
+export function bindProductWarehouseFilter(
+  ctx: AuthContext,
+  filterWarehouseId = ''
+): { selectBind: string; filter: (q: any) => any } {
+  if (hasUnrestrictedWarehouse(ctx)) {
+    const selectBind = 'product_warehouses(warehouse_id, sale_price)';
+    const filter = (q: any) => {
+      if (filterWarehouseId) return q.eq('product_warehouses.warehouse_id', filterWarehouseId);
+      return q;
+    };
+    return { selectBind, filter };
+  }
+  const ids = ctx.warehouseIds || [];
+  const selectBind = 'product_warehouses!inner(warehouse_id, sale_price)';
+  const filter = (q: any) => {
+    let x: any = q;
+    x = x.in('product_warehouses.warehouse_id', ids.length ? ids : [NULL_UUID]);
+    if (filterWarehouseId) x = x.eq('product_warehouses.warehouse_id', filterWarehouseId);
+    return x;
+  };
+  return { selectBind, filter };
 }
 
