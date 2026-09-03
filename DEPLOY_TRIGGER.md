@@ -1,1 +1,1 @@
-﻿deploy trigger for d4dee1d full-load fix
+﻿deploy trigger for 26028ef one-product-multi-warehouse (force CDN refresh)
