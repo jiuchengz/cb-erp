@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, assertShipmentStoreVisible } from '../_lib/rbac';
 import { uuidSchema, parse } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { handleError, Errors } from '../_lib/error';
@@ -33,6 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (shipErr || !shipment) {
       throw Errors.notFound('发货单不存在');
     }
+    await assertShipmentStoreVisible(supabase, ctx, (shipment as any).store);
     const items: any[] = shipment.shipment_items ?? [];
     if (items.length === 0) {
       return res.json({ data: { updated: [], skipped: [], message: '该货件无产品明细，无需同步' } });

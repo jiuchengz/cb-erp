@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
-import { requireAnyPermission, hasUnrestrictedWarehouse, applyWarehouseFilter, loadVisibleProductIds } from './_lib/rbac';
+import { requireAnyPermission, hasUnrestrictedWarehouse, applyWarehouseFilter, loadVisibleProductIds, loadVisibleStoreNames } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
@@ -114,6 +114,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return { data: out, error: null };
     };
 
+    // ===== 方案B：受限账号按可见范围统计（商品/仓库/店铺）=====
+    const restricted = !hasUnrestrictedWarehouse(ctx);
+    const countVisibleSince = async (table: string, col: string, values: string[]) => {
+      if (!restricted) return countSince(table);
+      if (!values || values.length === 0) return 0;
+      const { count, error } = await supabase
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .gte('created_at', createdAtFrom)
+        .lte('created_at', createdAtTo)
+        .in(col, values);
+      if (error) throw error;
+      return count ?? 0;
+    };
+    const visibleStores = restricted ? await loadVisibleStoreNames(supabase, ctx) : null;
+    const storeArr = visibleStores && visibleStores.size ? Array.from(visibleStores) : [];
+    const whIds = ctx.warehouseIds || [];
+
+    let inTransitQ: any = supabase
+      .from('shipment_items')
+      .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at, store)');
+    if (storeArr.length) inTransitQ = inTransitQ.in('shipments.store', storeArr);
+    else if (restricted) inTransitQ = inTransitQ.eq('shipments.store', '__no_visible__');
+
+    let recentQ: any = supabase
+      .from('shipments')
+      .select('id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)')
+      .is('deleted_at', null);
+    if (storeArr.length) recentQ = recentQ.in('store', storeArr);
+    else if (restricted) recentQ = recentQ.eq('store', '__no_visible__');
+    recentQ = recentQ.order('created_at', { ascending: false }).limit(5);
+
     const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] =
       await Promise.all([
         countAllProductsVisible(),
@@ -126,18 +159,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 产品海外库存快照（用于国外库存统计）
         fetchOverseasRows(),
         // 在途库存：调拨发货（国内→海外）且未入仓的明细数量
-        supabase
-          .from('shipment_items')
-          .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at)'),
-        countSince('shipments'),
-        countSince('sales_orders'),
-        countSince('after_sales'),
-        supabase
-          .from('shipments')
-          .select('id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)')
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .limit(5),
+        inTransitQ,
+        countVisibleSince('shipments', 'store', storeArr),
+        countVisibleSince('sales_orders', 'warehouse_id', whIds),
+        countVisibleSince('after_sales', 'warehouse_id', whIds),
+        recentQ,
       ]);
 
     if (inventoryRows.error) throw inventoryRows.error;

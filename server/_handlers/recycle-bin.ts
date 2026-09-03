@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requireAnyPermission } from './_lib/rbac';
+import { requirePermission } from './_lib/rbac';
 import { parse } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -25,15 +25,6 @@ const actionSchema = z.object({
   id: z.string().uuid(),
 });
 
-const READ_PERMISSIONS = [
-  'products.read',
-  'sales.read',
-  'procurement.read',
-  'shipment.read',
-  'after_sales.read',
-  'replenishment.read',
-];
-
 function toItems(rows: any[], type: string, cfg: { table: string; titleField: string; write: string }) {
   return (rows || []).map((r: any) => ({
     type,
@@ -53,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- GET /recycle-bin ----------
     if (req.method === 'GET') {
-      requireAnyPermission(ctx, READ_PERMISSIONS);
+      requirePermission(ctx, 'system.manage'); // 回收站属系统管理整组，仅 system.manage 可见
       const typeRaw = typeof req.query.type === 'string' ? req.query.type.trim() : '';
       const page = Math.max(1, parseInt(typeof req.query.page === 'string' ? req.query.page : '1', 10) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt(typeof req.query.pageSize === 'string' ? req.query.pageSize : '20', 10) || 20));
@@ -104,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const path = new URL(req.url || '/', 'http://internal').pathname.replace(/^\/api/, '') || '/';
       const { type, id } = parse(actionSchema, req.body || {});
       const cfg = TYPES[type];
-      requireAnyPermission(ctx, [cfg.write]);
+      requirePermission(ctx, 'system.manage'); // 恢复/清除同样仅 system.manage 可操作
 
       const { data: before, error: getErr } = await supabase.from(cfg.table).select('*').eq('id', id).maybeSingle();
       if (getErr) throw getErr;

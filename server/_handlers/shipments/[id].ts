@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission } from '../_lib/rbac';
+import { requirePermission, assertShipmentStoreVisible, hasUnrestrictedWarehouse, loadVisibleStoreNames } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -60,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (error.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw error;
       }
+      await assertShipmentStoreVisible(supabase, ctx, (data as any)?.store);
       return res.status(200).json({ data });
     }
 
@@ -71,6 +72,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw getErr;
+      }
+      await assertShipmentStoreVisible(supabase, ctx, (before as any)?.store);
+      // 受限账号不允许将货件划归到不可见店铺 / 清空店铺
+      if (!hasUnrestrictedWarehouse(ctx) && body.store !== undefined) {
+        const stores = (await loadVisibleStoreNames(supabase, ctx)) || new Set<string>();
+        const storeName = typeof body.store === 'string' ? body.store.trim() : '';
+        if (!stores.has(storeName)) throw Errors.forbidden('无权将货件划归该店铺');
       }
 
       const update: Record<string, unknown> = {};
@@ -333,6 +341,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw getErr;
       }
+      await assertShipmentStoreVisible(supabase, ctx, (before as any)?.store);
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('shipments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;

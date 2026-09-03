@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, applyWarehouseFilter } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('purchase_orders')
         .select('*, purchase_order_items(*, products(sku, code, name, image_text))', { count: 'exact' })
         .is('deleted_at', null);
+      query = applyWarehouseFilter(query, ctx); // 受限账号仅可见其绑定仓库的拿货单
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -70,6 +71,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!product) throw Errors.conflict(`产品编码不存在：${body.product_code.trim()}`);
 
       // 仓库：指定时校验必须是国内仓；未指定取第一个国内仓
+      // 受限账号：必须显式选择自己有可见权限的仓库（不可回退到系统默认国内仓）
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const visSet = new Set(ctx.warehouseIds || []);
+        if (!body.warehouse_id || !visSet.has(body.warehouse_id)) {
+          throw Errors.forbidden('您没有该仓库的拿货权限，请选择可见仓库');
+        }
+      }
       let warehouseId: string;
       if (body.warehouse_id) {
         const { data: wh, error: whErr } = await supabase

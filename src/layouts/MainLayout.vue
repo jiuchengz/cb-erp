@@ -12,21 +12,23 @@
         </div>
       </div>
       <nav>
-        <router-link v-for="item in soloMenus" :key="item.path" :to="item.path" class="solo-link" @click="closeDrawer">
+        <router-link v-for="item in visibleSoloMenus" :key="item.path" :to="item.path" class="solo-link" @click="closeDrawer">
           <span class="mico"><component :is="item.icon" /></span>
           <span class="mlabel">{{ item.label }}</span>
         </router-link>
-        <div v-for="group in menuGroups" :key="group.title" class="menu-group" :class="{ open: group.open }">
+        <div v-for="group in visibleMenuGroups" :key="group.title" class="menu-group" :class="{ open: group.open }">
           <div class="group-title" @click="toggleGroup(group)">
             <span class="mico"><component :is="group.icon" /></span>
             <span class="mlabel">{{ group.title }}</span>
             <span class="garrow"><el-icon><arrow-down /></el-icon></span>
           </div>
           <div class="group-items">
-            <router-link v-for="item in group.children" :key="item.path" :to="item.path" @click="closeDrawer">
-              <span class="mico"><component :is="item.icon" /></span>
-              <span class="mlabel">{{ item.label }}</span>
-            </router-link>
+            <template v-for="item in group.children" :key="item.path">
+              <router-link v-if="permsPass(item.perms)" :to="item.path" @click="closeDrawer">
+                <span class="mico"><component :is="item.icon" /></span>
+                <span class="mlabel">{{ item.label }}</span>
+              </router-link>
+            </template>
           </div>
         </div>
       </nav>
@@ -44,7 +46,7 @@
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
-          <button class="topbar-btn" title="日志" @click="goLogs">
+          <button v-if="auth.hasPermission('system.manage')" class="topbar-btn" title="日志" @click="goLogs">
             <el-icon><document /></el-icon>
             <span v-if="localLogs.length" class="log-badge">{{ localLogs.length }}</span>
           </button>
@@ -120,9 +122,11 @@ auth.init().finally(() => {
   }
 })
 
+// 菜单项权限：perms 为空数组表示无需权限（任何登录用户可见）；
+// 非空数组时用户须拥有其中任意一项权限才显示该菜单
 const soloMenus = [
-  { path: '/dashboard', label: '首页概览', icon: HomeFilled },
-  { path: '/analysis', label: '经营分析', icon: TrendCharts }
+  { path: '/dashboard', label: '首页概览', icon: HomeFilled, perms: [] as string[] },
+  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] }
 ]
 
 const menuGroups = reactive([
@@ -131,8 +135,9 @@ const menuGroups = reactive([
     icon: Goods,
     open: true,
     children: [
-      { path: '/products', label: '商品管理', icon: Goods },
-      { path: '/cost-profit', label: '成本利润', icon: Goods }
+      { path: '/products', label: '商品管理', icon: Goods, perms: ['products.read'] },
+      { path: '/product-total', label: '商品总表', icon: Goods, perms: ['products.read'] },
+      { path: '/cost-profit', label: '成本利润', icon: Goods, perms: ['products.read'] }
     ]
   },
   {
@@ -140,10 +145,10 @@ const menuGroups = reactive([
     icon: Switch,
     open: true,
     children: [
-      { path: '/inventory', label: '库存查询', icon: Box },
-      { path: '/stocktakes', label: '库存盘点', icon: Box },
-      { path: '/procurement', label: '拿货管理', icon: ShoppingCart },
-      { path: '/transfers', label: '海外调拨', icon: Switch }
+      { path: '/inventory', label: '库存查询', icon: Box, perms: ['inventory.read'] },
+      { path: '/stocktakes', label: '库存盘点', icon: Box, perms: ['inventory.read'] },
+      { path: '/procurement', label: '拿货管理', icon: ShoppingCart, perms: ['procurement.read'] },
+      { path: '/transfers', label: '海外调拨', icon: Switch, perms: ['transfer.read'] }
     ]
   },
   {
@@ -151,24 +156,40 @@ const menuGroups = reactive([
     icon: Sell,
     open: true,
     children: [
-      { path: '/sales', label: '销售订单', icon: Sell },
-      { path: '/shipments', label: '物流发货', icon: Van },
-      { path: '/after-sales', label: '售后管理', icon: Service },
-      { path: '/replenishment', label: '补货管理', icon: TrendCharts }
+      { path: '/sales', label: '销售订单', icon: Sell, perms: ['sales.read'] },
+      { path: '/shipments', label: '物流发货', icon: Van, perms: ['shipment.read'] },
+      { path: '/after-sales', label: '售后管理', icon: Service, perms: ['after_sales.read'] },
+      { path: '/replenishment', label: '补货管理', icon: TrendCharts, perms: ['replenishment.read'] }
     ]
   },
   {
     title: '系统管理',
     icon: Setting,
     open: true,
+    groupPerms: ['system.manage'],
     children: [
-      { path: '/users', label: '成员管理', icon: User },
-      { path: '/logs', label: '操作日志', icon: Notebook },
-      { path: '/settings', label: '系统设置', icon: Setting },
-      { path: '/recycle-bin', label: '回收站', icon: Delete }
+      { path: '/users', label: '成员管理', icon: User, perms: ['user.read'] },
+      { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.manage'] },
+      { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.manage'] },
+      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.manage'] }
     ]
   }
 ])
+
+// 菜单权限判断：无权限码（空数组）直接可见；否则命中任一权限码即可见
+function permsPass(perms: string[]): boolean {
+  if (!perms || perms.length === 0) return true
+  return perms.some((p) => auth.permissions.includes(p))
+}
+
+// 过滤后的可见菜单：组若声明 groupPerms（整组门禁权限，如系统管理=system.manage），未命中整组不出现；组内子项仍按各自功能权限码单独显隐
+const visibleSoloMenus = computed(() => soloMenus.filter((m) => permsPass(m.perms)))
+const visibleMenuGroups = computed(() =>
+  menuGroups.filter((g) => {
+    if (g.groupPerms && !permsPass(g.groupPerms)) return false
+    return g.children.some((c) => permsPass(c.perms))
+  })
+)
 
 function toggleGroup(group: { open: boolean }) {
   group.open = !group.open

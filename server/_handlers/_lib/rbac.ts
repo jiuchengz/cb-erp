@@ -144,6 +144,42 @@ export async function loadVisibleLinkIds(supabase: any, ctx: AuthContext): Promi
   return linkIds;
 }
 
+// ===== 物流/发货按店铺隔离（仓库绑定店铺：warehouses.store） =====
+// 仓库管理为仓库绑定店铺后，调拨发货/发货单按店铺归属区分可见范围：
+// super_admin / 总仓账号返回 null（不做店铺过滤）；受限账号返回其可见仓库已配置的店铺集合
+// （空集合 = 无可见店铺，对应列表应过滤为空）。
+export async function loadVisibleStoreNames(supabase: any, ctx: AuthContext): Promise<Set<string> | null> {
+  if (hasUnrestrictedWarehouse(ctx)) return null;
+  const ids = ctx.warehouseIds || [];
+  const stores = new Set<string>();
+  if (ids.length === 0) return stores;
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('warehouses')
+      .select('store')
+      .in('id', ids)
+      .not('store', 'is', null)
+      .neq('store', '')
+      .range(page * WH_PAGE, (page + 1) * WH_PAGE - 1);
+    if (error) throw error;
+    const rows: any[] = data || [];
+    rows.forEach((r: any) => {
+      if (r.store) stores.add(String(r.store).trim());
+    });
+    if (rows.length < WH_PAGE) break;
+  }
+  return stores;
+}
+
+// 校验发货单（调拨/手动）的店铺归属在当前账号可见范围内（单条 GET / 更新 / 删除前置）：
+// 受限账号仅能访问其可见仓库店铺的货件；不可见按不存在处理（防越权枚举）。
+export async function assertShipmentStoreVisible(supabase: any, ctx: AuthContext, shipmentStore: unknown) {
+  if (hasUnrestrictedWarehouse(ctx)) return;
+  const stores = (await loadVisibleStoreNames(supabase, ctx)) || new Set<string>();
+  const s = String((shipmentStore as any) ?? '').trim();
+  if (!s || !stores.has(s)) throw Errors.notFound('发货单不存在');
+}
+
 // 校验商品是否存在（且未删除）且绑定任一可见仓库；不可见按不存在处理（防越权枚举）。
 // 返回 { row, bindings }（bindings 仅含当前账号可见绑定；超管返回全部绑定）。
 export async function fetchProductBindingsVisible(

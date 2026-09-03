@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
-import { requireAnyPermission } from './_lib/rbac';
+import { requireAnyPermission, hasUnrestrictedWarehouse, applyWarehouseFilter, loadVisibleProductIds, loadVisibleLinkIds, loadVisibleStoreNames } from './_lib/rbac';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
 import { rateLimit } from './_lib/rate-limit';
@@ -73,11 +73,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 全量聚合结果短期缓存，key 按请求参数区分（days/from/to/platform/ad_group），避免不同口径串缓存。
     // 内存缓存仅加速热实例，冷启动/多实例会回源，详见 _lib/cache.ts 说明。
-    const CACHE_KEY = `analysis:v1:${days}:${from || '-'}:${to || '-'}:${platform || '-'}:${adGroup || '-'}`;
+    const CACHE_KEY = `analysis:v1:${ctx.userId}:${days}:${from || '-'}:${to || '-'}:${platform || '-'}:${adGroup || '-'}`;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) {
       return res.status(200).json({ data: cached, fromCache: true });
     }
+
+    // ===== 方案B（受限账号）：经营分析按「可见商品 / 可见链接 / 可见店铺」过滤各维度 =====
+    // super_admin / 绑定总仓账号不受限（null = 全量不过滤）；普通账号只统计其可见范围
+    const restricted = !hasUnrestrictedWarehouse(ctx);
+    const visiblePids = restricted ? await loadVisibleProductIds(supabase, ctx) : null;
+    const visibleLinks = restricted ? await loadVisibleLinkIds(supabase, ctx) : null;
+    const visibleStores = restricted ? await loadVisibleStoreNames(supabase, ctx) : null;
+    // 无可见数据时用不可能匹配的占位值，避免 PostgREST in () 语义异常（空数组按未过滤处理）
+    const NO_MATCH = ['__no_visible__'];
+    const pidArr = visiblePids === null ? null : visiblePids.size ? Array.from(visiblePids) : NO_MATCH;
+    const linkArr = visibleLinks === null ? null : visibleLinks.size ? Array.from(visibleLinks) : NO_MATCH;
+    const storeArr = visibleStores === null ? null : visibleStores.size ? Array.from(visibleStores) : NO_MATCH;
+    // 受限账号商品批量加载（in 分片 500，防 URL 过长）
+    const fetchProductsVisible = async (): Promise<any[]> => {
+      const sel = 'id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text';
+      if (!pidArr) {
+        const { data, error } = await supabase.from('products').select(sel).is('deleted_at', null);
+        if (error) throw error;
+        return data || [];
+      }
+      const out: any[] = [];
+      for (let i = 0; i < pidArr.length; i += 500) {
+        const chunk = pidArr.slice(i, i + 500);
+        const { data, error } = await supabase.from('products').select(sel).is('deleted_at', null).in('id', chunk);
+        if (error) throw error;
+        out.push(...(data || []));
+      }
+      return out;
+    };
 
     const today = fmt(new Date());
 
@@ -97,6 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const salesScope = (q: any) => {
       if (platform) q = q.eq('platform', platform);
       if (adGroup) q = q.eq('ad_group', adGroup);
+      if (linkArr) q = q.in('link_id', linkArr);
       return q;
     };
     const [curSales, prevSales] = await Promise.all([
@@ -178,23 +208,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- 2. shipments：发货量 / 发货趋势 / 在途 / 发货量TOP ----------
     const shipSelect = 'ship_date, shipping_qty, cargo_status, source, shipment_no, product_code, shipment_items(product_id, quantity), forwarders(name)';
+    const buildShipQtyQuery = (fromDate: string, toDate: string) => {
+      let q: any = supabase.from('shipments').select('ship_date, shipping_qty').is('deleted_at', null).gte('ship_date', fromDate).lte('ship_date', toDate);
+      if (storeArr) q = q.in('store', storeArr);
+      return q;
+    };
+    let transitQ: any = supabase
+      .from('shipments')
+      .select(shipSelect)
+      .is('deleted_at', null)
+      .eq('source', 'transfer')
+      .neq('cargo_status', '已入仓');
+    if (storeArr) transitQ = transitQ.in('store', storeArr);
+    transitQ = transitQ.order('created_at', { ascending: false }).limit(50);
+    let domShipQ: any = supabase
+      .from('shipment_items')
+      .select('product_id, quantity, shipments!inner(ship_date)')
+      .is('shipments.deleted_at', null)
+      .gte('shipments.ship_date', start)
+      .lte('shipments.ship_date', end);
+    if (storeArr) domShipQ = domShipQ.in('shipments.store', storeArr);
     const [curShipments, prevShipments, inTransitRows, domShipItems] = await Promise.all([
-      supabase.from('shipments').select('ship_date, shipping_qty').is('deleted_at', null).gte('ship_date', start).lte('ship_date', end),
-      supabase.from('shipments').select('ship_date, shipping_qty').is('deleted_at', null).gte('ship_date', prevStart).lte('ship_date', prevEnd),
-      supabase
-        .from('shipments')
-        .select(shipSelect)
-        .is('deleted_at', null)
-        .eq('source', 'transfer')
-        .neq('cargo_status', '已入仓')
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
-        .from('shipment_items')
-        .select('product_id, quantity, shipments!inner(ship_date)')
-        .is('shipments.deleted_at', null)
-        .gte('shipments.ship_date', start)
-        .lte('shipments.ship_date', end),
+      buildShipQtyQuery(start, end),
+      buildShipQtyQuery(prevStart, prevEnd),
+      transitQ,
+      domShipQ,
     ]);
     if (curShipments.error) throw curShipments.error;
     if (prevShipments.error) throw prevShipments.error;
@@ -236,22 +274,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- 3. products + 国内库存 ----------
     const [productsRows, domInvRows] = await Promise.all([
-      supabase.from('products').select('id, sku, name, link_id, safety_stock, overseas_stock, purchase_cost, image_text').is('deleted_at', null),
-      supabase
-        .from('inventory')
-        .select('product_id, quantity, created_at, warehouses!inner(wh_type)')
-        .eq('warehouses.wh_type', 'domestic')
-        .gt('quantity', 0),
+      fetchProductsVisible(),
+      applyWarehouseFilter(
+        supabase
+          .from('inventory')
+          .select('product_id, quantity, created_at, warehouses!inner(wh_type)')
+          .eq('warehouses.wh_type', 'domestic')
+          .gt('quantity', 0),
+        ctx,
+        'warehouse_id'
+      ),
     ]);
-    if (productsRows.error) throw productsRows.error;
     if (domInvRows.error) throw domInvRows.error;
 
     const productById = new Map<string, any>();
-    for (const p of productsRows.data || []) productById.set(p.id, p);
+    for (const p of productsRows) productById.set(p.id, p);
 
     // 链接 -> 产品图片（供热销/潜力榜展示产品图）
     const linkImageMap = new Map<string, string>();
-    for (const p of productsRows.data || []) {
+    for (const p of productsRows) {
       if (p.link_id && p.image_text) linkImageMap.set(p.link_id, p.image_text);
     }
 
@@ -272,7 +313,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lowStock: any[] = [];
     let safetyTotal = 0;
     let safetyPass = 0;
-    for (const p of productsRows.data || []) {
+    for (const p of productsRows) {
       const safety = num(p.safety_stock);
       if (safety <= 0) continue;
       safetyTotal += 1;
@@ -293,11 +334,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 补货建议：按日均销 + 安全库存，补至 2 倍安全库存
     const linkToProduct = new Map<string, any>();
-    for (const p of productsRows.data || []) {
+    for (const p of productsRows) {
       if (p.link_id) linkToProduct.set(p.link_id, p);
     }
     const replenish: any[] = [];
-    for (const p of productsRows.data || []) {
+    for (const p of productsRows) {
       const safety = num(p.safety_stock);
       if (safety <= 0) continue;
       const dom = domStockMap.get(p.id) || 0;
@@ -342,9 +383,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const prevAfterFrom = prevStart + 'T00:00:00';
     const prevAfterTo = prevEnd + 'T23:59:59';
     const [afterRows, afterTrendRows, prevAfterRows] = await Promise.all([
-      supabase.from('after_sales').select('created_at, reason').is('deleted_at', null).gte('created_at', afterFrom).lte('created_at', afterTo),
-      supabase.from('after_sales').select('created_at').is('deleted_at', null).gte('created_at', afterFrom).lte('created_at', afterTo),
-      supabase.from('after_sales').select('created_at').is('deleted_at', null).gte('created_at', prevAfterFrom).lte('created_at', prevAfterTo),
+      applyWarehouseFilter(supabase.from('after_sales').select('created_at, reason').is('deleted_at', null), ctx, 'warehouse_id').gte('created_at', afterFrom).lte('created_at', afterTo),
+      applyWarehouseFilter(supabase.from('after_sales').select('created_at').is('deleted_at', null), ctx, 'warehouse_id').gte('created_at', afterFrom).lte('created_at', afterTo),
+      applyWarehouseFilter(supabase.from('after_sales').select('created_at').is('deleted_at', null), ctx, 'warehouse_id').gte('created_at', prevAfterFrom).lte('created_at', prevAfterTo),
     ]);
     if (afterRows.error) throw afterRows.error;
     if (afterTrendRows.error) throw afterTrendRows.error;

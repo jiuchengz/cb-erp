@@ -12,7 +12,16 @@ export const useAuthStore = defineStore('auth', () => {
   // 可见仓库范围：null = 不受限（super_admin 全量）；string[] = 角色绑定仓库并集
   const warehouseIds = ref<string[] | null>(null)
   const profile = ref<any>(null)
+  // init 幂等锁：路由守卫与 MainLayout 可能并发触发，避免重复调 /auth/me
+  let initInFlight: Promise<void> | null = null
   async function init() {
+    if (initInFlight) return initInFlight
+    initInFlight = doInit().finally(() => {
+      initInFlight = null
+    })
+    return initInFlight
+  }
+  async function doInit() {
     console.log('[auth:init] 开始, ts=' + new Date().toISOString())
     // 诊断：init 前 localStorage 中 session 键是否存在
     let rawSession = null

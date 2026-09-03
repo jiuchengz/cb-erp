@@ -141,6 +141,11 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="店铺" required>
+          <el-select v-model="form.store" placeholder="请选择店铺（来源：仓库管理中的店铺绑定）" clearable filterable style="width: 100%">
+            <el-option v-for="s in warehouseStoreOptions" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
@@ -681,8 +686,24 @@ const form = reactive({
   shipping_mode: '空运',
   shipping_cartons: 0,
   ship_date: '',
+  store: '',
   items: [] as any[],
 })
+
+// 店铺选项：来源于仓库管理中仓库绑定的店铺（warehouses.store）
+const warehouseStoreOptions = ref<string[]>([])
+async function loadWarehouseStores() {
+  try {
+    const { data } = await api.get('/warehouses')
+    const set = new Set<string>()
+    for (const w of data.data || []) {
+      if (w?.store && String(w.store).trim()) set.add(String(w.store).trim())
+    }
+    warehouseStoreOptions.value = Array.from(set)
+  } catch {
+    warehouseStoreOptions.value = []
+  }
+}
 
 const totalOfItems = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
 
@@ -703,9 +724,11 @@ function openCreate() {
   form.shipping_mode = '空运'
   form.shipping_cartons = 0
   form.ship_date = ''
+  form.store = ''
   form.items = []
   addItem()
   createVisible.value = true
+  loadWarehouseStores()
 }
 
 async function save() {
@@ -723,6 +746,10 @@ async function save() {
   }
   if (!form.ship_date) {
     ElMessage.warning('请选择发货时间')
+    return
+  }
+  if (!form.store.trim()) {
+    ElMessage.warning('请选择店铺')
     return
   }
   const items = form.items.filter((it) => it.product_id)
@@ -744,6 +771,7 @@ async function save() {
       shipping_mode: form.shipping_mode,
       shipping_cartons: form.shipping_cartons ?? 0,
       ship_date: form.ship_date,
+      store: form.store.trim(),
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
       source: 'transfer',
       cargo_status: '待发货',

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission, assertWarehouseVisible, bindProductWarehouseFilter, ProductBinding } from './_lib/rbac';
+import { requirePermission, assertWarehouseVisible, bindProductWarehouseFilter, hasUnrestrictedWarehouse, ProductBinding } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -177,13 +177,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const salesMap = new Map<string, number>();
 
       if (pageIds.length) {
-        // 库存：inventory join warehouses(wh_type)（分批查询，避免超长 URL）
+        // 库存：inventory join warehouses(wh_type)（分批查询，避免超长 URL）。
+        // 一货多仓口径：受限账号仅统计其可见仓库的库存行（不可见仓库存不泄露/不计入），
+        // super_admin/总仓全量账号不做过滤（可见全仓库存）。
+        const invExtra = (q: any) => {
+          if (!hasUnrestrictedWarehouse(ctx) && (ctx.warehouseIds || []).length) {
+            return q.in('warehouse_id', ctx.warehouseIds);
+          }
+          return q;
+        };
         const { data: invRows, error: invErr } = await queryInChunks(
           supabase,
           'inventory',
           'product_id',
           pageIds,
-          'product_id, quantity, warehouses!inner(wh_type)'
+          'product_id, quantity, warehouses!inner(wh_type)',
+          invExtra
         );
         if (invErr) throw invErr;
         for (const r of invRows || []) {

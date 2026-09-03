@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, bindProductWarehouseFilter, fetchProductBindingsVisible } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -138,7 +138,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const settings = await loadSettings(supabase);
 
-      let query: any = supabase.from('products').select('*', { count: 'exact' }).is('deleted_at', null);
+      // 一货多仓可见性：商品为公司级主档，受限账号仅能查看其绑定任一可见仓的商品（成本利润属商品主档数据）
+      const bindFilter = bindProductWarehouseFilter(ctx);
+      let query: any = supabase
+        .from('products')
+        .select(`*, ${bindFilter.selectBind}`, { count: 'exact' })
+        .is('deleted_at', null);
+      query = bindFilter.filter(query);
       if (search) {
         query = query.or(
           `sku.ilike.%${search}%,name.ilike.%${search}%,barcode.ilike.%${search}%,code.ilike.%${search}%,link_id.ilike.%${search}%`
@@ -148,7 +154,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data, error, count } = await query;
       if (error) throw error;
 
-      const rows = (data || []).map((p: any) => ({ ...p, ...calcProfitFields(p, settings) }));
+      const rows = (data || []).map((p: any) => {
+        // 载荷不含内嵌绑定行（绑定仅用于可见过滤）
+        const { product_warehouses: _pw, ...rest } = p;
+        return { ...rest, ...calcProfitFields(p, settings) };
+      });
       return res.status(200).json({ data: rows, count: count || 0, settings });
     }
 
@@ -174,13 +184,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { id, ...fields } = body;
       const settings = await loadSettings(supabase);
 
-      const { data: existing, error: fetchErr } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      if (fetchErr) throw fetchErr;
-      if (!existing) throw new Error('商品不存在');
+      // 一货多仓可见校验：商品需绑定任一当前账号可见仓（不可见按不存在处理，防越权写主档成本利润字段）
+      const { row: existing } = await fetchProductBindingsVisible(supabase, ctx, id);
 
       const merged = { ...existing, ...fields };
       const profit = calcProfitFields(merged, settings);

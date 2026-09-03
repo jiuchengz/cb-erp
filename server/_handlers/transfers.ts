@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -30,6 +30,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query: any = supabase.from('transfers').select('*', { count: 'exact' });
+      // 受限账号：调出仓或调入仓任一在可见仓集才可见
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const vis = ctx.warehouseIds || [];
+        if (vis.length === 0) {
+          query = query.in('from_warehouse_id', []);
+        } else {
+          query = query.or(`from_warehouse_id.in.(${vis.join(',')}),to_warehouse_id.in.(${vis.join(',')})`);
+        }
+      }
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);
@@ -42,6 +51,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'transfer.write');
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+
+      // 受限账号：调出/调入仓库都必须在自己可见范围内
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const vis = new Set(ctx.warehouseIds || []);
+        if (!vis.has(body.from_warehouse_id) || !vis.has(body.to_warehouse_id)) {
+          throw Errors.forbidden('调出/调入仓库不在您的可见范围');
+        }
+      }
 
       const { data: transfer, error } = await supabase.from('transfers').insert({
         transfer_no: body.transfer_no,

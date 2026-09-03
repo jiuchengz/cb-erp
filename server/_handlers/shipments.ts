@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, loadVisibleStoreNames } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -59,6 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (source) select += ', shipment_items(product_id, quantity, remark)';
       let query: any = supabase.from('shipments').select(select, { count: 'exact' }).is('deleted_at', null);
       if (source) query = query.eq('source', source);
+      // 物流发货单方案B：受限账号仅能查看其可见仓库店铺的货件（super_admin/总仓账号全量）
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const stores = (await loadVisibleStoreNames(supabase, ctx)) || new Set<string>();
+        query = query.in('store', Array.from(stores));
+      }
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       const cargoStatus = typeof req.query.cargo_status === 'string' ? req.query.cargo_status.trim() : '';
@@ -92,6 +97,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'shipment.write');
       const body = parse(createSchema, req.body || {});
       const supabase = getAdminClient();
+
+      // 物流发货单方案B：受限账号仅能创建属于自己可见仓库店铺的调拨发货（数据来源=调拨发货管理）
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const stores = (await loadVisibleStoreNames(supabase, ctx)) || new Set<string>();
+        const storeName = typeof body.store === 'string' ? body.store.trim() : '';
+        if (body.source !== 'transfer' || !storeName || !stores.has(storeName)) {
+          throw Errors.forbidden('仅能创建属于自己可见仓库店铺的调拨发货，请先在仓库管理中为仓库配置店铺');
+        }
+      }
 
       // 调拨发货创建支持绑定：若货件号已存在于发货管理（source=manual），复用该记录升级为调拨发货，
       // 使同一条货件在「发货管理」与「调拨发货管理」中同时可见，避免 tracking_no 唯一约束报 23505

@@ -10,7 +10,8 @@ export interface AuthContext {
   roles: string[];
   permissions: string[];
   // 可见仓库集：由该账号直接绑定的 user_warehouses 得出（用户维度）。
-  // super_admin 不受仓库限制，返回 null 表示"全量可见"。
+  // super_admin 不受仓库限制，返回 null 表示"全量可见"；
+  // 普通账号只要绑定了任一 head 总仓，也升级为 null（总仓账号=全量可见）。
   warehouseIds: string[] | null;
 }
 
@@ -37,6 +38,7 @@ const CACHE_TTL_MS = 60 * 1000;
 // user_warehouses -> 可见仓库（用户维度）。
 // 查询失败必须显性报错，禁止静默当成"无角色"（否则会误报 403 无权限）。
 // 仓库隔离口径：super_admin 返回 warehouseIds=null（全量可见，不受仓库限制）；
+// 总仓账号（普通账号但绑定任一 head 总仓）同样返回 null=全量可见；
 // 其余账号可见仓库 = 其 user_warehouses 直接绑定集（可为空数组 = 无可见仓库）。
 // 兼容降级：user_warehouses 表尚未部署（迁移未执行）时，仓库维度降级为全量空集，
 // 不阻断认证；业务侧需待迁移完成后才有隔离效果。
@@ -44,6 +46,8 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
   const roles: string[] = [];
   const permissionsSet = new Set<string>();
   const warehouseSet = new Set<string>();
+  // 普通账号是否因绑定 head 总仓而升级为全量（null=全量，同 super_admin）
+  let boundToHead = false;
 
   // 嵌套关联查询：一次拿到 user_roles + 角色名（替代原来 4 次串行查询）
   const { data: userRoles, error: userRolesErr } = await supabase
@@ -73,6 +77,23 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       for (const uw of uwData || []) {
         if (uw?.warehouse_id) warehouseSet.add(uw.warehouse_id);
       }
+      // 总仓(head)账号升级为全量(null)：绑定的任一仓库为 head 即视为总仓账号。
+      // warehouse_kind 列尚未部署（055 迁移未执行）时查询报错，保持绑定集原逻辑，不阻断认证。
+      if (warehouseSet.size > 0) {
+        try {
+          const { data: whRows, error: whErr } = await supabase
+            .from('warehouses')
+            .select('warehouse_kind')
+            .in('id', Array.from(warehouseSet))
+            .limit(50);
+          if (!whErr && (whRows || []).some((w: any) => w.warehouse_kind === 'head')) {
+            warehouseSet.clear();
+            boundToHead = true;
+          }
+        } catch {
+          /* warehouse_kind 未部署时忽略，保持绑定集 */
+        }
+      }
     } else {
       console.warn('[auth] user_warehouses load skipped (migration not applied?):', uwErr.message);
     }
@@ -91,11 +112,12 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
     }
   }
 
+  const unrestricted = isSuperAdmin || boundToHead;
   return {
     roles,
     permissions: Array.from(permissionsSet),
-    // super_admin 不需要仓库绑定：null 表示全量
-    warehouseIds: isSuperAdmin ? null : Array.from(warehouseSet),
+    // super_admin / 总仓(head)账号不需要仓库绑定：null 表示全量可见
+    warehouseIds: unrestricted ? null : Array.from(warehouseSet),
   };
 }
 

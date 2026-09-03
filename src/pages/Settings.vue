@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-            <el-tab-pane label="数据备份" name="backup">
+            <el-tab-pane v-if="tabVisible('backup')" label="数据备份" name="backup">
         <div class="page-header">
           <h2>数据备份</h2>
         </div>
@@ -19,7 +19,7 @@
           </div>
         </div>
       </el-tab-pane>
-            <el-tab-pane label="网站图标" name="logo">
+            <el-tab-pane v-if="tabVisible('logo')" label="网站图标" name="logo">
         <div class="page-header">
           <h2>网站图标</h2>
         </div>
@@ -45,7 +45,7 @@
             </div>
             <div class="logo-edit-hint">拖动图片调整位置，拖动滑块调整大小，保存后全局生效</div>
           </div>
-          <div class="appearance-row logo-actions">
+          <div v-if="canManage" class="appearance-row logo-actions">
             <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon" class="hidden-input" @change="onLogoFile" />
             <el-button type="primary" :disabled="logoSaving" @click="chooseLogo">选择图片</el-button>
             <el-button :disabled="!logoDirty" :loading="logoSaving" @click="saveLogo">保存</el-button>
@@ -54,7 +54,7 @@
           </div>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="系统设置" name="system">
+      <el-tab-pane v-if="tabVisible('system')" label="系统设置" name="system">
         <div class="page-header">
           <h2>系统设置</h2>
           <el-button v-if="canManage" type="primary" :loading="sysSaving" @click="saveSystemSettings">保存设置</el-button>
@@ -106,7 +106,7 @@
         </div>
       </el-tab-pane>
 
-<el-tab-pane label="界面外观" name="appearance">
+<el-tab-pane v-if="tabVisible('appearance')" label="界面外观" name="appearance">
         <div class="page-header">
           <h2>界面外观</h2>
         </div>
@@ -247,7 +247,7 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="角色管理" name="roles">
+      <el-tab-pane v-if="tabVisible('roles')" label="角色管理" name="roles">
         <div class="page-header">
           <h2>角色管理</h2>
           <el-button v-if="canManage" type="primary" @click="openRoleCreate">新增角色</el-button>
@@ -272,7 +272,7 @@
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="权限列表" name="permissions">
+      <el-tab-pane v-if="tabVisible('permissions')" label="权限列表" name="permissions">
         <div class="page-header">
           <h2>权限列表</h2>
         </div>
@@ -282,10 +282,10 @@
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="仓库管理" name="warehouses">
+      <el-tab-pane v-if="tabVisible('warehouses')" label="仓库管理" name="warehouses">
         <div class="page-header">
           <h2>仓库管理</h2>
-          <el-button v-if="canManage" type="primary" @click="openWhCreate">新增仓库</el-button>
+          <el-button v-if="canWhWrite" type="primary" @click="openWhCreate">新增仓库</el-button>
         </div>
         <el-table :resizable="false" v-loading="whLoading" :data="warehouses" border stripe>
           <el-table-column prop="name" label="仓库名称" min-width="180" />
@@ -295,7 +295,17 @@
               <el-tag :type="row.wh_type === 'overseas' ? 'warning' : 'primary'">{{ row.wh_type === 'overseas' ? '海外仓' : '国内仓库' }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="仓库层级" width="100">
+            <template #default="{ row }">
+              <el-tag :type="whKindTag(row).type">{{ whKindTag(row).label }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
+          <el-table-column label="店铺" min-width="120">
+            <template #default="{ row }">
+              <span>{{ row.store || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag>
@@ -303,14 +313,14 @@
           </el-table-column>
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="canManage" link type="primary" @click="openWhEdit(row)">编辑</el-button>
-              <el-button v-if="canManage" link type="danger" @click="removeWh(row)">删除</el-button>
+              <el-button v-if="canWhWrite" link type="primary" @click="openWhEdit(row)">编辑</el-button>
+              <el-button v-if="canWhWrite" link type="danger" @click="removeWh(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="数据库用量" name="usage">
+      <el-tab-pane v-if="tabVisible('usage')" label="数据库用量" name="usage">
         <div class="page-header">
           <h2>数据库用量</h2>
         </div>
@@ -336,7 +346,7 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="审计日志" name="audit">
+      <el-tab-pane v-if="tabVisible('audit')" label="审计日志" name="audit">
         <div class="filters">
           <el-input
             v-model="auditQuery.resource_type"
@@ -434,13 +444,24 @@
           <el-input v-model="whForm.code" />
         </el-form-item>
         <el-form-item label="仓库类型" required>
-          <el-radio-group v-model="whForm.wh_type">
+          <el-radio-group v-model="whForm.wh_type" @change="onWhTypeChange">
             <el-radio value="domestic">国内仓库</el-radio>
             <el-radio value="overseas">海外仓</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="仓库层级" required>
+          <el-select v-model="whForm.warehouse_kind" placeholder="选择仓库层级" style="width: 100%" @change="onWhKindChange">
+            <el-option label="总仓（head）" value="head" />
+            <el-option label="子仓（sub）" value="sub" />
+            <el-option label="海外仓（overseas）" value="overseas" />
+          </el-select>
+          <div class="form-tip">总仓=head（国内总仓，总仓账号可查看全仓数据）；子仓=sub（国内子仓）；海外仓=overseas。总仓/子仓归属国内仓库，海外仓归属海外仓库，保存时自动同步。</div>
+        </el-form-item>
         <el-form-item label="地址">
           <el-input v-model="whForm.address" type="textarea" :rows="2" maxlength="256" />
+        </el-form-item>
+        <el-form-item label="店铺">
+          <el-input v-model="whForm.store" placeholder="填写该仓库对应的店铺名（用于调拨发货/物流模块按店铺区分），可留空" maxlength="100" />
         </el-form-item>
         <el-form-item v-if="whEditing" label="状态">
           <el-switch v-model="whForm.is_active" />
@@ -465,12 +486,40 @@ import { useSiteStore } from '../stores/site'
 const auth = useAuthStore()
 const site = useSiteStore()
 const canManage = computed(() => auth.hasPermission('system.manage'))
+// 系统设置页内按权限显隐：canUser 覆盖 角色/权限 标签，canWh 覆盖 仓库管理 标签
+const canUser = computed(() => auth.hasPermission('user.read'))
+const canWh = computed(() => auth.hasPermission('inventory.read'))
+const canWhWrite = computed(() => auth.hasPermission('inventory.write'))
 
 function formatDate(v: string) {
   return sysFormatDateTime(v)
 }
 
-const activeTab = ref('system')
+// 顶部标签权限映射：system.manage 类（系统设置/备份/图标/界面外观/用量/审计）、user.read 类（角色/权限）、inventory.read 类（仓库）
+const TAB_ORDER = ['system', 'backup', 'logo', 'appearance', 'roles', 'permissions', 'warehouses', 'usage', 'audit']
+function tabVisible(name: string): boolean {
+  switch (name) {
+    case 'system':
+    case 'backup':
+    case 'logo':
+    case 'appearance':
+    case 'usage':
+    case 'audit':
+      return auth.hasPermission('system.manage')
+    case 'roles':
+    case 'permissions':
+      return canUser.value
+    case 'warehouses':
+      return canWh.value
+    default:
+      return true
+  }
+}
+function defaultTab(): string {
+  return TAB_ORDER.find((n) => tabVisible(n)) || 'system'
+}
+
+const activeTab = ref(defaultTab())
 const backupLoading = ref(false)
 const backupResult = ref<any>(null)
 
@@ -634,11 +683,11 @@ async function doBackup() {
   }
 }
 function onTabChange(name: string | number) {
-  if (name === 'permissions') loadPermissions()
-  if (name === 'warehouses') loadWarehouses()
-  if (name === 'usage') loadDbUsage()
-  if (name === 'audit') loadAudit()
-  if (name === 'system') loadSystemSettings()
+  if (name === 'permissions' && canUser.value) loadPermissions()
+  if (name === 'warehouses' && canWh.value) loadWarehouses()
+  if (name === 'usage' && canManage.value) loadDbUsage()
+  if (name === 'audit' && canManage.value) loadAudit()
+  if (name === 'system' && canManage.value) loadSystemSettings()
 }
 
 /* ---------- 数据库用量 ---------- */
@@ -1288,17 +1337,52 @@ const whForm = reactive({
   name: '',
   code: '',
   address: '',
+  store: '',
   is_active: true,
   wh_type: 'domestic',
+  warehouse_kind: 'sub',
 })
+
+// 仓库层级辅助：warehouse_kind <-> wh_type 双向同步（head/sub -> domestic，overseas -> overseas）
+function kindLabel(kind: string | undefined | null): string {
+  if (kind === 'head') return '总仓'
+  if (kind === 'overseas') return '海外仓'
+  return '子仓'
+}
+function kindTagType(kind: string | undefined | null): 'danger' | 'warning' | 'primary' {
+  if (kind === 'head') return 'danger'
+  if (kind === 'overseas') return 'warning'
+  return 'primary'
+}
+function deriveKindFromType(whType?: string | null): string {
+  return whType === 'overseas' ? 'overseas' : 'sub'
+}
+function deriveTypeFromKind(kind: string): string {
+  return kind === 'overseas' ? 'overseas' : 'domestic'
+}
+function whKindTag(row: any): { label: string; type: 'danger' | 'warning' | 'primary' } {
+  const kind = row.warehouse_kind ?? deriveKindFromType(row.wh_type)
+  return { label: kindLabel(kind), type: kindTagType(kind) }
+}
+function onWhTypeChange(ty: string | number | boolean | undefined) {
+  const t = String(ty ?? '')
+  // 用户改 国内/海外 时联动层级：overseas -> 海外仓；domestic 时若当前为海外则回退子仓，否则保留 head/sub
+  if (t === 'overseas') whForm.warehouse_kind = 'overseas'
+  else if (whForm.warehouse_kind === 'overseas') whForm.warehouse_kind = 'sub'
+}
+function onWhKindChange(kind: string) {
+  whForm.wh_type = deriveTypeFromKind(kind)
+}
 
 function openWhCreate() {
   whEditing.value = null
   whForm.name = ''
   whForm.code = ''
   whForm.address = ''
+  whForm.store = ''
   whForm.is_active = true
   whForm.wh_type = 'domestic'
+  whForm.warehouse_kind = 'sub'
   whVisible.value = true
 }
 
@@ -1307,8 +1391,10 @@ function openWhEdit(row: any) {
   whForm.name = row.name
   whForm.code = row.code || ''
   whForm.address = row.address || ''
+  whForm.store = row.store || ''
   whForm.is_active = row.is_active !== false
   whForm.wh_type = row.wh_type === 'overseas' ? 'overseas' : 'domestic'
+  whForm.warehouse_kind = row.warehouse_kind ?? deriveKindFromType(row.wh_type)
   whVisible.value = true
 }
 
@@ -1323,7 +1409,9 @@ async function saveWh() {
       name: whForm.name,
       code: whForm.code,
       address: whForm.address,
-      wh_type: whForm.wh_type,
+      store: whForm.store.trim(),
+      wh_type: deriveTypeFromKind(whForm.warehouse_kind),
+      warehouse_kind: whForm.warehouse_kind,
     }
     if (whEditing.value) {
       payload.is_active = whForm.is_active
@@ -1387,10 +1475,12 @@ function onAuditSizeChange() {
 const saving = ref(false)
 
 onMounted(() => {
-  loadRoles()
-  loadPermissions()
+  if (canUser.value) {
+    loadRoles()
+    loadPermissions()
+  }
   loadAppearance()
-  loadSystemSettings()
+  if (canManage.value) loadSystemSettings()
 })
 </script>
 

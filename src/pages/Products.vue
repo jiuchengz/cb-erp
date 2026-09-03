@@ -163,8 +163,8 @@
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openTrack(row)">明细</el-button>
-          <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="canDelete" link type="danger" @click="remove(row)">删除</el-button>
+          <el-button v-if="canWrite" link type="primary" @click="openEdit(row as Product)">编辑</el-button>
+          <el-button v-if="canDelete" link type="danger" @click="remove(row as Product)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -909,9 +909,15 @@ async function save() {
     return
   }
   const validBinds = form.bindings.filter((b) => b.warehouse_id)
-  if (!validBinds.length) {
+  if (!editing.value && !validBinds.length) {
     ElMessage.warning('请至少绑定一个可售仓库')
     return
+  }
+  // 编辑场景允许提交空绑定数组：表示解绑当前账号全部可见绑定
+  // （后端保留其它不可见绑定；若全部绑定均已移除则由后端兜底提示）
+  if (editing.value && !validBinds.length) {
+    const ok = await ElMessageBox.confirm('移除全部可见仓库绑定后，该商品将不再出现在当前仓库视角；若商品仍绑定其它仓库则保留。确定继续？', '解绑全部可见仓库', { type: 'warning', confirmButtonText: '确定解绑', cancelButtonText: '取消' }).catch(() => false)
+    if (!ok) return
   }
   saving.value = true
   try {

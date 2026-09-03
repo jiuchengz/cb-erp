@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, applyWarehouseFilter } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -97,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('stocktakes')
         .select('*, warehouses!inner(id, name)', { count: 'exact' })
         .is('deleted_at', null);
+      query = applyWarehouseFilter(query, ctx); // 受限账号仅可见其绑定仓库的盘点单
       const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
       if (status) query = query.eq('status', status);
       const warehouseId = typeof req.query.warehouse_id === 'string' ? req.query.warehouse_id.trim() : '';
@@ -154,6 +155,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (stErr) {
         if (stErr.code === 'PGRST116') throw Errors.notFound('盘点单不存在');
         throw stErr;
+      }
+      if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(st.warehouse_id)) {
+        throw Errors.notFound('盘点单不存在');
       }
       if (st.status === 'COMPLETED') throw Errors.conflict('该盘点单已完成审核，不能重复审核');
       const { data: items, error: itErr } = await supabase
@@ -217,6 +221,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // POST /api/stocktakes 创建盘点单
       requirePermission(ctx, 'inventory.adjust');
       const body = parse(createSchema, req.body || {});
+      // 受限账号：只能创建可见仓库的盘点单
+      if (!hasUnrestrictedWarehouse(ctx)) {
+        const visSet = new Set(ctx.warehouseIds || []);
+        if (!visSet.has(body.warehouse_id)) throw Errors.forbidden('您没有该仓库的盘点权限');
+      }
       const stocktakeNo = await genStocktakeNo(supabase);
       const { data: st, error } = await supabase
         .from('stocktakes')
@@ -282,9 +291,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('盘点单不存在');
         throw getErr;
       }
+      if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(before.warehouse_id)) {
+        throw Errors.notFound('盘点单不存在');
+      }
       if (before.status === 'COMPLETED') throw Errors.conflict('盘点单已完成审核，不能编辑');
 
       const body = parse(updateSchema, req.body || {});
+      if (!hasUnrestrictedWarehouse(ctx) && body.warehouse_id && body.warehouse_id !== before.warehouse_id) {
+        const visSet = new Set(ctx.warehouseIds || []);
+        if (!visSet.has(body.warehouse_id)) throw Errors.forbidden('您没有该仓库的盘点权限');
+      }
       const warehouseId = body.warehouse_id || before.warehouse_id;
       const update: any = { updated_at: new Date().toISOString() };
       if (body.warehouse_id !== undefined) update.warehouse_id = body.warehouse_id;
@@ -343,6 +359,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (getErr) {
         if (getErr.code === 'PGRST116') throw Errors.notFound('盘点单不存在');
         throw getErr;
+      }
+      if (!hasUnrestrictedWarehouse(ctx) && !(ctx.warehouseIds || []).includes(before.warehouse_id)) {
+        throw Errors.notFound('盘点单不存在');
       }
       if (before.status === 'COMPLETED') throw Errors.conflict('已完成审核的盘点单不能删除，如需修正请新建盘点单');
       const { error } = await supabase.from('stocktakes').update({ deleted_at: new Date().toISOString() }).eq('id', id);

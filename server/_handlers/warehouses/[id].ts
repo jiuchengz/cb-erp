@@ -14,7 +14,17 @@ const updateSchema = z.object({
   address: z.string().max(300).nullable().optional(),
   is_active: z.boolean().optional(),
   wh_type: z.enum(['domestic', 'overseas']).optional(),
+  warehouse_kind: z.enum(['head', 'sub', 'overseas']).optional(),
+  store: z.string().max(100).nullable().optional(),
 });
+
+// warehouse_kind 与 wh_type 双向同步：head/sub -> domestic；overseas -> overseas
+function deriveWhType(kind: string): 'domestic' | 'overseas' {
+  return kind === 'overseas' ? 'overseas' : 'domestic';
+}
+function deriveKind(whType: string | undefined): 'head' | 'sub' | 'overseas' {
+  return whType === 'overseas' ? 'overseas' : 'sub';
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -27,9 +37,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'inventory.write');
       const body = parse(updateSchema, req.body || {});
       if (Object.keys(body).length === 0) throw Errors.badRequest('无更新字段');
+      // 两列双向同步：改 kind 则同步 wh_type；改 wh_type 则同步 kind
+      const patch: Record<string, unknown> = { ...body };
+      if (patch.warehouse_kind !== undefined) {
+        patch.wh_type = deriveWhType(patch.warehouse_kind as string);
+      } else if (patch.wh_type !== undefined) {
+        patch.warehouse_kind = deriveKind(patch.wh_type as string | undefined);
+      }
+      if (patch.store !== undefined) {
+        patch.store = typeof patch.store === 'string' ? (patch.store.trim() || null) : (patch.store ?? null);
+      }
       const { data: before } = await supabase.from('warehouses').select('*').eq('id', id).single();
       if (!before) throw Errors.notFound('仓库不存在');
-      const { data, error } = await supabase.from('warehouses').update(body).eq('id', id).select().single();
+      const { data, error } = await supabase.from('warehouses').update(patch).eq('id', id).select().single();
       if (error) {
         if (error.code === '23505') throw Errors.conflict('仓库编码已存在');
         if (error.code === 'PGRST116') throw Errors.notFound('仓库不存在');
