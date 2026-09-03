@@ -14,19 +14,43 @@ const createSchema = z.object({
   name: z.string().min(1).max(100),
   password: z.string().min(6).max(72),
   role_ids: z.array(z.string().uuid()).optional(),
+  // 用户直接绑定的可见仓库 id（仓库级行级隔离：用户维度）
+  warehouse_ids: z.array(z.string().uuid()).optional(),
 });
 
 async function getProfileWithRoles(supabase: any, id: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*, user_roles(role_id, roles(id, name))')
+    .select('*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)')
     .eq('id', id)
     .single();
   if (error) {
     if (error.code === 'PGRST116') throw Errors.notFound('用户不存在');
     throw error;
   }
-  return data;
+  return normalizeUserRoles(data);
+}
+
+// 校验仓库 id 均存在，返回去重后的合法 id 列表
+async function resolveWarehouseIds(supabase: any, ids: string[]) {
+  if (!ids || ids.length === 0) return [] as string[];
+  const uniqueIds = Array.from(new Set(ids));
+  const { data, error } = await supabase.from('warehouses').select('id').in('id', uniqueIds);
+  if (error) throw error;
+  const found = new Set((data || []).map((w: any) => w.id));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw Errors.badRequest('存在无效仓库 ID');
+  return uniqueIds;
+}
+
+async function replaceUserWarehouses(supabase: any, userId: string, warehouseIds: string[]) {
+  const { error: delErr } = await supabase.from('user_warehouses').delete().eq('user_id', userId);
+  if (delErr) throw delErr;
+  if (warehouseIds.length > 0) {
+    const rows = warehouseIds.map((warehouse_id) => ({ user_id: userId, warehouse_id }));
+    const { error: insErr } = await supabase.from('user_warehouses').insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -67,6 +91,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (roleErr) throw roleErr;
       }
 
+      // 4) 仓库绑定
+      if (body.warehouse_ids !== undefined && body.warehouse_ids.length > 0) {
+        const whIds = await resolveWarehouseIds(supabase, body.warehouse_ids);
+        await replaceUserWarehouses(supabase, newId, whIds);
+      }
+
       const after = await getProfileWithRoles(supabase, newId);
       await writeAudit(ctx, req, 'create', 'user', newId, null, after);
       return res.status(201).json({ data: after });
@@ -78,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = getAdminClient();
       let query: any = supabase
         .from('profiles')
-        .select('*, user_roles(role_id, roles(id, name))', { count: 'exact' });
+        .select('*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)', { count: 'exact' });
       const email = typeof req.query.email === 'string' ? req.query.email.trim() : '';
       if (email) query = query.ilike('email', `%${email}%`);
       query = query.order('created_at', { ascending: false }).range((q.page - 1) * q.pageSize, q.page * q.pageSize - 1);

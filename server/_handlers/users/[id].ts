@@ -15,6 +15,8 @@ const updateSchema = z.object({
   password: z.string().min(6).max(72).optional(),
   is_active: z.boolean().optional(),
   role_ids: z.array(z.string().uuid()).optional(),
+  // 用户直接绑定的可见仓库 id（仓库级行级隔离：用户维度）
+  warehouse_ids: z.array(z.string().uuid()).optional(),
 });
 
 // 与后端管理入口相关、不允许自我移除的权限
@@ -30,20 +32,28 @@ async function collectRoleCodes(supabase: any, roleIds: string[]) {
   return (data || []).map((rp: any) => rp.permissions?.code).filter(Boolean) as string[];
 }
 
-// 前后端字段归一：user_roles(role_id, roles) -> 顶层 roles: [{id, name}]（前端读 row.roles）
+// 前后端字段归一：
+// user_roles(role_id, roles) -> 顶层 roles: [{id, name}]（前端读 row.roles）
+// user_warehouses(warehouse_id) -> 顶层 warehouse_ids: [仓库id]（前端读 row.warehouse_ids）
 // display_name -> name（前端读 row.name 渲染姓名列/编辑回填）
-export function normalizeUserRoles<T extends { user_roles?: Array<{ roles: { id: string; name: string } | null } | null> }>(row: T) {
+export function normalizeUserRoles(row: any) {
+  const userRoles = row?.user_roles || [];
+  const userWarehouses = row?.user_warehouses || [];
+  const rolesArr = userRoles.map((ur: any) => ur?.roles).filter(Boolean);
+  const { user_roles, user_warehouses, ...rest } = row || {};
   return {
-    ...row,
-    name: (row as any).display_name ?? '',
-    roles: (row.user_roles || []).map((ur: any) => ur?.roles).filter(Boolean),
+    ...rest,
+    name: row?.display_name ?? '',
+    roles: rolesArr,
+    warehouse_ids: userWarehouses.map((uw: any) => uw?.warehouse_id).filter(Boolean) as string[],
+    is_super_admin: rolesArr.some((r: any) => r?.name === 'super_admin'),
   };
 }
 
 async function getProfileWithRoles(supabase: any, id: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*, user_roles(role_id, roles(id, name))')
+    .select('*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)')
     .eq('id', id)
     .single();
   if (error) {
@@ -51,6 +61,29 @@ async function getProfileWithRoles(supabase: any, id: string) {
     throw error;
   }
   return normalizeUserRoles(data);
+}
+
+// 校验仓库 id 均存在，返回去重后的合法 id 列表
+async function resolveWarehouseIds(supabase: any, ids: string[]) {
+  if (!ids || ids.length === 0) return [] as string[];
+  const uniqueIds = Array.from(new Set(ids));
+  const { data, error } = await supabase.from('warehouses').select('id').in('id', uniqueIds);
+  if (error) throw error;
+  const found = new Set((data || []).map((w: any) => w.id));
+  const missing = uniqueIds.filter((id) => !found.has(id));
+  if (missing.length > 0) throw Errors.badRequest('存在无效仓库 ID');
+  return uniqueIds;
+}
+
+// 全量覆盖写用户的仓库绑定（user_warehouses）
+async function replaceUserWarehouses(supabase: any, userId: string, warehouseIds: string[]) {
+  const { error: delErr } = await supabase.from('user_warehouses').delete().eq('user_id', userId);
+  if (delErr) throw delErr;
+  if (warehouseIds.length > 0) {
+    const rows = warehouseIds.map((warehouse_id) => ({ user_id: userId, warehouse_id }));
+    const { error: insErr } = await supabase.from('user_warehouses').insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -111,6 +144,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // 4) 仓库绑定更新：整表替换 user_warehouses（super_admin 全量，前端不展示绑定）
+      if (body.warehouse_ids !== undefined) {
+        const whIds = await resolveWarehouseIds(supabase, body.warehouse_ids);
+        await replaceUserWarehouses(supabase, id, whIds);
+      }
+
       const after = await getProfileWithRoles(supabase, id);
       await writeAudit(ctx, req, 'update', 'user', id, null, after);
       return res.status(200).json({ data: after });
@@ -120,7 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requirePermission(ctx, 'user.manage');
       if (id === ctx.userId) throw Errors.badRequest('不能删除当前登录账号');
       const before = await getProfileWithRoles(supabase, id);
-      const isSuperAdmin = (before.user_roles || []).some((ur: any) => ur.roles?.name === 'super_admin');
+      const isSuperAdmin = (before.roles || []).some((r: any) => r?.name === 'super_admin');
       if (isSuperAdmin) throw Errors.badRequest('超级管理员不可删除');
       const { error: authErr } = await supabase.auth.admin.deleteUser(id);
       if (authErr) throw authErr;

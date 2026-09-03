@@ -33,6 +33,17 @@
           <el-tag v-for="r in row.roles" :key="r.id" size="small" style="margin-right: 4px">{{ r.name }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="可见仓库" min-width="200">
+        <template #default="{ row }">
+          <el-tag v-if="row.is_super_admin" size="small" type="warning">全部（超级管理员）</el-tag>
+          <template v-else>
+            <el-tag v-for="wid in (row.warehouse_ids || [])" :key="wid" size="small" style="margin-right: 4px">
+              {{ warehouseName(wid) }}
+            </el-tag>
+            <span v-if="!(row.warehouse_ids || []).length" style="color: #909399">未绑定</span>
+          </template>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '禁用' }}</el-tag>
@@ -67,7 +78,7 @@
       </el-select>
     </div>
 
-    <el-dialog v-model="formVisible" :title="editing ? '编辑用户' : '新增用户'" width="520px" destroy-on-close>
+    <el-dialog v-model="formVisible" :title="editing ? '编辑用户' : '新增用户'" width="620px" destroy-on-close>
       <el-form :model="form" label-width="90px">
         <el-form-item label="邮箱" required>
           <el-input v-model="form.email" :disabled="!!editing" placeholder="user@example.com" />
@@ -85,8 +96,23 @@
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.role_ids" multiple placeholder="选择角色" style="width: 100%">
-            <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
+            <el-option v-for="r in roles" :key="r.id" :label="`${r.name}${r.description ? '（' + r.description + '）' : ''}`" :value="r.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="可见仓库">
+          <el-alert
+            v-if="editingSuperAdmin"
+            type="info"
+            :closable="false"
+            show-icon
+            title="超级管理员不受仓库限制，可查看全部仓库数据，无需绑定"
+          />
+          <template v-else>
+            <el-select v-model="form.warehouse_ids" multiple filterable clearable placeholder="选择该账号可查看的仓库" style="width: 100%">
+              <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+            </el-select>
+            <div class="form-tip">该账号只能看到已绑定仓库的数据；角色决定可访问的模块，仓库范围在此为账号单独绑定</div>
+          </template>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -145,14 +171,30 @@ async function loadRoles() {
   }
 }
 
+const warehouses = ref<any[]>([])
+async function loadWarehouses() {
+  try {
+    const { data } = await api.get('/warehouses')
+    warehouses.value = data.data ?? []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载仓库失败')
+  }
+}
+
+function warehouseName(id: string): string {
+  return warehouses.value.find((w: any) => w.id === id)?.name || id.slice(0, 8)
+}
+
 const formVisible = ref(false)
 const saving = ref(false)
 const editing = ref<any>(null)
+const editingSuperAdmin = computed(() => !!(editing.value && editing.value.is_super_admin))
 const form = reactive({
   email: '',
   name: '',
   password: '',
   role_ids: [] as string[],
+  warehouse_ids: [] as string[],
 })
 
 function openCreate() {
@@ -161,6 +203,7 @@ function openCreate() {
   form.name = ''
   form.password = ''
   form.role_ids = []
+  form.warehouse_ids = []
   formVisible.value = true
 }
 
@@ -170,6 +213,7 @@ function openEdit(row: any) {
   form.name = row.name || ''
   form.password = ''
   form.role_ids = (row.roles || []).map((r: any) => r.id)
+  form.warehouse_ids = [...((row as any).warehouse_ids || [])]
   formVisible.value = true
 }
 
@@ -190,13 +234,27 @@ async function save() {
       return
     }
   }
+  // 非超管账号清空仓库需确认（可能导致看不到任何仓库数据）
+  if (editing.value && !editingSuperAdmin.value && form.warehouse_ids.length === 0) {
+    try {
+      await ElMessageBox.confirm(
+        '当前未选择任何仓库，保存后该账号将看不到任何仓库的数据（仅超级管理员不受限）。是否继续？',
+        '清空仓库确认',
+        { type: 'warning', confirmButtonText: '继续清空', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
   saving.value = true
   try {
+    const warehousePayload = editingSuperAdmin.value ? {} : { warehouse_ids: form.warehouse_ids }
     if (editing.value) {
       await api.patch(`/users/${editing.value.id}`, {
         name: form.name,
         role_ids: form.role_ids,
         ...(form.password ? { password: form.password } : {}),
+        ...warehousePayload,
       })
     } else {
       if (!form.password) {
@@ -208,6 +266,7 @@ async function save() {
         name: form.name,
         password: form.password,
         role_ids: form.role_ids,
+        ...warehousePayload,
       })
     }
     ElMessage.success(editing.value ? '更新成功' : '创建成功')
@@ -253,6 +312,11 @@ async function exportRows() {
       key: 'roles',
       label: '角色',
       value: (r: any) => (r.roles || []).map((x: any) => x.name).join(', '),
+    },
+    {
+      key: 'warehouses',
+      label: '可见仓库',
+      value: (r: any) => (r.is_super_admin ? '全部（超级管理员）' : (r.warehouse_ids || []).map((id: string) => warehouseName(id)).join(', ') || '未绑定'),
     },
     { key: 'is_active', label: '状态', value: (r: any) => (r.is_active ? '启用' : '禁用') },
     { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
@@ -300,6 +364,7 @@ async function batchRemove() {
 onMounted(() => {
   load()
   loadRoles()
+  loadWarehouses()
 })
 </script>
 
@@ -350,5 +415,11 @@ onMounted(() => {
 .el-pagination {
   margin-top: 16px;
   justify-content: flex-end;
+}
+.form-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #606266);
+  line-height: 1.6;
+  margin-top: 2px;
 }
 </style>

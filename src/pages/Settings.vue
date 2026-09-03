@@ -30,13 +30,13 @@
               <div class="appearance-desc">上传后系统全局生效：浏览器标签页 favicon、侧边栏品牌图标、登录页标题图标；支持 PNG/JPG/WebP/SVG/ICO，大小不超过 1MB</div>
             </div>
             <div class="logo-preview">
-              <img v-if="logoPreview || site.logo" :src="logoPreview || site.logo" class="logo-preview-img" alt="网站图标预览" />
+              <img v-if="logoPreview || site.logo" :src="logoPreview || site.logo || ''" class="logo-preview-img" alt="网站图标预览" />
               <div v-else class="logo-preview-empty">默认图标</div>
             </div>
           </div>
           <div v-if="logoDirty" class="logo-edit-wrap">
             <div class="logo-edit" @pointerdown="onEditPointerDown" @pointermove="onEditPointerMove" @pointerup="onEditPointerUp" @pointercancel="onEditPointerUp">
-              <img :src="logoPreview" :style="editStyle" class="logo-edit-img" draggable="false" />
+              <img :src="logoPreview || ''" :style="editStyle" class="logo-edit-img" draggable="false" />
             </div>
             <div class="logo-edit-tools">
               <span class="logo-edit-label">大小</span>
@@ -253,25 +253,18 @@
           <el-button v-if="canManage" type="primary" @click="openRoleCreate">新增角色</el-button>
         </div>
         <el-table :resizable="false" v-loading="rolesLoading" :data="roles" border stripe>
-          <el-table-column prop="name" label="角色名" min-width="160" />
+          <el-table-column label="角色名" min-width="180">
+            <template #default="{ row }">
+              <span>{{ row.name }}</span>
+              <el-tag v-if="row.is_system" size="small" type="info" style="margin-left: 6px">内置</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
           <el-table-column label="权限数" width="100" align="right">
             <template #default="{ row }">{{ (row.permissions || []).length }}</template>
           </el-table-column>
-          <el-table-column label="可见仓库" min-width="180">
+          <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
-              <el-tag v-if="row.name === 'super_admin'" size="small" type="warning">全部（超级管理员）</el-tag>
-              <template v-else>
-                <el-tag v-for="wid in (row.warehouse_ids || [])" :key="wid" size="small" style="margin-right: 4px">
-                  {{ warehouseName(wid) }}
-                </el-tag>
-                <span v-if="!(row.warehouse_ids || []).length" style="color: #909399">未绑定</span>
-              </template>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
-            <template #default="{ row }">
-              <el-button v-if="canManage && row.is_system && row.name !== 'super_admin'" link type="primary" @click="openRoleEdit(row)">绑定仓库</el-button>
               <el-button v-if="canManage && !row.is_system" link type="primary" @click="openRoleEdit(row)">编辑</el-button>
               <el-button v-if="canManage && !row.is_system" link type="danger" @click="removeRole(row)">删除</el-button>
             </template>
@@ -284,9 +277,8 @@
           <h2>权限列表</h2>
         </div>
         <el-table :resizable="false" v-loading="permsLoading" :data="permissions" border stripe>
-          <el-table-column prop="code" label="权限码" min-width="220" />
-          <el-table-column prop="name" label="名称" min-width="160" />
-          <el-table-column prop="description" label="描述" min-width="260" show-overflow-tooltip />
+          <el-table-column prop="code" label="权限码" min-width="240" />
+          <el-table-column prop="description" label="权限名称（中文）" min-width="320" show-overflow-tooltip />
         </el-table>
       </el-tab-pane>
 
@@ -393,32 +385,38 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="roleVisible" :title="roleEditing?.is_system ? '绑定可见仓库' : roleEditing ? '编辑角色' : '新增角色'" width="560px" destroy-on-close>
+    <el-dialog v-model="roleVisible" :title="roleEditing ? '编辑角色' : '新增角色'" width="720px" destroy-on-close>
       <el-form :model="roleForm" label-width="90px">
-        <template v-if="!roleEditing?.is_system">
-          <el-form-item label="角色名" required>
-            <el-input v-model="roleForm.name" />
-          </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="roleForm.description" type="textarea" :rows="2" maxlength="256" />
-          </el-form-item>
-          <el-form-item label="权限">
-            <el-select v-model="roleForm.permissions" multiple filterable placeholder="选择权限" style="width: 100%">
-              <el-option v-for="p in permissions" :key="p.code" :label="`${p.code} - ${p.name}`" :value="p.code" />
-            </el-select>
-          </el-form-item>
-        </template>
-        <el-form-item v-if="!roleEditing?.is_system" label="可见仓库">
-          <el-select v-model="roleForm.warehouse_ids" multiple filterable clearable placeholder="不选则该角色默认无仓库可见（建议至少绑定一个）" style="width: 100%">
-            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
-          </el-select>
-          <div class="form-tip">该角色下的账号只能查看绑定仓库的数据（超级管理员除外）</div>
+        <el-form-item label="角色名" required>
+          <el-input v-model="roleForm.name" placeholder="如：运营专员" />
         </el-form-item>
-        <el-form-item v-else label="可见仓库">
-          <el-select v-model="roleForm.warehouse_ids" multiple filterable clearable placeholder="选择该角色可访问的仓库" style="width: 100%">
-            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
-          </el-select>
-          <div class="form-tip">内置角色仅可调整仓库可见范围，名称/描述/权限不可修改</div>
+        <el-form-item label="描述">
+          <el-input v-model="roleForm.description" type="textarea" :rows="2" maxlength="256" />
+        </el-form-item>
+        <el-form-item label="模块权限">
+          <div class="perm-panel">
+            <div v-for="grp in permissionGroups" :key="grp.key" class="perm-group">
+              <div class="perm-group-head">
+                <span class="perm-group-name">{{ grp.label }}</span>
+                <el-checkbox :model-value="isModuleAllChecked(grp)" @change="(v: boolean | string | number) => toggleModule(grp.key, !!v)">全选</el-checkbox>
+              </div>
+              <div class="perm-items">
+                <el-checkbox-group v-model="roleForm.permissions" class="perm-checkbox-group">
+                  <el-checkbox
+                    v-for="p in grp.items"
+                    :key="p.code"
+                    :label="p.code"
+                    class="perm-item"
+                  >
+                    <span class="perm-item-name">{{ p.description || p.code }}</span>
+                    <code class="perm-item-code">{{ p.code }}</code>
+                  </el-checkbox>
+                </el-checkbox-group>
+              </div>
+            </div>
+            <el-empty v-if="!permissionGroups.length" description="暂无权限数据" :image-size="60" />
+            <div class="form-tip">按模块勾选该角色可查看的功能；仓库范围请在「用户管理」中为账号单独绑定</div>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1151,13 +1149,58 @@ async function loadPermissions() {
   }
 }
 
+// 权限按模块分组展示（权限 code 形如 products.read，取模块前缀）
+const PERM_MODULE_NAMES: Record<string, string> = {
+  products: '商品',
+  inventory: '库存',
+  sales: '销售',
+  shipment: '发货',
+  procurement: '采购',
+  transfer: '调拨',
+  after_sales: '售后',
+  replenishment: '补货',
+  user: '用户',
+  system: '系统',
+}
+const PERM_MODULE_ORDER = ['products', 'inventory', 'sales', 'shipment', 'procurement', 'transfer', 'after_sales', 'replenishment', 'user', 'system']
+
+const permissionGroups = computed(() => {
+  const map = new Map<string, any[]>()
+  for (const p of permissions.value) {
+    const key = String(p.code || '').split('.')[0]
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(p)
+  }
+  return PERM_MODULE_ORDER.filter((m) => map.has(m)).map((m) => ({
+    key: m,
+    label: PERM_MODULE_NAMES[m] || m,
+    items: map.get(m)!,
+  }))
+})
+
+function isModuleAllChecked(grp: { key: string; items: any[] }): boolean {
+  return grp.items.length > 0 && grp.items.every((p) => roleForm.permissions.includes(p.code))
+}
+
+function toggleModule(key: string, checked: boolean | string | number) {
+  const grp = permissionGroups.value.find((g) => g.key === key)
+  if (!grp) return
+  const want = !!checked
+  const codes = grp.items.map((p) => p.code)
+  if (want) {
+    const merged = Array.from(new Set([...roleForm.permissions, ...codes]))
+    roleForm.permissions = merged
+  } else {
+    roleForm.permissions = roleForm.permissions.filter((c: string) => !codes.includes(c))
+  }
+}
+
 const roleVisible = ref(false)
 const roleEditing = ref<any>(null)
 const roleForm = reactive({
   name: '',
   description: '',
   permissions: [] as string[],
-  warehouse_ids: [] as string[],
 })
 
 function openRoleCreate() {
@@ -1165,10 +1208,8 @@ function openRoleCreate() {
   roleForm.name = ''
   roleForm.description = ''
   roleForm.permissions = []
-  roleForm.warehouse_ids = []
   roleVisible.value = true
   loadPermissions()
-  loadWarehouses()
 }
 
 function openRoleEdit(row: any) {
@@ -1176,28 +1217,21 @@ function openRoleEdit(row: any) {
   roleForm.name = row.name
   roleForm.description = row.description || ''
   roleForm.permissions = (row.permissions || []).map((p: any) => (typeof p === 'string' ? p : p.code))
-  roleForm.warehouse_ids = [...((row as any).warehouse_ids || [])]
   roleVisible.value = true
   loadPermissions()
-  loadWarehouses()
-}
-
-function warehouseName(id: string): string {
-  return warehouses.value.find((w: any) => w.id === id)?.name || id.slice(0, 8)
 }
 
 async function saveRole() {
-  if (!roleEditing.value?.is_system && !roleForm.name.trim()) {
+  if (!roleForm.name.trim()) {
     ElMessage.warning('请填写角色名')
     return
   }
   saving.value = true
   try {
-    const payload: any = { warehouses: roleForm.warehouse_ids }
-    if (!roleEditing.value?.is_system) {
-      payload.name = roleForm.name
-      payload.description = roleForm.description
-      payload.permissions = roleForm.permissions
+    const payload: any = {
+      name: roleForm.name,
+      description: roleForm.description,
+      permissions: roleForm.permissions,
     }
     if (roleEditing.value) {
       await api.patch(`/roles/${roleEditing.value.id}`, payload)
@@ -1354,6 +1388,7 @@ const saving = ref(false)
 
 onMounted(() => {
   loadRoles()
+  loadPermissions()
   loadAppearance()
   loadSystemSettings()
 })
@@ -1653,5 +1688,55 @@ onMounted(() => {
   color: var(--ink-2);
   line-height: 1.6;
   margin-top: 2px;
+}
+
+/* 权限分组选择 */
+.perm-panel {
+  width: 100%;
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 6px;
+  padding: 4px 12px 12px;
+}
+.perm-group {
+  border-bottom: 1px dashed var(--el-border-color-lighter, #ebeef5);
+  padding: 8px 0 4px;
+}
+.perm-group:last-child {
+  border-bottom: none;
+}
+.perm-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.perm-group-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--el-text-color-primary, #303133);
+}
+.perm-items {
+  display: block;
+}
+.perm-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 12px;
+}
+.perm-item {
+  height: 32px;
+  margin-right: 0;
+  white-space: nowrap;
+}
+.perm-item-name {
+  font-size: 13px;
+}
+.perm-item-code {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--ink-3, #909399);
+  background: transparent;
 }
 </style>

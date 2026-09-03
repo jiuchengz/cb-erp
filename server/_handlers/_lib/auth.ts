@@ -9,7 +9,7 @@ export interface AuthContext {
   avatarUrl: string;
   roles: string[];
   permissions: string[];
-  // 可见仓库集：由该账号全部角色的 role_warehouses 并集得出。
+  // 可见仓库集：由该账号直接绑定的 user_warehouses 得出（用户维度）。
   // super_admin 不受仓库限制，返回 null 表示"全量可见"。
   warehouseIds: string[] | null;
 }
@@ -34,11 +34,11 @@ const accessCache = new Map<string, { expireAt: number; roles: string[]; permiss
 const CACHE_TTL_MS = 60 * 1000;
 
 // 单次完整加载：user_roles -> roles -> role_permissions -> permissions，以及
-// user_roles -> roles -> role_warehouses -> 可见仓库并集。
+// user_warehouses -> 可见仓库（用户维度）。
 // 查询失败必须显性报错，禁止静默当成"无角色"（否则会误报 403 无权限）。
 // 仓库隔离口径：super_admin 返回 warehouseIds=null（全量可见，不受仓库限制）；
-// 其余账号可见仓库 = 其全部角色 role_warehouses 的并集（可为空数组 = 无可见仓库）。
-// 兼容降级：role_warehouses 表尚未部署（迁移未执行）时，仓库维度降级为全量空集，
+// 其余账号可见仓库 = 其 user_warehouses 直接绑定集（可为空数组 = 无可见仓库）。
+// 兼容降级：user_warehouses 表尚未部署（迁移未执行）时，仓库维度降级为全量空集，
 // 不阻断认证；业务侧需待迁移完成后才有隔离效果。
 async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAccess> {
   const roles: string[] = [];
@@ -62,19 +62,19 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
     }
   }
 
-  // super_admin 不需要仓库绑定：null 表示全量，不再查绑仓
-  if (!isSuperAdmin && roleIds.length) {
-    const { data: rwData, error: rwErr } = await supabase
-      .from('role_warehouses')
+  // super_admin 不需要仓库绑定：null 表示全量；普通账号按 user_warehouses 直接绑定加载
+  if (!isSuperAdmin) {
+    const { data: uwData, error: uwErr } = await supabase
+      .from('user_warehouses')
       .select('warehouse_id')
-      .in('role_id', roleIds);
+      .eq('user_id', userId);
     // 迁移未上线（表不存在等）时降级为空集，不阻断认证
-    if (!rwErr) {
-      for (const rw of rwData || []) {
-        if (rw?.warehouse_id) warehouseSet.add(rw.warehouse_id);
+    if (!uwErr) {
+      for (const uw of uwData || []) {
+        if (uw?.warehouse_id) warehouseSet.add(uw.warehouse_id);
       }
     } else {
-      console.warn('[auth] role_warehouses load skipped (migration not applied?):', rwErr.message);
+      console.warn('[auth] user_warehouses load skipped (migration not applied?):', uwErr.message);
     }
   }
 
