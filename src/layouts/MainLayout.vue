@@ -97,7 +97,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting, Tools } from '@element-plus/icons-vue'
 import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES, fetchExchangeRates } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useSiteStore } from '@/stores/site'
@@ -126,7 +126,8 @@ auth.init().finally(() => {
 // 非空数组时用户须拥有其中任意一项权限才显示该菜单
 const soloMenus = [
   { path: '/dashboard', label: '首页概览', icon: HomeFilled, perms: [] as string[] },
-  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] }
+  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] },
+  { path: '/tools-page', label: '工具', icon: Tools, perms: [] as string[] }
 ]
 
 const menuGroups = reactive([
