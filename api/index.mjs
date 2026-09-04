@@ -97087,6 +97087,43 @@ var Errors = {
   rateLimited: (msg = "\u8BF7\u6C42\u8FC7\u4E8E\u9891\u7E41\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5") => new ApiError(429, "RATE_LIMITED", msg)
 };
 
+// server/_handlers/_lib/permissions.ts
+var SYSTEM_MANAGE_EXPAND = [
+  "system.users",
+  "system.roles",
+  "system.permissions",
+  "system.settings",
+  "system.appearance",
+  "system.logo",
+  "system.backup",
+  "system.usage",
+  "system.audit",
+  "system.logs",
+  "system.recycle"
+];
+var LEGACY_DEAD_CODES = ["user.read", "sales.cancel", "system.manage"];
+var LEGACY_READ_EXPAND = {
+  "products.read": ["products.read", "product_total.read", "cost_profit.read"],
+  "inventory.read": ["inventory.read", "stocktake.read"]
+};
+function expandSystemManage(codes) {
+  const set = /* @__PURE__ */ new Set();
+  for (const code of codes || []) {
+    if (code === "system.manage") {
+      for (const c of SYSTEM_MANAGE_EXPAND) set.add(c);
+    } else {
+      set.add(code);
+      const extra = LEGACY_READ_EXPAND[code];
+      if (extra) for (const c of extra) set.add(c);
+    }
+  }
+  return Array.from(set);
+}
+function normalizeRoleCodes(codes) {
+  const dead = new Set(LEGACY_DEAD_CODES);
+  return expandSystemManage(codes || []).filter((c) => !dead.has(c));
+}
+
 // server/_handlers/_lib/auth.ts
 function extractToken(req) {
   const h = req.headers.authorization;
@@ -97139,6 +97176,9 @@ async function loadUserAccessOnce(supabase, userId) {
       const code = rp.permissions?.code;
       if (code) permissionsSet.add(code);
     }
+    const expanded = expandSystemManage(Array.from(permissionsSet));
+    permissionsSet.clear();
+    for (const c of expanded) permissionsSet.add(c);
   }
   const unrestricted = isSuperAdmin || boundToHead;
   return {
@@ -103834,7 +103874,7 @@ var createSchema6 = external_exports.object({
   permissions: external_exports.array(external_exports.string().min(1).max(100)).optional()
 });
 function normalizeRole(row) {
-  const perms = (row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean);
+  const perms = normalizeRoleCodes((row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean));
   const { role_permissions, ...rest } = row;
   return {
     ...rest,
@@ -103870,7 +103910,7 @@ async function handler26(req, res) {
       const { data: existing, error: exErr } = await supabase.from("roles").select("id").eq("name", body.name).maybeSingle();
       if (exErr) throw exErr;
       if (existing) throw Errors.conflict("\u89D2\u8272\u540D\u79F0\u5DF2\u5B58\u5728");
-      const permIds = await resolvePermissionIds(supabase, body.permissions || []);
+      const permIds = await resolvePermissionIds(supabase, normalizeRoleCodes(body.permissions || []));
       const { data: created, error: insErr } = await supabase.from("roles").insert({ name: body.name, description: body.description ?? null }).select().single();
       if (insErr) {
         if (insErr.code === "23505") throw Errors.conflict("\u89D2\u8272\u540D\u79F0\u5DF2\u5B58\u5728");
@@ -103900,7 +103940,7 @@ var updateSchema2 = external_exports.object({
   permissions: external_exports.array(external_exports.string().min(1).max(100)).optional()
 });
 function normalizeRole2(row) {
-  const perms = (row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean);
+  const perms = normalizeRoleCodes((row.role_permissions || []).map((rp) => rp.permissions?.code).filter(Boolean));
   const { role_permissions, ...rest } = row;
   return {
     ...rest,
@@ -103958,7 +103998,7 @@ async function handler27(req, res) {
         }
       }
       if (body.permissions !== void 0) {
-        const permIds = await resolvePermissionIds2(supabase, body.permissions);
+        const permIds = await resolvePermissionIds2(supabase, normalizeRoleCodes(body.permissions));
         const { error: delErr } = await supabase.from("role_permissions").delete().eq("role_id", id);
         if (delErr) throw delErr;
         if (permIds.length > 0) {
@@ -104434,7 +104474,7 @@ var updateSchema3 = external_exports.object({
   // 用户直接绑定的可见仓库 id（仓库级行级隔离：用户维度）
   warehouse_ids: external_exports.array(external_exports.string().uuid()).optional()
 });
-var MANAGE_CODES = ["user.manage", "system.manage"];
+var MANAGE_CODES = ["user.manage", "system.manage", ...SYSTEM_MANAGE_EXPAND];
 async function collectRoleCodes(supabase, roleIds) {
   if (!roleIds || roleIds.length === 0) return [];
   const { data, error } = await supabase.from("role_permissions").select("permissions(code)").in("role_id", roleIds);
@@ -104518,7 +104558,7 @@ async function handler31(req, res) {
           const beforeManage = beforeCodes.some((c) => MANAGE_CODES.includes(c));
           const afterManage = afterCodes.some((c) => MANAGE_CODES.includes(c));
           if (beforeManage && !afterManage) {
-            throw Errors.badRequest("\u4E0D\u80FD\u79FB\u9664\u81EA\u5DF1\u8D26\u53F7\u7684\u7BA1\u7406\u6743\u9650\uFF08user.manage/system.manage\uFF09\uFF0C\u5426\u5219\u5C06\u5931\u53BB\u7BA1\u7406\u5165\u53E3");
+            throw Errors.badRequest("\u4E0D\u80FD\u79FB\u9664\u81EA\u5DF1\u8D26\u53F7\u7684\u5168\u90E8\u7BA1\u7406\u6743\u9650\uFF0C\u5426\u5219\u5C06\u5931\u53BB\u7BA1\u7406\u5165\u53E3");
           }
         }
         const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", id);
@@ -105107,7 +105147,7 @@ async function handler36(req, res) {
     const visiblePids = restricted ? await loadVisibleProductIds(supabase, ctx) : null;
     const visibleLinks = restricted ? await loadVisibleLinkIds(supabase, ctx) : null;
     const visibleStores = restricted ? await loadVisibleStoreNames(supabase, ctx) : null;
-    const NO_MATCH = ["__no_visible__"];
+    const NO_MATCH = ["00000000-0000-0000-0000-000000000000"];
     const pidArr = visiblePids === null ? null : visiblePids.size ? Array.from(visiblePids) : NO_MATCH;
     const linkArr = visibleLinks === null ? null : visibleLinks.size ? Array.from(visibleLinks) : NO_MATCH;
     const storeArr = visibleStores === null ? null : visibleStores.size ? Array.from(visibleStores) : NO_MATCH;
@@ -105541,10 +105581,10 @@ async function handler37(req, res) {
     const whIds = ctx.warehouseIds || [];
     let inTransitQ = supabase.from("shipment_items").select("product_id, quantity, shipments!inner(source, cargo_status, deleted_at, store)");
     if (storeArr.length) inTransitQ = inTransitQ.in("shipments.store", storeArr);
-    else if (restricted) inTransitQ = inTransitQ.eq("shipments.store", "__no_visible__");
+    else if (restricted) inTransitQ = inTransitQ.eq("shipments.store", "00000000-0000-0000-0000-000000000000");
     let recentQ = supabase.from("shipments").select("id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)").is("deleted_at", null);
     if (storeArr.length) recentQ = recentQ.in("store", storeArr);
-    else if (restricted) recentQ = recentQ.eq("store", "__no_visible__");
+    else if (restricted) recentQ = recentQ.eq("store", "00000000-0000-0000-0000-000000000000");
     recentQ = recentQ.order("created_at", { ascending: false }).limit(5);
     const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] = await Promise.all([
       countAllProductsVisible(),
