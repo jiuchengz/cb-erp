@@ -170,8 +170,7 @@ const menuGroups = reactive([
       { path: '/users', label: '成员管理', icon: User, perms: ['system.users'] },
       { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.logs'] },
       { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] },
-      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] },
-      { path: '/tools-page', label: '工具', icon: Tools, perms: [] }
+      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] }
     ]
   }
 ])

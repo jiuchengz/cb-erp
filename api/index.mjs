@@ -97087,43 +97087,6 @@ var Errors = {
   rateLimited: (msg = "\u8BF7\u6C42\u8FC7\u4E8E\u9891\u7E41\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5") => new ApiError(429, "RATE_LIMITED", msg)
 };
 
-// server/_handlers/_lib/permissions.ts
-var SYSTEM_MANAGE_EXPAND = [
-  "system.users",
-  "system.roles",
-  "system.permissions",
-  "system.settings",
-  "system.appearance",
-  "system.logo",
-  "system.backup",
-  "system.usage",
-  "system.audit",
-  "system.logs",
-  "system.recycle"
-];
-var LEGACY_DEAD_CODES = ["user.read", "sales.cancel", "system.manage"];
-var LEGACY_READ_EXPAND = {
-  "products.read": ["products.read", "product_total.read", "cost_profit.read"],
-  "inventory.read": ["inventory.read", "stocktake.read"]
-};
-function expandSystemManage(codes) {
-  const set = /* @__PURE__ */ new Set();
-  for (const code of codes || []) {
-    if (code === "system.manage") {
-      for (const c of SYSTEM_MANAGE_EXPAND) set.add(c);
-    } else {
-      set.add(code);
-      const extra = LEGACY_READ_EXPAND[code];
-      if (extra) for (const c of extra) set.add(c);
-    }
-  }
-  return Array.from(set);
-}
-function normalizeRoleCodes(codes) {
-  const dead = new Set(LEGACY_DEAD_CODES);
-  return expandSystemManage(codes || []).filter((c) => !dead.has(c));
-}
-
 // server/_handlers/_lib/auth.ts
 function extractToken(req) {
   const h = req.headers.authorization;
@@ -97176,9 +97139,6 @@ async function loadUserAccessOnce(supabase, userId) {
       const code = rp.permissions?.code;
       if (code) permissionsSet.add(code);
     }
-    const expanded = expandSystemManage(Array.from(permissionsSet));
-    permissionsSet.clear();
-    for (const c of expanded) permissionsSet.add(c);
   }
   const unrestricted = isSuperAdmin || boundToHead;
   return {
@@ -103864,6 +103824,29 @@ async function handler25(req, res) {
   } catch (e) {
     return handleError2(res, e);
   }
+}
+
+// server/_handlers/_lib/permissions.ts
+var SYSTEM_MANAGE_EXPAND = [
+  "system.users",
+  "system.roles",
+  "system.permissions",
+  "system.settings",
+  "system.appearance",
+  "system.logo",
+  "system.backup",
+  "system.usage",
+  "system.audit",
+  "system.logs",
+  "system.recycle"
+];
+var LEGACY_DEAD_CODES = ["user.read", "sales.cancel", "system.manage"];
+function expandSystemManage(codes) {
+  const dead = new Set(LEGACY_DEAD_CODES);
+  return Array.from(new Set((codes || []).filter((c) => !dead.has(c))));
+}
+function normalizeRoleCodes(codes) {
+  return expandSystemManage(codes || []);
 }
 
 // server/_handlers/roles.ts

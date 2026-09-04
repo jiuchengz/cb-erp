@@ -19,8 +19,7 @@ const updateSchema = z.object({
 });
 
 // 前后端字段归一：role_permissions -> 顶层 permissions:[code]；并标记 is_system。
-// 058 拆分后：旧 system.manage 展开为子码、死码剔除，保证编辑回显与保存口径一致。
-// 注意：角色只管“能看哪些模块”，仓库范围由用户管理(user_warehouses)单独绑定，不再下发。
+// 严格独立授权：回显即角色实际显式授权的码（normalizeRoleCodes 仅清洗死码、不做旧码展开）。
 function normalizeRole(row: any) {
   const perms = normalizeRoleCodes((row.role_permissions || []).map((rp: any) => rp.permissions?.code).filter(Boolean));
   const { role_permissions, ...rest } = row;

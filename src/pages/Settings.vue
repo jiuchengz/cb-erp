@@ -1210,7 +1210,10 @@ async function loadPermissions() {
 // 权限按模块分组展示（权限 code 形如 products.read，取模块前缀）
 const PERM_MODULE_NAMES: Record<string, string> = {
   products: '商品',
+  product_total: '商品总表',
+  cost_profit: '成本利润',
   inventory: '库存',
+  stocktake: '库存盘点',
   sales: '销售',
   shipment: '发货',
   procurement: '采购',
@@ -1220,19 +1223,15 @@ const PERM_MODULE_NAMES: Record<string, string> = {
   user: '用户',
   system: '系统',
 }
-const PERM_MODULE_ORDER = ['products', 'inventory', 'sales', 'shipment', 'procurement', 'transfer', 'after_sales', 'replenishment', 'user', 'system']
+const PERM_MODULE_ORDER = ['products', 'product_total', 'cost_profit', 'inventory', 'stocktake', 'sales', 'shipment', 'procurement', 'transfer', 'after_sales', 'replenishment', 'user', 'system']
 
 // 058 拆分后遗留的失效码不参与勾选展示：
 // user.read 无消费方、sales.cancel 无前端入口、system.manage 整组旧码已被 system.* 子码替代。
-// 保存时后端会做等价展开与清洗，此处仅负责"不显示"，避免误导勾选。
+// 保存时后端仅做死码清洗、不再做任何旧码等价展开，此处只负责"不显示"，避免误导勾选。
 const LEGACY_HIDDEN_CODES = ['user.read', 'sales.cancel', 'system.manage']
-// 058 拆分出的独立读码归属展示到原业务模块组：商品总表/成本利润 归「商品」、库存盘点 归「库存」，
-// 使组内“全选/取消”与旧版 products.read / inventory.read 的模块语义保持一致。
-const PERM_MODULE_ALIAS: Record<string, string> = {
-  product_total: 'products',
-  cost_profit: 'products',
-  stocktake: 'inventory',
-}
+// 058 拆分出的独立读码（商品总表/成本利润/库存盘点）各自独立成组，可单独勾选授权，
+// 不再并回 products/inventory 组联动全选，避免"勾了商品管理就自动带出商品总表"的越权扩散。
+const PERM_MODULE_ALIAS: Record<string, string> = {}
 
 const permissionGroups = computed(() => {
   const map = new Map<string, any[]>()
