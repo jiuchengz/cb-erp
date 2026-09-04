@@ -126,8 +126,7 @@ auth.init().finally(() => {
 // 非空数组时用户须拥有其中任意一项权限才显示该菜单
 const soloMenus = [
   { path: '/dashboard', label: '首页概览', icon: HomeFilled, perms: [] as string[] },
-  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] },
-  { path: '/tools-page', label: '工具', icon: Tools, perms: [] as string[] }
+  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] }
 ]
 
 const menuGroups = reactive([
@@ -171,7 +170,8 @@ const menuGroups = reactive([
       { path: '/users', label: '成员管理', icon: User, perms: ['system.users'] },
       { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.logs'] },
       { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] },
-      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] }
+      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] },
+      { path: '/tools-page', label: '工具', icon: Tools, perms: [] }
     ]
   }
 ])
