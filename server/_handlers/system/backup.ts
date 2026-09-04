@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth';
 import { requirePermission } from '../_lib/rbac';
 import { getAdminClient } from '../_lib/db';
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
-    // 备份导出全部核心业务表，属于系统级敏感操作：仅限 system.manage 管理员
+    // 备份导出全部核心业务表，属于系统级敏感操作：058 拆分后门禁为 system.backup
     requirePermission(ctx, 'system.backup');
     const supabase = getAdminClient();
 

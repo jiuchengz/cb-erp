@@ -137,14 +137,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('shipment_items')
       .select('product_id, quantity, shipments!inner(source, cargo_status, deleted_at, store)');
     if (storeArr.length) inTransitQ = inTransitQ.in('shipments.store', storeArr);
-    else if (restricted) inTransitQ = inTransitQ.eq('shipments.store', '__no_visible__');
+    else if (restricted) inTransitQ = inTransitQ.eq('shipments.store', '00000000-0000-0000-0000-000000000000');
 
     let recentQ: any = supabase
       .from('shipments')
       .select('id, tracking_no, status, cargo_status, created_at, forwarder_id, shipping_mode, warehouse_no, shipping_qty, forwarders(name)')
       .is('deleted_at', null);
     if (storeArr.length) recentQ = recentQ.in('store', storeArr);
-    else if (restricted) recentQ = recentQ.eq('store', '__no_visible__');
+    else if (restricted) recentQ = recentQ.eq('store', '00000000-0000-0000-0000-000000000000');
     recentQ = recentQ.order('created_at', { ascending: false }).limit(5);
 
     const [productsCount, inventoryRows, productsRows, inTransitItems, shipmentsCount, salesCount, afterSalesCount, recentShipments] =

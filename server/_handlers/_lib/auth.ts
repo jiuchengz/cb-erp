@@ -1,6 +1,7 @@
 import type { VercelRequest } from '@vercel/node';
 import { getAdminClient } from './db';
 import { Errors } from './error';
+import { expandSystemManage } from './permissions';
 
 export interface AuthContext {
   userId: string;
@@ -110,6 +111,11 @@ async function loadUserAccessOnce(supabase: any, userId: string): Promise<UserAc
       const code = rp.permissions?.code;
       if (code) permissionsSet.add(code);
     }
+    // 058 拆分后：存量角色若仍只持 system.manage（旧整组码），运行时展开为全部
+    // system.* 子码，保证菜单/路由/接口门禁一致，杜绝"勾了系统管理却没功能"的断链。
+    const expanded = expandSystemManage(Array.from(permissionsSet));
+    permissionsSet.clear();
+    for (const c of expanded) permissionsSet.add(c);
   }
 
   const unrestricted = isSuperAdmin || boundToHead;

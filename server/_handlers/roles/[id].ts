@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
 import { requirePermission } from '../_lib/rbac';
+import { normalizeRoleCodes } from '../_lib/permissions';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -18,9 +19,10 @@ const updateSchema = z.object({
 });
 
 // 前后端字段归一：role_permissions -> 顶层 permissions:[code]；并标记 is_system。
+// 058 拆分后：旧 system.manage 展开为子码、死码剔除，保证编辑回显与保存口径一致。
 // 注意：角色只管“能看哪些模块”，仓库范围由用户管理(user_warehouses)单独绑定，不再下发。
 function normalizeRole(row: any) {
-  const perms = (row.role_permissions || []).map((rp: any) => rp.permissions?.code).filter(Boolean);
+  const perms = normalizeRoleCodes((row.role_permissions || []).map((rp: any) => rp.permissions?.code).filter(Boolean));
   const { role_permissions, ...rest } = row;
   return {
     ...rest,
@@ -101,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (body.permissions !== undefined) {
-        const permIds = await resolvePermissionIds(supabase, body.permissions);
+        const permIds = await resolvePermissionIds(supabase, normalizeRoleCodes(body.permissions));
         const { error: delErr } = await supabase.from('role_permissions').delete().eq('role_id', id);
         if (delErr) throw delErr;
         if (permIds.length > 0) {

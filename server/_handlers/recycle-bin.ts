@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
 import { requirePermission } from './_lib/rbac';
@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- GET /recycle-bin ----------
     if (req.method === 'GET') {
-      requirePermission(ctx, 'system.recycle'); // 回收站属系统管理整组，仅 system.manage 可见
+      requirePermission(ctx, 'system.recycle'); // 回收站：058 拆分后入口码为 system.recycle
       const typeRaw = typeof req.query.type === 'string' ? req.query.type.trim() : '';
       const page = Math.max(1, parseInt(typeof req.query.page === 'string' ? req.query.page : '1', 10) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt(typeof req.query.pageSize === 'string' ? req.query.pageSize : '20', 10) || 20));
@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const path = new URL(req.url || '/', 'http://internal').pathname.replace(/^\/api/, '') || '/';
       const { type, id } = parse(actionSchema, req.body || {});
       const cfg = TYPES[type];
-      requirePermission(ctx, 'system.recycle'); // 恢复/清除同样仅 system.manage 可操作
+      requirePermission(ctx, 'system.recycle'); // 恢复/清除同样要求 system.recycle
 
       const { data: before, error: getErr } = await supabase.from(cfg.table).select('*').eq('id', id).maybeSingle();
       if (getErr) throw getErr;

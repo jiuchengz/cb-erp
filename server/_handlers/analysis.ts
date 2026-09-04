@@ -85,8 +85,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const visiblePids = restricted ? await loadVisibleProductIds(supabase, ctx) : null;
     const visibleLinks = restricted ? await loadVisibleLinkIds(supabase, ctx) : null;
     const visibleStores = restricted ? await loadVisibleStoreNames(supabase, ctx) : null;
-    // 无可见数据时用不可能匹配的占位值，避免 PostgREST in () 语义异常（空数组按未过滤处理）
-    const NO_MATCH = ['__no_visible__'];
+    // 无可见数据时用不可能匹配的占位值，避免 PostgREST in () 语义异常（空数组按未过滤处理）。
+    // 占位必须为合法 UUID（products.id 为 uuid 列），用普通字符串哨兵会触发 22P02 类型报错。
+    const NO_MATCH = ['00000000-0000-0000-0000-000000000000'];
     const pidArr = visiblePids === null ? null : visiblePids.size ? Array.from(visiblePids) : NO_MATCH;
     const linkArr = visibleLinks === null ? null : visibleLinks.size ? Array.from(visibleLinks) : NO_MATCH;
     const storeArr = visibleStores === null ? null : visibleStores.size ? Array.from(visibleStores) : NO_MATCH;

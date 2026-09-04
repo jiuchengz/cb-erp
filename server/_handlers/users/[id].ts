@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
 import { requirePermission } from '../_lib/rbac';
+import { SYSTEM_MANAGE_EXPAND } from '../_lib/permissions';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -19,8 +20,10 @@ const updateSchema = z.object({
   warehouse_ids: z.array(z.string().uuid()).optional(),
 });
 
-// 与后端管理入口相关、不允许自我移除的权限
-const MANAGE_CODES = ['user.manage', 'system.manage'];
+// 与后端管理入口相关、不允许自我移除的权限。
+// 058 拆分后 system.manage 已拆为 11 个 system.* 子码，须一并纳入保护，
+// 否则用户把自己降级成不含任何 system.* 的角色时会被放行，导致管理入口锁死。
+const MANAGE_CODES = ['user.manage', 'system.manage', ...SYSTEM_MANAGE_EXPAND];
 
 async function collectRoleCodes(supabase: any, roleIds: string[]) {
   if (!roleIds || roleIds.length === 0) return [] as string[];
@@ -125,14 +128,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 3) 角色更新：整表替换 user_roles
       if (body.role_ids !== undefined) {
-        // 自我保护：编辑自己账号时，禁止移除自己的 user.manage / system.manage，防止锁死管理入口
+        // 自我保护：编辑自己账号时，禁止移除全部管理权限（成员/系统管理子码），防止锁死管理入口
         if (id === ctx.userId && before.roles && before.roles.length > 0) {
           const beforeCodes = await collectRoleCodes(supabase, before.roles.map((r: any) => r.id));
           const afterCodes = await collectRoleCodes(supabase, body.role_ids);
           const beforeManage = beforeCodes.some((c) => MANAGE_CODES.includes(c));
           const afterManage = afterCodes.some((c) => MANAGE_CODES.includes(c));
           if (beforeManage && !afterManage) {
-            throw Errors.badRequest('不能移除自己账号的管理权限（user.manage/system.manage），否则将失去管理入口');
+            throw Errors.badRequest('不能移除自己账号的全部管理权限，否则将失去管理入口');
           }
         }
         const { error: delErr } = await supabase.from('user_roles').delete().eq('user_id', id);

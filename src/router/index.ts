@@ -101,7 +101,7 @@ const routes: RouteRecordRaw[] = [
         path: 'users',
         name: 'users',
         component: () => import('@/pages/Users.vue'),
-        // 成员管理属系统管理整组：菜单整组需 system.manage 才出现，直链同样要求 system.manage（requiresGroupGate），页面内操作再按 user.read / user.manage 细分
+        // 成员管理：058 拆分后入口码为 system.users，页面内操作再按 user.manage 细分
         meta: { requiresPerm: ['system.users'] }
       },
       {
@@ -114,7 +114,7 @@ const routes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'settings',
         component: () => import('@/pages/Settings.vue'),
-        // 系统设置属系统管理整组，仅 system.manage 可进入；页内各 tab 再按功能权限码单独显隐
+        // 系统设置：058 拆分后按子码任一进入，页内各 tab 再按功能权限码单独显隐
         meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] }
       },
       {
@@ -126,7 +126,7 @@ const routes: RouteRecordRaw[] = [
         path: 'recycle-bin',
         name: 'recycle-bin',
         component: () => import('@/pages/RecycleBin.vue'),
-        // 回收站属系统管理整组，仅 system.manage 可进入
+        // 回收站：058 拆分后入口码为 system.recycle
         meta: { requiresPerm: ['system.recycle'] }
       }
     ]
@@ -185,7 +185,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 整组门禁校验：requiresGroupGate 存在且非空时，用户必须拥有其中全部权限（如系统管理整组=system.manage，防止菜单外直链绕过）
+  // 整组门禁校验：requiresGroupGate 存在且非空时，用户必须拥有其中全部权限（防止菜单外直链绕过；按需在路由 meta 设置）
   const requiresGroupGate = to.meta.requiresGroupGate as string[] | undefined
   if (requiresGroupGate && requiresGroupGate.length > 0) {
     const gateOk = requiresGroupGate.every((p) => authStore.permissions.includes(p))

@@ -1222,10 +1222,25 @@ const PERM_MODULE_NAMES: Record<string, string> = {
 }
 const PERM_MODULE_ORDER = ['products', 'inventory', 'sales', 'shipment', 'procurement', 'transfer', 'after_sales', 'replenishment', 'user', 'system']
 
+// 058 拆分后遗留的失效码不参与勾选展示：
+// user.read 无消费方、sales.cancel 无前端入口、system.manage 整组旧码已被 system.* 子码替代。
+// 保存时后端会做等价展开与清洗，此处仅负责"不显示"，避免误导勾选。
+const LEGACY_HIDDEN_CODES = ['user.read', 'sales.cancel', 'system.manage']
+// 058 拆分出的独立读码归属展示到原业务模块组：商品总表/成本利润 归「商品」、库存盘点 归「库存」，
+// 使组内“全选/取消”与旧版 products.read / inventory.read 的模块语义保持一致。
+const PERM_MODULE_ALIAS: Record<string, string> = {
+  product_total: 'products',
+  cost_profit: 'products',
+  stocktake: 'inventory',
+}
+
 const permissionGroups = computed(() => {
   const map = new Map<string, any[]>()
   for (const p of permissions.value) {
-    const key = String(p.code || '').split('.')[0]
+    const code = String(p.code || '')
+    if (LEGACY_HIDDEN_CODES.includes(code)) continue
+    const rawKey = code.split('.')[0]
+    const key = PERM_MODULE_ALIAS[rawKey] || rawKey
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(p)
   }

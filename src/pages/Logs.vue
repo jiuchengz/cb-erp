@@ -127,7 +127,7 @@ async function loadServerLogs() {
     serverLogs.value = data.data ?? []
     serverTotal.value = data.total ?? 0
   } catch (e: any) {
-    serverError.value = e?.response?.data?.error?.message || '加载审计日志失败（可能需要 system.manage 权限）'
+    serverError.value = e?.response?.data?.error?.message || '加载操作日志失败（可能需要 system.logs 权限）'
   } finally {
     serverLoading.value = false
   }

@@ -136,8 +136,8 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/products', label: '商品管理', icon: Goods, perms: ['products.read'] },
-      { path: '/product-total', label: '商品总表', icon: Goods, perms: ['products.read'] },
-      { path: '/cost-profit', label: '成本利润', icon: Goods, perms: ['products.read'] }
+      { path: '/product-total', label: '商品总表', icon: Goods, perms: ['product_total.read'] },
+      { path: '/cost-profit', label: '成本利润', icon: Goods, perms: ['cost_profit.read'] }
     ]
   },
   {
@@ -146,7 +146,7 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/inventory', label: '库存查询', icon: Box, perms: ['inventory.read'] },
-      { path: '/stocktakes', label: '库存盘点', icon: Box, perms: ['inventory.read'] },
+      { path: '/stocktakes', label: '库存盘点', icon: Box, perms: ['stocktake.read'] },
       { path: '/procurement', label: '拿货管理', icon: ShoppingCart, perms: ['procurement.read'] },
       { path: '/transfers', label: '海外调拨', icon: Switch, perms: ['transfer.read'] }
     ]
