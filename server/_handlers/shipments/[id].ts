@@ -44,6 +44,8 @@ const updateSchema = z.object({
   store: z.string().max(100).nullable().optional(),
   tracking_no: z.string().max(100).nullable().optional(),
   items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive(), remark: z.string().max(1000).nullable().optional() })).min(1).max(200).optional(),
+  // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
+  from_warehouse_id: z.string().uuid().nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -216,8 +218,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.estimated_arrival !== undefined) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== undefined) update.cargo_code = body.cargo_code;
       if (body.store !== undefined) update.store = body.store;
+      if (body.from_warehouse_id !== undefined) {
+        // 已进入发货流程（已扣库存）的调拨单禁止更换出库仓，避免账实错乱
+        if ((before as any).source === 'transfer' && before.cargo_status !== '待发货' && body.from_warehouse_id !== (before as any).from_warehouse_id) {
+          throw Errors.conflict('该货件已进入发货流程，出库仓不可修改');
+        }
+        update.from_warehouse_id = body.from_warehouse_id;
+      }
 
-      // 调拨发货确认发货：货物状态由「待发货」变为其他状态时，扣减国内仓库库存（transfer_out）
+      // 调拨发货确认发货：货物状态由「待发货」变为其他状态时，按出库仓扣减国内库存（transfer_out）。
+      // 库存不足时拦截（不允许负库存）：状态不落库，提示补货后再发货。
       const confirmItems = (body.items && body.items.length ? body.items : (before as any).shipment_items) || [];
       const willConfirmShipment =
         (before as any).source === 'transfer' &&
@@ -225,36 +235,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body.cargo_status !== undefined &&
         body.cargo_status !== '待发货';
       let deductedDomestic = false;
+      let usedDomWarehouseId: string | null = null;
       if (willConfirmShipment) {
-        const { data: domWh, error: domWhErr } = await supabase
-          .from('warehouses')
-          .select('id')
-          .eq('wh_type', 'domestic')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (domWhErr) throw domWhErr;
-        if (!domWh) throw Errors.conflict('暂无国内仓库，无法扣减国内库存');
-        for (const it of confirmItems) {
-          const { error: invErr } = await supabase.rpc('adjust_inventory', {
-            p_product_id: it.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: -Number(it.quantity || 0),
-            p_type: 'transfer_out',
-            p_reference_type: 'shipment',
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `调拨发货确认发货（${before.cargo_status}→${body.cargo_status}）${before.tracking_no || before.shipment_no || id}`,
-          });
-          if (invErr) throw invErr;
-        }
-        deductedDomestic = true;
-      }
-
-      const { data, error } = await supabase.from('shipments').update(update).eq('id', id).select().single();
-      if (error) {
-        // 已扣减国内库存但更新失败：回补，保持数据一致
-        if (deductedDomestic) {
+        // 出库仓解析：本单新选 → 单据已存 → 存量单回退第一个国内仓
+        let outWhId = body.from_warehouse_id || (before as any).from_warehouse_id || null;
+        if (!outWhId) {
           const { data: domWh, error: domWhErr } = await supabase
             .from('warehouses')
             .select('id')
@@ -262,55 +247,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle();
-          if (!domWhErr && domWh) {
-            for (const it of confirmItems) {
-              await supabase.rpc('adjust_inventory', {
-                p_product_id: it.product_id,
-                p_warehouse_id: domWh.id,
-                p_quantity: Number(it.quantity || 0),
-                p_type: 'transfer_in',
-                p_reference_type: 'shipment',
-                p_reference_id: id,
-                p_created_by: ctx.userId,
-                p_note: `调拨发货状态更新失败回补 ${before.tracking_no || before.shipment_no || id}`,
-              });
-            }
+          if (domWhErr) throw domWhErr;
+          if (!domWh) throw Errors.conflict('暂无国内仓库，无法扣减国内库存');
+          outWhId = domWh.id;
+        }
+        usedDomWarehouseId = outWhId;
+        const rollback: typeof confirmItems = [];
+        try {
+          for (const it of confirmItems) {
+            const { error: invErr } = await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: outWhId,
+              p_quantity: -Number(it.quantity || 0),
+              p_type: 'transfer_out',
+              p_reference_type: 'shipment',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `调拨发货确认发货（${before.cargo_status}→${body.cargo_status}）${before.tracking_no || before.shipment_no || id}`,
+            });
+            if (invErr) throw invErr;
+            rollback.push(it);
+          }
+        } catch (invErr: any) {
+          // 扣减中途失败：回补已扣明细，保证账实一致
+          for (const it of rollback) {
+            await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: outWhId,
+              p_quantity: Number(it.quantity || 0),
+              p_type: 'transfer_in',
+              p_reference_type: 'shipment',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `调拨发货扣减失败回补 ${before.tracking_no || before.shipment_no || id}`,
+            });
+          }
+          const msg = String(invErr?.message || '');
+          if (msg.includes('INSUFFICIENT_INVENTORY')) {
+            throw Errors.conflict('出库仓库存不足，无法确认发货；单据仍可保存为待发货，请先补货/入库后再发货');
+          }
+          throw invErr;
+        }
+        deductedDomestic = true;
+      }
+
+      const { data, error } = await supabase.from('shipments').update(update).eq('id', id).select().single();
+      if (error) {
+        // 已扣减国内库存但更新失败：回补，保持数据一致
+        if (deductedDomestic && usedDomWarehouseId) {
+          for (const it of confirmItems) {
+            await supabase.rpc('adjust_inventory', {
+              p_product_id: it.product_id,
+              p_warehouse_id: usedDomWarehouseId,
+              p_quantity: Number(it.quantity || 0),
+              p_type: 'transfer_in',
+              p_reference_type: 'shipment',
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `调拨发货状态更新失败回补 ${before.tracking_no || before.shipment_no || id}`,
+            });
           }
         }
         if (error.code === '23503') throw Errors.conflict('关联的货代不存在');
         if (error.code === 'PGRST116') throw Errors.notFound('发货单不存在');
         throw error;
-      }
-
-      // 调拨发货货物状态变为「已入仓」：自动增加海外仓库存（仅从未入仓变为已入仓时执行一次）
-      const becameInbound =
-        (before as any).source === 'transfer' &&
-        before.cargo_status !== '已入仓' &&
-        body.cargo_status === '已入仓';
-      if (becameInbound) {
-        const items = (body.items && body.items.length ? body.items : (before as any).shipment_items) || [];
-        const { data: ovsWh, error: ovsWhErr } = await supabase
-          .from('warehouses')
-          .select('id')
-          .eq('wh_type', 'overseas')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (ovsWhErr) throw ovsWhErr;
-        if (!ovsWh) throw Errors.conflict('暂无海外仓库，无法增加海外库存');
-        for (const it of items) {
-          const { error: invErr } = await supabase.rpc('adjust_inventory', {
-            p_product_id: it.product_id,
-            p_warehouse_id: ovsWh.id,
-            p_quantity: Number(it.quantity || 0),
-            p_type: 'transfer_in',
-            p_reference_type: 'shipment',
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `调拨发货已入仓 ${data.tracking_no || data.shipment_no || id}`,
-          });
-          if (invErr) throw invErr;
-        }
       }
 
       // 明细整体替换：先删旧明细，再插入新明细
@@ -345,22 +345,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 软删除：置 deleted_at，数据进入回收站
       const { error } = await supabase.from('shipments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
-      // 调拨发货已确认发货（状态非「待发货」，已扣减国内库存）的记录，删除时回补国内库存；
-      // 待发货记录未扣减，无需回补；已入仓货件入仓时已增加海外库存，删除仅移除登记，不反向扣减
+      // 调拨发货已确认发货（状态非「待发货」，已扣减国内库存）的记录，删除时按原出库仓回补国内库存；
+      // 待发货记录未扣减，无需回补；已入仓货件海外库存以签收登记/平台快照为准，删除不反向扣减
       if ((before as any).source === 'transfer' && before.cargo_status !== '待发货') {
         const items = (before as any).shipment_items || [];
-        const { data: domWh, error: domWhErr } = await supabase
-          .from('warehouses')
-          .select('id')
-          .eq('wh_type', 'domestic')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (!domWhErr && domWh) {
+        // 出库仓解析：单据已存 → 存量单回退第一个国内仓
+        let outWhId = (before as any).from_warehouse_id || null;
+        if (!outWhId) {
+          const { data: domWh, error: domWhErr } = await supabase
+            .from('warehouses')
+            .select('id')
+            .eq('wh_type', 'domestic')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (!domWhErr && domWh) outWhId = domWh.id;
+        }
+        if (outWhId) {
           for (const it of items) {
             await supabase.rpc('adjust_inventory', {
               p_product_id: it.product_id,
-              p_warehouse_id: domWh.id,
+              p_warehouse_id: outWhId,
               p_quantity: Number(it.quantity || 0),
               p_type: 'transfer_in',
               p_reference_type: 'shipment',

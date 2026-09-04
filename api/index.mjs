@@ -31099,8 +31099,8 @@ var require_saxes = __commonJS({
        *
        * @param handler The handler to set.
        */
-      on(name, handler61) {
-        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler61;
+      on(name, handler62) {
+        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler62;
       }
       /**
        * Unset an event handler.
@@ -31145,11 +31145,11 @@ var require_saxes = __commonJS({
        */
       fail(message) {
         const err = this.makeError(message);
-        const handler61 = this.errorHandler;
-        if (handler61 === void 0) {
+        const handler62 = this.errorHandler;
+        if (handler62 === void 0) {
           throw err;
         } else {
-          handler61(err);
+          handler62(err);
         }
         return this;
       }
@@ -32165,20 +32165,20 @@ var require_saxes = __commonJS({
       // END OF STATE ENGINE METHODS
       handleTextInRoot() {
         let { i: start, forbiddenState } = this;
-        const { chunk, textHandler: handler61 } = this;
+        const { chunk, textHandler: handler62 } = this;
         scanLoop:
           while (true) {
             switch (this.getCode()) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler61(text + slice);
+                    handler62(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler61(slice);
+                    handler62(slice);
                   }
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32187,7 +32187,7 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32213,7 +32213,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case NL_LIKE:
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
@@ -32221,7 +32221,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case EOC:
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break scanLoop;
@@ -32233,7 +32233,7 @@ var require_saxes = __commonJS({
       }
       handleTextOutsideRoot() {
         let { i: start } = this;
-        const { chunk, textHandler: handler61 } = this;
+        const { chunk, textHandler: handler62 } = this;
         let nonSpace = false;
         outRootLoop:
           while (true) {
@@ -32241,14 +32241,14 @@ var require_saxes = __commonJS({
             switch (code) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   const { text } = this;
                   const slice = chunk.slice(start, this.prevI);
                   if (text.length !== 0) {
-                    handler61(text + slice);
+                    handler62(text + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler61(slice);
+                    handler62(slice);
                   }
                 }
                 break outRootLoop;
@@ -32256,20 +32256,20 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 nonSpace = true;
                 break outRootLoop;
               case NL_LIKE:
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
                 start = this.i;
                 break;
               case EOC:
-                if (handler61 !== void 0) {
+                if (handler62 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break outRootLoop;
@@ -32499,12 +32499,12 @@ var require_saxes = __commonJS({
           this.text += "</>";
           return;
         }
-        const handler61 = this.closeTagHandler;
+        const handler62 = this.closeTagHandler;
         let l2 = tags.length;
         while (l2-- > 0) {
           const tag = this.tag = tags.pop();
           this.topNS = tag.ns;
-          handler61 === null || handler61 === void 0 ? void 0 : handler61(tag);
+          handler62 === null || handler62 === void 0 ? void 0 : handler62(tag);
           if (tag.name === name) {
             break;
           }
@@ -48942,23 +48942,23 @@ var require_async = __commonJS({
           unsaturated: [],
           empty: []
         };
-        function on(event, handler61) {
-          events[event].push(handler61);
+        function on(event, handler62) {
+          events[event].push(handler62);
         }
-        function once2(event, handler61) {
+        function once2(event, handler62) {
           const handleAndRemove = (...args) => {
             off(event, handleAndRemove);
-            handler61(...args);
+            handler62(...args);
           };
           events[event].push(handleAndRemove);
         }
-        function off(event, handler61) {
+        function off(event, handler62) {
           if (!event) return Object.keys(events).forEach((ev) => events[ev] = []);
-          if (!handler61) return events[event] = [];
-          events[event] = events[event].filter((ev) => ev !== handler61);
+          if (!handler62) return events[event] = [];
+          events[event] = events[event].filter((ev) => ev !== handler62);
         }
         function trigger(event, ...args) {
-          events[event].forEach((handler61) => handler61(...args));
+          events[event].forEach((handler62) => handler62(...args));
         }
         var processingScheduled = false;
         function _insert(data, insertAtFront, rejectOnError, callback) {
@@ -49027,8 +49027,8 @@ var require_async = __commonJS({
           }
           return false;
         }
-        const eventMethod = (name) => (handler61) => {
-          if (!handler61) {
+        const eventMethod = (name) => (handler62) => {
+          if (!handler62) {
             return new Promise((resolve, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
@@ -49037,7 +49037,7 @@ var require_async = __commonJS({
             });
           }
           off(name);
-          on(name, handler61);
+          on(name, handler62);
         };
         var isProcessing = false;
         var q = {
@@ -78284,7 +78284,7 @@ var require_debuggability = __commonJS({
       };
       Promise2.prototype._onCancel = function() {
       };
-      Promise2.prototype._setOnCancel = function(handler61) {
+      Promise2.prototype._setOnCancel = function(handler62) {
         ;
       };
       Promise2.prototype._attachCancellationCallback = function(onCancel) {
@@ -78839,10 +78839,10 @@ var require_finally = __commonJS({
       var util2 = require_util4();
       var CancellationError = Promise2.CancellationError;
       var errorObj2 = util2.errorObj;
-      function PassThroughHandlerContext(promise, type, handler61) {
+      function PassThroughHandlerContext(promise, type, handler62) {
         this.promise = promise;
         this.type = type;
-        this.handler = handler61;
+        this.handler = handler62;
         this.called = false;
         this.cancelPromise = null;
       }
@@ -78877,10 +78877,10 @@ var require_finally = __commonJS({
       }
       function finallyHandler(reasonOrValue) {
         var promise = this.promise;
-        var handler61 = this.handler;
+        var handler62 = this.handler;
         if (!this.called) {
           this.called = true;
-          var ret2 = this.isFinallyHandler() ? handler61.call(promise._boundValue()) : handler61.call(promise._boundValue(), reasonOrValue);
+          var ret2 = this.isFinallyHandler() ? handler62.call(promise._boundValue()) : handler62.call(promise._boundValue(), reasonOrValue);
           if (ret2 !== void 0) {
             promise._setReturnedNonUndefined();
             var maybePromise = tryConvertToPromise(ret2, promise);
@@ -78916,26 +78916,26 @@ var require_finally = __commonJS({
           return reasonOrValue;
         }
       }
-      Promise2.prototype._passThrough = function(handler61, type, success, fail2) {
-        if (typeof handler61 !== "function") return this.then();
+      Promise2.prototype._passThrough = function(handler62, type, success, fail2) {
+        if (typeof handler62 !== "function") return this.then();
         return this._then(
           success,
           fail2,
           void 0,
-          new PassThroughHandlerContext(this, type, handler61),
+          new PassThroughHandlerContext(this, type, handler62),
           void 0
         );
       };
-      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler61) {
+      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler62) {
         return this._passThrough(
-          handler61,
+          handler62,
           0,
           finallyHandler,
           finallyHandler
         );
       };
-      Promise2.prototype.tap = function(handler61) {
-        return this._passThrough(handler61, 1, finallyHandler);
+      Promise2.prototype.tap = function(handler62) {
+        return this._passThrough(handler62, 1, finallyHandler);
       };
       return PassThroughHandlerContext;
     };
@@ -79336,10 +79336,10 @@ var require_direct_resolve = __commonJS({
           );
         } else {
           var _reason = arguments[1];
-          var handler61 = function() {
+          var handler62 = function() {
             throw _reason;
           };
-          return this.caught(reason, handler61);
+          return this.caught(reason, handler62);
         }
       };
       Promise2.prototype.catchReturn = function(value) {
@@ -79355,10 +79355,10 @@ var require_direct_resolve = __commonJS({
         } else {
           var _value = arguments[1];
           if (_value instanceof Promise2) _value.suppressUnhandledRejections();
-          var handler61 = function() {
+          var handler62 = function() {
             return _value;
           };
-          return this.caught(value, handler61);
+          return this.caught(value, handler62);
         }
       };
     };
@@ -81460,22 +81460,22 @@ var require_promise = __commonJS({
         }
         var domain = getDomain();
         if (!((bitField & 50397184) === 0)) {
-          var handler61, value, settler = target._settlePromiseCtx;
+          var handler62, value, settler = target._settlePromiseCtx;
           if ((bitField & 33554432) !== 0) {
             value = target._rejectionHandler0;
-            handler61 = didFulfill;
+            handler62 = didFulfill;
           } else if ((bitField & 16777216) !== 0) {
             value = target._fulfillmentHandler0;
-            handler61 = didReject;
+            handler62 = didReject;
             target._unsetRejectionIsUnhandled();
           } else {
             settler = target._settlePromiseLateCancellationObserver;
             value = new CancellationError("late cancellation observer");
             target._attachExtraTrace(value);
-            handler61 = didReject;
+            handler62 = didReject;
           }
           async.invoke(settler, target, {
-            handler: domain === null ? handler61 : typeof handler61 === "function" && util2.domainBind(domain, handler61),
+            handler: domain === null ? handler62 : typeof handler62 === "function" && util2.domainBind(domain, handler62),
             promise,
             receiver,
             value
@@ -81656,7 +81656,7 @@ var require_promise = __commonJS({
           promise._rejectCallback(r, true);
         }
       };
-      Promise2.prototype._settlePromiseFromHandler = function(handler61, receiver, value, promise) {
+      Promise2.prototype._settlePromiseFromHandler = function(handler62, receiver, value, promise) {
         var bitField = promise._bitField;
         if ((bitField & 65536) !== 0) return;
         promise._pushContext();
@@ -81666,10 +81666,10 @@ var require_promise = __commonJS({
             x = errorObj2;
             x.e = new TypeError2("cannot .spread() a non-array: " + util2.classString(value));
           } else {
-            x = tryCatch2(handler61).apply(this._boundValue(), value);
+            x = tryCatch2(handler62).apply(this._boundValue(), value);
           }
         } else {
-          x = tryCatch2(handler61).call(receiver, value);
+          x = tryCatch2(handler62).call(receiver, value);
         }
         var promiseCreated = promise._popContext();
         bitField = promise._bitField;
@@ -81694,7 +81694,7 @@ var require_promise = __commonJS({
       Promise2.prototype._setFollowee = function(promise) {
         this._rejectionHandler0 = promise;
       };
-      Promise2.prototype._settlePromise = function(promise, handler61, receiver, value) {
+      Promise2.prototype._settlePromise = function(promise, handler62, receiver, value) {
         var isPromise = promise instanceof Promise2;
         var bitField = this._bitField;
         var asyncGuaranteed = (bitField & 134217728) !== 0;
@@ -81702,10 +81702,10 @@ var require_promise = __commonJS({
           if (isPromise) promise._invokeInternalOnCancel();
           if (receiver instanceof PassThroughHandlerContext && receiver.isFinallyHandler()) {
             receiver.cancelPromise = promise;
-            if (tryCatch2(handler61).call(receiver, value) === errorObj2) {
+            if (tryCatch2(handler62).call(receiver, value) === errorObj2) {
               promise._reject(errorObj2.e);
             }
-          } else if (handler61 === reflectHandler) {
+          } else if (handler62 === reflectHandler) {
             promise._fulfill(reflectHandler.call(receiver));
           } else if (receiver instanceof Proxyable) {
             receiver._promiseCancelled(promise);
@@ -81714,12 +81714,12 @@ var require_promise = __commonJS({
           } else {
             receiver.cancel();
           }
-        } else if (typeof handler61 === "function") {
+        } else if (typeof handler62 === "function") {
           if (!isPromise) {
-            handler61.call(receiver, value, promise);
+            handler62.call(receiver, value, promise);
           } else {
             if (asyncGuaranteed) promise._setAsyncGuaranteed();
-            this._settlePromiseFromHandler(handler61, receiver, value, promise);
+            this._settlePromiseFromHandler(handler62, receiver, value, promise);
           }
         } else if (receiver instanceof Proxyable) {
           if (!receiver._isResolved()) {
@@ -81739,15 +81739,15 @@ var require_promise = __commonJS({
         }
       };
       Promise2.prototype._settlePromiseLateCancellationObserver = function(ctx) {
-        var handler61 = ctx.handler;
+        var handler62 = ctx.handler;
         var promise = ctx.promise;
         var receiver = ctx.receiver;
         var value = ctx.value;
-        if (typeof handler61 === "function") {
+        if (typeof handler62 === "function") {
           if (!(promise instanceof Promise2)) {
-            handler61.call(receiver, value, promise);
+            handler62.call(receiver, value, promise);
           } else {
-            this._settlePromiseFromHandler(handler61, receiver, value, promise);
+            this._settlePromiseFromHandler(handler62, receiver, value, promise);
           }
         } else if (promise instanceof Promise2) {
           promise._reject(value);
@@ -81756,12 +81756,12 @@ var require_promise = __commonJS({
       Promise2.prototype._settlePromiseCtx = function(ctx) {
         this._settlePromise(ctx.promise, ctx.handler, ctx.receiver, ctx.value);
       };
-      Promise2.prototype._settlePromise0 = function(handler61, value, bitField) {
+      Promise2.prototype._settlePromise0 = function(handler62, value, bitField) {
         var promise = this._promise0;
         var receiver = this._receiverAt(0);
         this._promise0 = void 0;
         this._receiver0 = void 0;
-        this._settlePromise(promise, handler61, receiver, value);
+        this._settlePromise(promise, handler62, receiver, value);
       };
       Promise2.prototype._clearCallbackDataAtIndex = function(index) {
         var base = index * 4 - 4;
@@ -81801,20 +81801,20 @@ var require_promise = __commonJS({
       };
       Promise2.prototype._fulfillPromises = function(len, value) {
         for (var i = 1; i < len; i++) {
-          var handler61 = this._fulfillmentHandlerAt(i);
+          var handler62 = this._fulfillmentHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler61, receiver, value);
+          this._settlePromise(promise, handler62, receiver, value);
         }
       };
       Promise2.prototype._rejectPromises = function(len, reason) {
         for (var i = 1; i < len; i++) {
-          var handler61 = this._rejectionHandlerAt(i);
+          var handler62 = this._rejectionHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler61, receiver, reason);
+          this._settlePromise(promise, handler62, receiver, reason);
         }
       };
       Promise2.prototype._settlePromises = function() {
@@ -88420,14 +88420,14 @@ var require_iterate_stream = __commonJS({
     function once(eventEmitter, type) {
       return new Promise((resolve) => {
         let fired = false;
-        const handler61 = () => {
+        const handler62 = () => {
           if (!fired) {
             fired = true;
-            eventEmitter.removeListener(type, handler61);
+            eventEmitter.removeListener(type, handler62);
             resolve();
           }
         };
-        eventEmitter.addListener(type, handler61);
+        eventEmitter.addListener(type, handler62);
       });
     }
   }
@@ -104204,7 +104204,9 @@ var createSchema8 = external_exports.object({
   // 调拨发货管理字段
   cargo_code: external_exports.string().max(100).nullable().optional(),
   store: external_exports.string().max(100).nullable().optional(),
-  source: external_exports.enum(["manual", "transfer"]).optional()
+  source: external_exports.enum(["manual", "transfer"]).optional(),
+  // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
+  from_warehouse_id: external_exports.string().uuid().nullable().optional()
 });
 async function handler29(req, res) {
   try {
@@ -104277,7 +104279,8 @@ async function handler29(req, res) {
               shipping_qty: body.shipping_qty ?? null,
               ship_date: body.ship_date ?? null,
               product_code: body.cargo_code ?? null,
-              cargo_status: body.cargo_status ?? "\u5F85\u53D1\u8D27"
+              cargo_status: body.cargo_status ?? "\u5F85\u53D1\u8D27",
+              from_warehouse_id: body.from_warehouse_id ?? null
             };
             const { data: boundShipment, error: boundErr } = await supabase.from("shipments").update(boundUpdate).eq("id", existing.id).select().single();
             if (boundErr) throw boundErr;
@@ -104345,6 +104348,7 @@ async function handler29(req, res) {
         cargo_code: body.cargo_code ?? null,
         store: body.store ?? null,
         source: body.source ?? "manual",
+        from_warehouse_id: body.from_warehouse_id ?? null,
         created_by: ctx.userId
       }).select().single();
       if (error) {
@@ -107077,7 +107081,9 @@ var updateSchema12 = external_exports.object({
   cargo_code: external_exports.string().max(100).nullable().optional(),
   store: external_exports.string().max(100).nullable().optional(),
   tracking_no: external_exports.string().max(100).nullable().optional(),
-  items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional()
+  items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional(),
+  // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
+  from_warehouse_id: external_exports.string().uuid().nullable().optional()
 });
 async function handler55(req, res) {
   try {
@@ -107211,70 +107217,81 @@ async function handler55(req, res) {
       if (body.estimated_arrival !== void 0) update.estimated_arrival = body.estimated_arrival;
       if (body.cargo_code !== void 0) update.cargo_code = body.cargo_code;
       if (body.store !== void 0) update.store = body.store;
+      if (body.from_warehouse_id !== void 0) {
+        if (before.source === "transfer" && before.cargo_status !== "\u5F85\u53D1\u8D27" && body.from_warehouse_id !== before.from_warehouse_id) {
+          throw Errors.conflict("\u8BE5\u8D27\u4EF6\u5DF2\u8FDB\u5165\u53D1\u8D27\u6D41\u7A0B\uFF0C\u51FA\u5E93\u4ED3\u4E0D\u53EF\u4FEE\u6539");
+        }
+        update.from_warehouse_id = body.from_warehouse_id;
+      }
       const confirmItems = (body.items && body.items.length ? body.items : before.shipment_items) || [];
       const willConfirmShipment = before.source === "transfer" && before.cargo_status === "\u5F85\u53D1\u8D27" && body.cargo_status !== void 0 && body.cargo_status !== "\u5F85\u53D1\u8D27";
       let deductedDomestic = false;
+      let usedDomWarehouseId = null;
       if (willConfirmShipment) {
-        const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-        if (domWhErr) throw domWhErr;
-        if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
-        for (const it of confirmItems) {
-          const { error: invErr } = await supabase.rpc("adjust_inventory", {
-            p_product_id: it.product_id,
-            p_warehouse_id: domWh.id,
-            p_quantity: -Number(it.quantity || 0),
-            p_type: "transfer_out",
-            p_reference_type: "shipment",
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `\u8C03\u62E8\u53D1\u8D27\u786E\u8BA4\u53D1\u8D27\uFF08${before.cargo_status}\u2192${body.cargo_status}\uFF09${before.tracking_no || before.shipment_no || id}`
-          });
-          if (invErr) throw invErr;
+        let outWhId = body.from_warehouse_id || before.from_warehouse_id || null;
+        if (!outWhId) {
+          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+          if (domWhErr) throw domWhErr;
+          if (!domWh) throw Errors.conflict("\u6682\u65E0\u56FD\u5185\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u6263\u51CF\u56FD\u5185\u5E93\u5B58");
+          outWhId = domWh.id;
+        }
+        usedDomWarehouseId = outWhId;
+        const rollback = [];
+        try {
+          for (const it of confirmItems) {
+            const { error: invErr } = await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: outWhId,
+              p_quantity: -Number(it.quantity || 0),
+              p_type: "transfer_out",
+              p_reference_type: "shipment",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u8C03\u62E8\u53D1\u8D27\u786E\u8BA4\u53D1\u8D27\uFF08${before.cargo_status}\u2192${body.cargo_status}\uFF09${before.tracking_no || before.shipment_no || id}`
+            });
+            if (invErr) throw invErr;
+            rollback.push(it);
+          }
+        } catch (invErr) {
+          for (const it of rollback) {
+            await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: outWhId,
+              p_quantity: Number(it.quantity || 0),
+              p_type: "transfer_in",
+              p_reference_type: "shipment",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u8C03\u62E8\u53D1\u8D27\u6263\u51CF\u5931\u8D25\u56DE\u8865 ${before.tracking_no || before.shipment_no || id}`
+            });
+          }
+          const msg = String(invErr?.message || "");
+          if (msg.includes("INSUFFICIENT_INVENTORY")) {
+            throw Errors.conflict("\u51FA\u5E93\u4ED3\u5E93\u5B58\u4E0D\u8DB3\uFF0C\u65E0\u6CD5\u786E\u8BA4\u53D1\u8D27\uFF1B\u5355\u636E\u4ECD\u53EF\u4FDD\u5B58\u4E3A\u5F85\u53D1\u8D27\uFF0C\u8BF7\u5148\u8865\u8D27/\u5165\u5E93\u540E\u518D\u53D1\u8D27");
+          }
+          throw invErr;
         }
         deductedDomestic = true;
       }
       const { data, error } = await supabase.from("shipments").update(update).eq("id", id).select().single();
       if (error) {
-        if (deductedDomestic) {
-          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-          if (!domWhErr && domWh) {
-            for (const it of confirmItems) {
-              await supabase.rpc("adjust_inventory", {
-                p_product_id: it.product_id,
-                p_warehouse_id: domWh.id,
-                p_quantity: Number(it.quantity || 0),
-                p_type: "transfer_in",
-                p_reference_type: "shipment",
-                p_reference_id: id,
-                p_created_by: ctx.userId,
-                p_note: `\u8C03\u62E8\u53D1\u8D27\u72B6\u6001\u66F4\u65B0\u5931\u8D25\u56DE\u8865 ${before.tracking_no || before.shipment_no || id}`
-              });
-            }
+        if (deductedDomestic && usedDomWarehouseId) {
+          for (const it of confirmItems) {
+            await supabase.rpc("adjust_inventory", {
+              p_product_id: it.product_id,
+              p_warehouse_id: usedDomWarehouseId,
+              p_quantity: Number(it.quantity || 0),
+              p_type: "transfer_in",
+              p_reference_type: "shipment",
+              p_reference_id: id,
+              p_created_by: ctx.userId,
+              p_note: `\u8C03\u62E8\u53D1\u8D27\u72B6\u6001\u66F4\u65B0\u5931\u8D25\u56DE\u8865 ${before.tracking_no || before.shipment_no || id}`
+            });
           }
         }
         if (error.code === "23503") throw Errors.conflict("\u5173\u8054\u7684\u8D27\u4EE3\u4E0D\u5B58\u5728");
         if (error.code === "PGRST116") throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
         throw error;
-      }
-      const becameInbound = before.source === "transfer" && before.cargo_status !== "\u5DF2\u5165\u4ED3" && body.cargo_status === "\u5DF2\u5165\u4ED3";
-      if (becameInbound) {
-        const items = (body.items && body.items.length ? body.items : before.shipment_items) || [];
-        const { data: ovsWh, error: ovsWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "overseas").order("created_at", { ascending: true }).limit(1).maybeSingle();
-        if (ovsWhErr) throw ovsWhErr;
-        if (!ovsWh) throw Errors.conflict("\u6682\u65E0\u6D77\u5916\u4ED3\u5E93\uFF0C\u65E0\u6CD5\u589E\u52A0\u6D77\u5916\u5E93\u5B58");
-        for (const it of items) {
-          const { error: invErr } = await supabase.rpc("adjust_inventory", {
-            p_product_id: it.product_id,
-            p_warehouse_id: ovsWh.id,
-            p_quantity: Number(it.quantity || 0),
-            p_type: "transfer_in",
-            p_reference_type: "shipment",
-            p_reference_id: id,
-            p_created_by: ctx.userId,
-            p_note: `\u8C03\u62E8\u53D1\u8D27\u5DF2\u5165\u4ED3 ${data.tracking_no || data.shipment_no || id}`
-          });
-          if (invErr) throw invErr;
-        }
       }
       if (body.items && body.items.length > 0) {
         const { error: delErr } = await supabase.from("shipment_items").delete().eq("shipment_id", id);
@@ -107304,12 +107321,16 @@ async function handler55(req, res) {
       if (error) throw error;
       if (before.source === "transfer" && before.cargo_status !== "\u5F85\u53D1\u8D27") {
         const items = before.shipment_items || [];
-        const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
-        if (!domWhErr && domWh) {
+        let outWhId = before.from_warehouse_id || null;
+        if (!outWhId) {
+          const { data: domWh, error: domWhErr } = await supabase.from("warehouses").select("id").eq("wh_type", "domestic").order("created_at", { ascending: true }).limit(1).maybeSingle();
+          if (!domWhErr && domWh) outWhId = domWh.id;
+        }
+        if (outWhId) {
           for (const it of items) {
             await supabase.rpc("adjust_inventory", {
               p_product_id: it.product_id,
-              p_warehouse_id: domWh.id,
+              p_warehouse_id: outWhId,
               p_quantity: Number(it.quantity || 0),
               p_type: "transfer_in",
               p_reference_type: "shipment",
@@ -107786,6 +107807,87 @@ async function handler57(req, res) {
   }
 }
 
+// server/_handlers/shipments/receive.ts
+var receiveSchema = external_exports.object({
+  items: external_exports.array(
+    external_exports.object({
+      product_id: external_exports.string().uuid(),
+      add_quantity: external_exports.coerce.number().positive()
+    })
+  ).min(1).max(200)
+});
+async function handler58(req, res) {
+  try {
+    rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method Not Allowed" } });
+    }
+    const ctx = await requireAuth(req);
+    requirePermission(ctx, "shipment.write");
+    const id = parse(uuidSchema, String(req.query.id));
+    const body = parse(receiveSchema, req.body || {});
+    const supabase = getAdminClient();
+    const { data: shipment, error: shipErr } = await supabase.from("shipments").select("*, shipment_items(*)").eq("id", id).is("deleted_at", null).single();
+    if (shipErr || !shipment) {
+      throw Errors.notFound("\u53D1\u8D27\u5355\u4E0D\u5B58\u5728");
+    }
+    await assertShipmentStoreVisible(supabase, ctx, shipment.store);
+    if (shipment.source !== "transfer") {
+      throw Errors.badRequest("\u4EC5\u8C03\u62E8\u53D1\u8D27\u5355\u652F\u6301\u7B7E\u6536\u5165\u4ED3");
+    }
+    if (shipment.cargo_status !== "\u5DF2\u5165\u4ED3") {
+      throw Errors.conflict(`\u5F53\u524D\u8D27\u7269\u72B6\u6001\u4E3A\u300C${shipment.cargo_status || "\u672A\u77E5"}\u300D\uFF0C\u4EC5\u300C\u5DF2\u5165\u4ED3\u300D\u540E\u53EF\u7B7E\u6536\u767B\u8BB0`);
+    }
+    const items = shipment.shipment_items ?? [];
+    if (!items.length) {
+      throw Errors.conflict("\u8BE5\u8D27\u4EF6\u65E0\u5546\u54C1\u660E\u7EC6\uFF0C\u65E0\u6CD5\u7B7E\u6536");
+    }
+    const byProduct = new Map(items.map((it) => [it.product_id, it]));
+    const updated = [];
+    for (const row of body.items) {
+      const exist = byProduct.get(row.product_id);
+      if (!exist) {
+        throw Errors.badRequest("\u7B7E\u6536\u660E\u7EC6\u4E2D\u5B58\u5728\u672C\u5355\u672A\u5305\u542B\u7684\u4EA7\u54C1");
+      }
+      const qty = Number(exist.quantity ?? 0);
+      const cur = Number(exist.received_quantity ?? 0);
+      const add = Number(row.add_quantity || 0);
+      const next = cur + add;
+      if (next > qty) {
+        throw Errors.conflict(`\u4EA7\u54C1 ${row.product_id} \u7D2F\u8BA1\u7B7E\u6536 ${cur} \u4EF6\uFF0C\u6700\u591A\u8FD8\u53EF\u7B7E\u6536 ${qty - cur} \u4EF6`);
+      }
+      if (add <= 0) {
+        throw Errors.badRequest("\u7B7E\u6536\u6570\u91CF\u5FC5\u987B\u5927\u4E8E 0");
+      }
+      const { error: updErr } = await supabase.from("shipment_items").update({ received_quantity: next }).eq("id", exist.id);
+      if (updErr) throw updErr;
+      updated.push({ product_id: row.product_id, received_quantity: next, quantity: qty });
+    }
+    const allDoneCheck = items.every((it) => {
+      const addForIt = body.items.find((b) => b.product_id === it.product_id);
+      const cur = Number(it.received_quantity ?? 0) + (addForIt ? Number(addForIt.add_quantity || 0) : 0);
+      return cur >= Number(it.quantity ?? 0);
+    });
+    let signed = false;
+    if (allDoneCheck) {
+      const { error: signErr } = await supabase.from("shipments").update({ signed_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+      if (signErr) throw signErr;
+      signed = true;
+    }
+    await writeAudit(ctx, req, "update", "shipment", id, { received: body.items }, { signed, updated });
+    return res.status(200).json({
+      data: {
+        shipment_id: id,
+        updated,
+        signed,
+        message: signed ? "\u5168\u90E8\u660E\u7EC6\u5DF2\u7B7E\u6536\u5B8C\u6210" : "\u7B7E\u6536\u767B\u8BB0\u6210\u529F\uFF08\u672A\u5168\u91CF\u7B7E\u6536\uFF0C\u53EF\u518D\u6B21\u767B\u8BB0\uFF09"
+      }
+    });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
 // server/_handlers/transfers/[id].ts
 var TRANSFER_FLOW = {
   DRAFT: ["APPROVED", "CANCELLED"],
@@ -107798,7 +107900,7 @@ var TRANSFER_FLOW = {
 var updateSchema13 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler58(req, res) {
+async function handler59(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -107906,7 +108008,7 @@ function deriveWhType2(kind) {
 function deriveKind2(whType) {
   return whType === "overseas" ? "overseas" : "sub";
 }
-async function handler59(req, res) {
+async function handler60(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -108009,23 +108111,24 @@ var routes = [
   { pattern: /^\/sales$/, handler: handler28 },
   { pattern: /^\/shipments\/import$/, handler: handler56 },
   { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler57, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)\/receive$/, handler: handler58, params: ["id"] },
   { pattern: /^\/shipments\/([^/]+)$/, handler: handler55, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler29 },
   { pattern: /^\/stocktakes\/summary$/, handler: handler22 },
   { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes\/([^/]+)$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes$/, handler: handler10 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler58, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler59, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler30 },
   { pattern: /^\/users\/([^/]+)$/, handler: handler31, params: ["id"] },
   { pattern: /^\/users$/, handler: handler32 },
   { pattern: /^\/export\/xlsx$/, handler: handler5 },
   { pattern: /^\/system\/backup$/, handler: handler20 },
   { pattern: /^\/system\/logo$/, handler: handler21 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler59, params: ["id"] },
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler60, params: ["id"] },
   { pattern: /^\/warehouses$/, handler: handler33 }
 ];
-async function handler60(req, res) {
+async function handler61(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -108048,7 +108151,7 @@ async function handler60(req, res) {
   }
 }
 export {
-  handler60 as default
+  handler61 as default
 };
 /*! Bundled license information:
 

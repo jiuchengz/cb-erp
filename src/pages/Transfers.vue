@@ -146,6 +146,12 @@
             <el-option v-for="s in warehouseStoreOptions" :key="s" :label="s" :value="s" />
           </el-select>
         </el-form-item>
+        <el-form-item label="出库仓库" required>
+          <el-select v-model="form.from_warehouse_id" placeholder="请选择国内出库仓（确认发货时扣减此仓库存）" clearable filterable style="width: 100%">
+            <el-option v-for="w in domesticWarehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+          <div class="muted-hint">确认发货后将从此仓扣减国内库存；仓库库存不足时无法点击发货，请先补货</div>
+        </el-form-item>
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
@@ -214,6 +220,8 @@
         <el-descriptions-item label="总数">{{ totalQty(detail) }}</el-descriptions-item>
         <el-descriptions-item label="发货时间">{{ detail.ship_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="货物状态">{{ detail.cargo_status || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="出库仓库">{{ warehouseNameOf(detail.from_warehouse_id) }}</el-descriptions-item>
+        <el-descriptions-item label="签收状态">{{ receiveStateText(detail) }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
       <div class="detail-items-wrap">
@@ -250,10 +258,16 @@
           <el-table-column label="数量" width="90" align="right">
             <template #default="{ row }">{{ row.quantity }}</template>
           </el-table-column>
+          <el-table-column label="已签收/发货" width="110" align="right">
+            <template #default="{ row }">
+              <span :class="(row.received_quantity ?? 0) >= row.quantity ? 'signed-full' : ''">{{ row.received_quantity ?? 0 }} / {{ row.quantity }}</span>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
       <template #footer>
         <el-button type="success" @click="printWorkOrder(detail.id)">打印工单</el-button>
+        <el-button v-if="canWrite && detail && detail.cargo_status === '已入仓'" type="warning" @click="openReceive(detail)">签收入库</el-button>
         <el-button v-if="canWrite" type="primary" @click="openEdit(detail.id)">编辑</el-button>
         <el-button @click="detailVisible = false">关闭</el-button>
       </template>
@@ -304,11 +318,11 @@
         </el-row>
         <el-row :gutter="12">
           <el-col :span="8">
-            <el-form-item label="货物状态">
-              <el-select v-model="editForm.cargo_status" style="width: 100%">
-                <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name" />
+            <el-form-item label="出库仓库" required>
+              <el-select v-model="editForm.from_warehouse_id" style="width: 100%" :disabled="editLockedWarehouse" placeholder="请选择国内出库仓" clearable filterable @change="onEditWarehouseChange">
+                <el-option v-for="w in domesticWarehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
               </el-select>
-              <div class="muted-hint">状态由「待发货」变为其他状态时，将自动扣减国内库存</div>
+              <div class="muted-hint">确认发货时从此仓扣减国内库存{{ editLockedWarehouse ? '；已进入发货流程的单据不可更换出库仓' : '' }}</div>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -319,6 +333,35 @@
           <el-col :span="8">
             <el-form-item label="仓号">
               <el-input v-model="editForm.warehouse_no" placeholder="仓号" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="货物状态">
+              <el-select v-model="editForm.cargo_status" style="width: 100%" :disabled="stockLoading" @change="onEditStatusChange">
+                <el-option v-for="s in cargoStatuses" :key="s.name" :label="s.name" :value="s.name" />
+              </el-select>
+              <div class="muted-hint">状态由「待发货」变为其他状态时，将自动扣减国内库存</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="16">
+            <el-form-item label="库存校验" label-width="70">
+              <div class="ship-stock-check">
+                <el-alert v-if="stockLoading && editShipPending" type="info" :closable="false" show-icon title="正在查询出库仓库存…" />
+                <el-alert v-else-if="editStockCheck && editStockCheck.ok" type="success" :closable="false" show-icon title="出库仓库存充足，可以确认发货" />
+                <template v-else-if="editStockCheck && !editStockCheck.ok">
+                  <el-alert type="warning" :closable="false" show-icon title="出库仓库存不足，无法点击发货" description="可先保持「待发货」状态保存单据，前往补货补足库存后再回来确认发货；系统不允许负库存发货。" />
+                  <ul class="stock-lack-list">
+                    <li v-for="(s, i) in editStockCheck.shortage.slice(0, 8)" :key="i">
+                      {{ s.name }}：需 {{ s.need }}，仓内 {{ s.have }}，缺 {{ s.lack }}
+                    </li>
+                  </ul>
+                  <div class="stock-lack-actions">
+                    <el-button size="small" type="warning" @click="goReplenish">前往补货管理</el-button>
+                  </div>
+                </template>
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -379,11 +422,49 @@
         <el-button type="primary" :loading="saving" @click="saveEdit">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="receiveVisible" title="签收入库登记" width="720px" destroy-on-close class="transfer-dialog">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="货件已入仓后，按海外仓实际收到的数量登记签收。允许分批签收，累计不可超过发货数量；全部签收完成后记录整单签收时间。"
+      />
+      <div class="detail-items-wrap">
+        <el-table :resizable="false" :data="receiveRows" border stripe size="small">
+          <el-table-column label="产品编码" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ productCodeOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="中文名称" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ productNameOf(row.product_id) }}</template>
+          </el-table-column>
+          <el-table-column label="发货数量" width="90" align="right">
+            <template #default="{ row }">{{ row.quantity }}</template>
+          </el-table-column>
+          <el-table-column label="已签收" width="90" align="right">
+            <template #default="{ row }">{{ row.received_quantity ?? 0 }}</template>
+          </el-table-column>
+          <el-table-column label="剩余可签" width="90" align="right">
+            <template #default="{ row }">{{ row.remain }}</template>
+          </el-table-column>
+          <el-table-column label="本次签收" width="150" align="center">
+            <template #default="{ row }">
+              <el-input-number v-model="row.add_quantity" :min="0" :max="row.remain" :precision="0" :disabled="row.remain <= 0" style="width: 120px" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="receiveVisible = false">取消</el-button>
+        <el-button type="warning" :loading="receiving" :disabled="!receiveRows.some((r) => (r.add_quantity || 0) > 0)" @click="submitReceive">确认签收</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
@@ -394,6 +475,7 @@ import { readExcelFile, buildColMap, cellStr, cellNum, cellDateStr } from '../ut
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('shipment.write'))
+const router = useRouter()
 
 function formatDate(v: string) {
   return sysFormatDateTime(v)
@@ -687,22 +769,83 @@ const form = reactive({
   shipping_cartons: 0,
   ship_date: '',
   store: '',
+  from_warehouse_id: '',
   items: [] as any[],
 })
 
 // 店铺选项：来源于仓库管理中仓库绑定的店铺（warehouses.store）
 const warehouseStoreOptions = ref<string[]>([])
-async function loadWarehouseStores() {
+const warehousesAll = ref<any[]>([])
+// 国内出库仓（wh_type=domestic）下拉
+const domesticWarehouses = computed(() => warehousesAll.value.filter((w) => w.wh_type === 'domestic'))
+const warehouseMap = computed(() => {
+  const m = new Map<string, any>()
+  for (const w of warehousesAll.value) m.set(w.id, w)
+  return m
+})
+function warehouseNameOf(id: string | null | undefined) {
+  if (!id) return '-'
+  const w = warehouseMap.value.get(id)
+  return w ? `${w.name}（${w.code}）` : '未知仓库'
+}
+async function loadWarehouseMeta() {
   try {
     const { data } = await api.get('/warehouses')
+    warehousesAll.value = data.data || []
     const set = new Set<string>()
-    for (const w of data.data || []) {
+    for (const w of warehousesAll.value) {
       if (w?.store && String(w.store).trim()) set.add(String(w.store).trim())
     }
     warehouseStoreOptions.value = Array.from(set)
   } catch {
     warehouseStoreOptions.value = []
+    warehousesAll.value = []
   }
+}
+
+// 出库仓即时库存（确认发货前校验库存是否充足；不允许负库存，不足则禁止发货）
+const warehouseStockMap = ref<Map<string, number>>(new Map())
+const stockLoading = ref(false)
+async function fetchWarehouseStock(whId: string | null | undefined) {
+  warehouseStockMap.value = new Map()
+  if (!whId) return
+  stockLoading.value = true
+  try {
+    let page = 1
+    const pageSize = 1000
+    for (;;) {
+      const { data } = await api.get('/inventory', {
+        params: { warehouse_id: whId, page, pageSize, wh_type: 'domestic' },
+      })
+      for (const row of data.data || []) {
+        warehouseStockMap.value.set(row.product_id, Number(row.quantity) || 0)
+      }
+      if ((data.data?.length || 0) < pageSize || (warehouseStockMap.value.size >= (data.total ?? 0))) break
+      page++
+    }
+  } catch {
+    warehouseStockMap.value = new Map()
+  } finally {
+    stockLoading.value = false
+  }
+}
+function stockOf(pid: string): number {
+  const v = warehouseStockMap.value.get(pid)
+  return typeof v === 'number' ? v : 0
+}
+// 检查某组明细在某出库仓是否充足，返回缺口列表
+function stockShortage(whId: string | null | undefined, items: { product_id: string; quantity: number }[]) {
+  if (!whId || !items.length) return { ok: false, shortage: [] as { name: string; need: number; have: number; lack: number }[] }
+  const shortage: { name: string; need: number; have: number; lack: number }[] = []
+  for (const it of items) {
+    if (!it.product_id) continue
+    const need = Number(it.quantity) || 0
+    const have = stockOf(it.product_id)
+    if (have < need) {
+      shortage.push({ name: productCodeOf(it.product_id), need, have, lack: need - have })
+    }
+  }
+  return { ok: shortage.length === 0, shortage }
 }
 
 const totalOfItems = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
@@ -725,10 +868,11 @@ function openCreate() {
   form.shipping_cartons = 0
   form.ship_date = ''
   form.store = ''
+  form.from_warehouse_id = ''
   form.items = []
   addItem()
   createVisible.value = true
-  loadWarehouseStores()
+  loadWarehouseMeta()
 }
 
 async function save() {
@@ -752,6 +896,10 @@ async function save() {
     ElMessage.warning('请选择店铺')
     return
   }
+  if (!form.from_warehouse_id) {
+    ElMessage.warning('请选择出库仓库（确认发货时从此仓扣减国内库存）')
+    return
+  }
   const items = form.items.filter((it) => it.product_id)
   if (!items.length) {
     ElMessage.warning('请至少添加一条商品明细')
@@ -772,6 +920,7 @@ async function save() {
       shipping_cartons: form.shipping_cartons ?? 0,
       ship_date: form.ship_date,
       store: form.store.trim(),
+      from_warehouse_id: form.from_warehouse_id,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
       source: 'transfer',
       cargo_status: '待发货',
@@ -799,14 +948,64 @@ async function fetchDetail(id: string) {
 async function openDetail(id: string) {
   try {
     detail.value = await fetchDetail(id)
+    if (!warehousesAll.value.length) await loadWarehouseMeta()
     detailVisible.value = true
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载详情失败')
   }
 }
 
+// 签收入库登记（货件到海外仓后按实收数分批登记）
+const receiveVisible = ref(false)
+const receiveRows = ref<any[]>([])
+const receiving = ref(false)
+function receiveStateText(d: any) {
+  if (!d) return '-'
+  if (d.signed_at) return '已签收完成'
+  if (d.cargo_status === '已入仓') return '部分/待签收'
+  return '-'
+}
+function openReceive(d: any) {
+  receiveRows.value = (d.shipment_items || []).map((it: any) => {
+    const qty = Number(it.quantity) || 0
+    const received = Number(it.received_quantity ?? 0)
+    return {
+      product_id: it.product_id,
+      quantity: qty,
+      received_quantity: received,
+      remain: Math.max(0, qty - received),
+      add_quantity: Math.max(0, qty - received),
+    }
+  })
+  receiveVisible.value = true
+}
+async function submitReceive() {
+  const payload = receiveRows.value
+    .filter((r) => (Number(r.add_quantity) || 0) > 0 && (r.remain ?? 0) > 0)
+    .map((r) => ({ product_id: r.product_id, add_quantity: Number(r.add_quantity) }))
+  if (!payload.length) {
+    ElMessage.warning('请填写本次签收数量')
+    return
+  }
+  receiving.value = true
+  try {
+    const resp: any = await api.post(`/shipments/${detail.value.id}/receive`, { items: payload })
+    ElMessage.success(resp?.data?.data?.message || '签收成功')
+    receiveVisible.value = false
+    detail.value = await fetchDetail(detail.value.id)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '签收失败')
+  } finally {
+    receiving.value = false
+  }
+}
+
 const editVisible = ref(false)
 const editingId = ref('')
+// 打开编辑时的原始货物状态（用于识别"待发货→已发货"需要扣库存并校验库存）
+const editOriginalStatus = ref('')
+// 已进入发货流程（扣过库存）的调拨单，出库仓不可更换
+const editLockedWarehouse = computed(() => editOriginalStatus.value !== '' && editOriginalStatus.value !== '待发货')
 const editForm = reactive({
   tracking_no: '',
   cargo_code: '',
@@ -817,9 +1016,42 @@ const editForm = reactive({
   cargo_status: '待发货',
   store: '',
   warehouse_no: '',
+  from_warehouse_id: '',
   items: [] as any[],
 })
 const editTotalOfItems = computed(() => editForm.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
+
+// 是否正处于"待发货→进入发货流程"的确认发货动作（此时才做库存校验）
+const editShipPending = computed(
+  () => editOriginalStatus.value === '待发货' && !!editForm.cargo_status && editForm.cargo_status !== '待发货'
+)
+// 实时库存校验结果：充足 ok=true；不足 ok=false 并列出缺口；null 表示当前无需校验
+const editStockCheck = computed(() => {
+  if (!editShipPending.value) return null
+  return stockShortage(editForm.from_warehouse_id || null, editForm.items)
+})
+async function onEditWarehouseChange() {
+  if (editShipPending.value) {
+    await fetchWarehouseStock(editForm.from_warehouse_id || null)
+  } else {
+    warehouseStockMap.value = new Map()
+  }
+}
+async function onEditStatusChange() {
+  if (editForm.cargo_status !== '待发货' && !editForm.from_warehouse_id) {
+    editForm.cargo_status = '待发货'
+    ElMessage.warning('请先选择出库仓库，才能确认发货')
+    return
+  }
+  if (editShipPending.value) {
+    await fetchWarehouseStock(editForm.from_warehouse_id)
+  } else {
+    warehouseStockMap.value = new Map()
+  }
+}
+function goReplenish() {
+  router.push('/replenishment')
+}
 
 function addEditItem() {
   editForm.items.push({ product_id: '', quantity: 1, remark: '' })
@@ -845,14 +1077,23 @@ async function openEdit(id: string) {
     editForm.shipping_cartons = d.shipping_cartons ?? 0
     editForm.ship_date = d.ship_date || ''
     editForm.cargo_status = d.cargo_status || '待发货'
+    editOriginalStatus.value = d.cargo_status || '待发货'
     editForm.store = d.store || ''
     editForm.warehouse_no = d.warehouse_no || ''
+    editForm.from_warehouse_id = d.from_warehouse_id || ''
     editForm.items = (d.shipment_items || []).map((it: any) => ({
       product_id: it.product_id,
       quantity: it.quantity,
       remark: it.remark || '',
     }))
     if (!editForm.items.length) addEditItem()
+    // 出库仓选项元数据（店铺下拉同源）
+    await loadWarehouseMeta()
+    // 存量老单没有出库仓且仍是待发货时，默认推荐第一个国内仓，与后端回退规则保持一致
+    if (!editForm.from_warehouse_id && editOriginalStatus.value === '待发货' && domesticWarehouses.value.length) {
+      editForm.from_warehouse_id = domesticWarehouses.value[0].id
+    }
+    warehouseStockMap.value = new Map()
     editVisible.value = true
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载数据失败')
@@ -881,6 +1122,26 @@ async function saveEdit() {
     ElMessage.warning('请至少添加一条商品明细')
     return
   }
+  // 不允许负库存：待发货→进入发货流程时必须校验出库仓库存，不足则禁止保存该状态变更
+  const isConfirmingShip = editOriginalStatus.value === '待发货' && editForm.cargo_status !== '待发货'
+  if (isConfirmingShip) {
+    if (!editForm.from_warehouse_id) {
+      ElMessage.warning('请选择出库仓库')
+      return
+    }
+    saving.value = true
+    try {
+      await fetchWarehouseStock(editForm.from_warehouse_id)
+    } finally {
+      saving.value = false
+    }
+    const check = stockShortage(editForm.from_warehouse_id, items)
+    if (!check.ok) {
+      const brief = check.shortage.slice(0, 8).map((s) => `${s.name}缺${s.lack}`).join('、')
+      ElMessage.warning(`出库仓库存不足，无法发货（不允许负库存）。请先保持「待发货」保存，补货后再确认发货。缺口：${brief || '明细商品'}。`)
+      return
+    }
+  }
   saving.value = true
   try {
     const itemCount = items.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
@@ -898,6 +1159,7 @@ async function saveEdit() {
       cargo_status: editForm.cargo_status,
       store: editForm.store.trim() || null,
       warehouse_no: editForm.warehouse_no.trim() || null,
+      from_warehouse_id: editForm.from_warehouse_id || null,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
     })
     const saved = resp?.data?.data
@@ -1350,6 +1612,27 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   line-height: 32px;
+}
+.ship-stock-check {
+  width: 100%;
+  min-height: 32px;
+}
+.ship-stock-check .el-alert {
+  margin-bottom: 6px;
+}
+.stock-lack-list {
+  margin: 2px 0 8px 22px;
+  padding: 0;
+  font-size: 12px;
+  color: #e6a23c;
+  line-height: 20px;
+}
+.stock-lack-actions {
+  margin-left: 22px;
+}
+.signed-full {
+  color: #67c23a;
+  font-weight: 600;
 }
 .sel-img {
   width: 22px;

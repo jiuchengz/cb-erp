@@ -43,6 +43,8 @@ const createSchema = z.object({
   cargo_code: z.string().max(100).nullable().optional(),
   store: z.string().max(100).nullable().optional(),
   source: z.enum(['manual', 'transfer']).optional(),
+  // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
+  from_warehouse_id: z.string().uuid().nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -136,6 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               ship_date: body.ship_date ?? null,
               product_code: body.cargo_code ?? null,
               cargo_status: body.cargo_status ?? '待发货',
+              from_warehouse_id: body.from_warehouse_id ?? null,
             };
             const { data: boundShipment, error: boundErr } = await supabase
               .from('shipments')
@@ -223,6 +226,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           cargo_code: body.cargo_code ?? null,
           store: body.store ?? null,
           source: body.source ?? 'manual',
+          from_warehouse_id: body.from_warehouse_id ?? null,
           created_by: ctx.userId,
         })
         .select()
