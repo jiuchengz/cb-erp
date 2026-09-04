@@ -103,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'user.read');
+      requirePermission(ctx, 'system.users');
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query: any = supabase

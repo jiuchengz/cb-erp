@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const ctx = await requireAuth(req);
-      requirePermission(ctx, 'system.manage');
+      requirePermission(ctx, 'system.logo');
       const supabase = getAdminClient();
       const schema = z.object({ logo: z.string().max(2_500_000) });
       const { logo } = parse(schema, req.body || {});

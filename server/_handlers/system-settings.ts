@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getAdminClient();
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'system.manage');
+      requirePermission(ctx, 'system.settings');
       const { data, error } = await supabase.from('system_settings').select('*');
       if (error) throw error;
       const map: Record<string, any> = {};
@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PUT') {
-      requirePermission(ctx, 'system.manage');
+      requirePermission(ctx, 'system.settings');
       const schema = z.object({
         default_timezone: z.string().min(1).max(64).optional(),
         default_currency: z.string().min(1).max(8).optional(),

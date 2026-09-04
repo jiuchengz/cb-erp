@@ -45,7 +45,7 @@
             </div>
             <div class="logo-edit-hint">拖动图片调整位置，拖动滑块调整大小，保存后全局生效</div>
           </div>
-          <div v-if="canManage" class="appearance-row logo-actions">
+          <div v-if="canLogo" class="appearance-row logo-actions">
             <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,image/vnd.microsoft.icon" class="hidden-input" @change="onLogoFile" />
             <el-button type="primary" :disabled="logoSaving" @click="chooseLogo">选择图片</el-button>
             <el-button :disabled="!logoDirty" :loading="logoSaving" @click="saveLogo">保存</el-button>
@@ -57,7 +57,7 @@
       <el-tab-pane v-if="tabVisible('system')" label="系统设置" name="system">
         <div class="page-header">
           <h2>系统设置</h2>
-          <el-button v-if="canManage" type="primary" :loading="sysSaving" @click="saveSystemSettings">保存设置</el-button>
+          <el-button v-if="canSystem" type="primary" :loading="sysSaving" @click="saveSystemSettings">保存设置</el-button>
         </div>
         <div class="appearance-card">
           <div class="appearance-row">
@@ -250,7 +250,7 @@
       <el-tab-pane v-if="tabVisible('roles')" label="角色管理" name="roles">
         <div class="page-header">
           <h2>角色管理</h2>
-          <el-button v-if="canManage" type="primary" @click="openRoleCreate">新增角色</el-button>
+          <el-button v-if="canRoleWrite" type="primary" @click="openRoleCreate">新增角色</el-button>
         </div>
         <el-table :resizable="false" v-loading="rolesLoading" :data="roles" border stripe>
           <el-table-column label="角色名" min-width="180">
@@ -265,8 +265,8 @@
           </el-table-column>
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="canManage && !row.is_system" link type="primary" @click="openRoleEdit(row)">编辑</el-button>
-              <el-button v-if="canManage && !row.is_system" link type="danger" @click="removeRole(row)">删除</el-button>
+              <el-button v-if="canRoleWrite && !row.is_system" link type="primary" @click="openRoleEdit(row)">编辑</el-button>
+              <el-button v-if="canRoleWrite && !row.is_system" link type="danger" @click="removeRole(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -485,30 +485,39 @@ import { useSiteStore } from '../stores/site'
 
 const auth = useAuthStore()
 const site = useSiteStore()
-const canManage = computed(() => auth.hasPermission('system.manage'))
-// 系统设置页内按权限显隐：canUser 覆盖 角色/权限 标签，canWh 覆盖 仓库管理 标签
-const canUser = computed(() => auth.hasPermission('user.read'))
-const canWh = computed(() => auth.hasPermission('inventory.read'))
+// 系统设置页内按权限码显隐：system.* 子码分别控制各功能块，仓库管理 tab 用 system.warehouses
+const canWh = computed(() => auth.hasPermission('system.warehouses'))
 const canWhWrite = computed(() => auth.hasPermission('inventory.write'))
+const canSystem = computed(() => auth.hasPermission('system.settings'))
+const canLogo = computed(() => auth.hasPermission('system.logo'))
+const canRoleWrite = computed(() => auth.hasPermission('user.manage'))
+const canRoles = computed(() => auth.hasPermission('system.roles'))
+const canPerms = computed(() => auth.hasPermission('system.permissions'))
 
 function formatDate(v: string) {
   return sysFormatDateTime(v)
 }
 
-// 顶部标签权限映射：system.manage 类（系统设置/备份/图标/界面外观/用量/审计）、user.read 类（角色/权限）、inventory.read 类（仓库）
+// 顶部标签权限映射：每个 tab 对应独立 system.* 子码；角色/权限 tab 亦独立
 const TAB_ORDER = ['system', 'backup', 'logo', 'appearance', 'roles', 'permissions', 'warehouses', 'usage', 'audit']
 function tabVisible(name: string): boolean {
   switch (name) {
     case 'system':
+      return auth.hasPermission('system.settings')
     case 'backup':
+      return auth.hasPermission('system.backup')
     case 'logo':
+      return auth.hasPermission('system.logo')
     case 'appearance':
+      return auth.hasPermission('system.appearance')
     case 'usage':
+      return auth.hasPermission('system.usage')
     case 'audit':
-      return auth.hasPermission('system.manage')
+      return auth.hasPermission('system.audit')
     case 'roles':
+      return auth.hasPermission('system.roles')
     case 'permissions':
-      return canUser.value
+      return auth.hasPermission('system.permissions')
     case 'warehouses':
       return canWh.value
     default:
@@ -683,11 +692,11 @@ async function doBackup() {
   }
 }
 function onTabChange(name: string | number) {
-  if (name === 'permissions' && canUser.value) loadPermissions()
+  if (name === 'permissions' && canPerms.value) loadPermissions()
   if (name === 'warehouses' && canWh.value) loadWarehouses()
-  if (name === 'usage' && canManage.value) loadDbUsage()
-  if (name === 'audit' && canManage.value) loadAudit()
-  if (name === 'system' && canManage.value) loadSystemSettings()
+  if (name === 'usage' && auth.hasPermission('system.usage')) loadDbUsage()
+  if (name === 'audit' && auth.hasPermission('system.audit')) loadAudit()
+  if (name === 'system' && auth.hasPermission('system.settings')) loadSystemSettings()
 }
 
 /* ---------- 数据库用量 ---------- */
@@ -1143,7 +1152,7 @@ async function loadSystemSettings() {
 }
 
 async function saveSystemSettings() {
-  if (!canManage.value) return
+  if (!canSystem.value) return
   sysSaving.value = true
   try {
     const { data } = await api.put('/system-settings', {
@@ -1475,12 +1484,12 @@ function onAuditSizeChange() {
 const saving = ref(false)
 
 onMounted(() => {
-  if (canUser.value) {
+  if (canRoles.value || canPerms.value) {
     loadRoles()
     loadPermissions()
   }
   loadAppearance()
-  if (canManage.value) loadSystemSettings()
+  if (auth.hasPermission('system.settings')) loadSystemSettings()
 })
 </script>
 

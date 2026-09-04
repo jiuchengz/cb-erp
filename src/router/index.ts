@@ -36,7 +36,7 @@ const routes: RouteRecordRaw[] = [
         path: 'product-total',
         name: 'product-total',
         component: () => import('@/pages/ProductTotal.vue'),
-        meta: { requiresPerm: ['products.read'] }
+        meta: { requiresPerm: ['product_total.read'] }
       },
       {
         path: 'inventory',
@@ -48,13 +48,13 @@ const routes: RouteRecordRaw[] = [
         path: 'stocktakes',
         name: 'stocktakes',
         component: () => import('@/pages/Stocktake.vue'),
-        meta: { requiresPerm: ['inventory.read'] }
+        meta: { requiresPerm: ['stocktake.read'] }
       },
       {
         path: 'cost-profit',
         name: 'cost-profit',
         component: () => import('@/pages/CostProfit.vue'),
-        meta: { requiresPerm: ['products.read'] }
+        meta: { requiresPerm: ['cost_profit.read'] }
       },
       {
         path: 'sales',
@@ -97,20 +97,20 @@ const routes: RouteRecordRaw[] = [
         name: 'users',
         component: () => import('@/pages/Users.vue'),
         // 成员管理属系统管理整组：菜单整组需 system.manage 才出现，直链同样要求 system.manage（requiresGroupGate），页面内操作再按 user.read / user.manage 细分
-        meta: { requiresPerm: ['user.read'], requiresGroupGate: ['system.manage'] }
+        meta: { requiresPerm: ['system.users'] }
       },
       {
         path: 'logs',
         name: 'logs',
         component: () => import('@/pages/Logs.vue'),
-        meta: { requiresPerm: ['system.manage'] }
+        meta: { requiresPerm: ['system.logs'] }
       },
       {
         path: 'settings',
         name: 'settings',
         component: () => import('@/pages/Settings.vue'),
         // 系统设置属系统管理整组，仅 system.manage 可进入；页内各 tab 再按功能权限码单独显隐
-        meta: { requiresPerm: ['system.manage'] }
+        meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] }
       },
       {
         path: 'profile',
@@ -122,7 +122,7 @@ const routes: RouteRecordRaw[] = [
         name: 'recycle-bin',
         component: () => import('@/pages/RecycleBin.vue'),
         // 回收站属系统管理整组，仅 system.manage 可进入
-        meta: { requiresPerm: ['system.manage'] }
+        meta: { requiresPerm: ['system.recycle'] }
       }
     ]
   },

@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
-    requirePermission(ctx, 'products.read');
+    requirePermission(ctx, 'product_total.read');
 
     const q = parse(productTotalSchema, req.query);
     const s = typeof req.query.search === 'string' ? req.query.search.trim() : '';

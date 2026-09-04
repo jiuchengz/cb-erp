@@ -133,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getAdminClient();
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'products.read');
+      requirePermission(ctx, 'cost_profit.read');
       const q = parse(paginationSchema, req.query);
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const settings = await loadSettings(supabase);

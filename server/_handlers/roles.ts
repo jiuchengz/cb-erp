@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requirePermission, requireAnyPermission } from './_lib/rbac';
 import { parse } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ctx = await requireAuth(req);
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'user.read');
+      requireAnyPermission(ctx, ['system.users', 'system.roles']);
       const supabase = getAdminClient();
       const { data, error } = await supabase
         .from('roles')

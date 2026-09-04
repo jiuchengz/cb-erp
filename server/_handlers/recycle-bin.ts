@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ---------- GET /recycle-bin ----------
     if (req.method === 'GET') {
-      requirePermission(ctx, 'system.manage'); // 回收站属系统管理整组，仅 system.manage 可见
+      requirePermission(ctx, 'system.recycle'); // 回收站属系统管理整组，仅 system.manage 可见
       const typeRaw = typeof req.query.type === 'string' ? req.query.type.trim() : '';
       const page = Math.max(1, parseInt(typeof req.query.page === 'string' ? req.query.page : '1', 10) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt(typeof req.query.pageSize === 'string' ? req.query.pageSize : '20', 10) || 20));
@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const path = new URL(req.url || '/', 'http://internal').pathname.replace(/^\/api/, '') || '/';
       const { type, id } = parse(actionSchema, req.body || {});
       const cfg = TYPES[type];
-      requirePermission(ctx, 'system.manage'); // 恢复/清除同样仅 system.manage 可操作
+      requirePermission(ctx, 'system.recycle'); // 恢复/清除同样仅 system.manage 可操作
 
       const { data: before, error: getErr } = await supabase.from(cfg.table).select('*').eq('id', id).maybeSingle();
       if (getErr) throw getErr;

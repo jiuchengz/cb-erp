@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
     const ctx = await requireAuth(req);
-    requirePermission(ctx, 'system.manage');
+    requirePermission(ctx, 'system.usage');
 
     if (req.method === 'GET') {
       const supabase = getAdminClient();

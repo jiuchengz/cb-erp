@@ -101718,7 +101718,10 @@ var READ_PERMISSIONS = [
   "procurement.read",
   "transfer.read",
   "after_sales.read",
-  "replenishment.read"
+  "replenishment.read",
+  "product_total.read",
+  "cost_profit.read",
+  "stocktake.read"
 ];
 var MAX_ROWS = 5e4;
 var IMAGE_CONCURRENCY = 5;
@@ -101936,7 +101939,7 @@ async function handler7(req, res) {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
     if (req.method === "GET") {
-      requirePermission(ctx, "system.manage");
+      requireAnyPermission(ctx, ["system.audit", "system.logs"]);
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query = supabase.from("audit_logs").select("*", { count: "exact" });
@@ -101961,7 +101964,7 @@ async function handler8(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
-    requirePermission(ctx, "system.manage");
+    requirePermission(ctx, "system.usage");
     if (req.method === "GET") {
       const supabase = getAdminClient();
       const { data, error } = await supabase.rpc("get_db_size");
@@ -102096,7 +102099,7 @@ async function handler10(req, res) {
     const supabase = getAdminClient();
     const parts = pathOf(req);
     if (req.method === "GET") {
-      requirePermission(ctx, "inventory.read");
+      requirePermission(ctx, "stocktake.read");
       if (parts.length === 2) {
         const id = parts[1];
         const { data: st, error: stErr } = await supabase.from("stocktakes").select("*, warehouses!inner(id, name)").eq("id", id).is("deleted_at", null).single();
@@ -102341,7 +102344,7 @@ async function handler11(req, res) {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
     if (req.method === "GET") {
-      requirePermission(ctx, "user.read");
+      requireAnyPermission(ctx, ["system.users", "system.roles", "system.permissions"]);
       const supabase = getAdminClient();
       const { data, error } = await supabase.from("permissions").select("*").order("code", { ascending: true });
       if (error) throw error;
@@ -102648,7 +102651,7 @@ async function handler13(req, res) {
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
-    requirePermission(ctx, "products.read");
+    requirePermission(ctx, "product_total.read");
     const q = parse(productTotalSchema, req.query);
     const s = typeof req.query.search === "string" ? req.query.search.trim() : "";
     const supabase = getAdminClient();
@@ -102901,7 +102904,7 @@ async function handler15(req, res) {
     const ctx = await requireAuth(req);
     const supabase = getAdminClient();
     if (req.method === "GET") {
-      requirePermission(ctx, "products.read");
+      requirePermission(ctx, "cost_profit.read");
       const q = parse(paginationSchema, req.query);
       const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
       const settings = await loadSettings(supabase);
@@ -103283,7 +103286,7 @@ async function handler20(req, res) {
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
     }
-    requirePermission(ctx, "system.manage");
+    requirePermission(ctx, "system.backup");
     const supabase = getAdminClient();
     const tables = {};
     const failed = [];
@@ -103346,7 +103349,7 @@ async function handler21(req, res) {
     }
     if (req.method === "POST") {
       const ctx = await requireAuth(req);
-      requirePermission(ctx, "system.manage");
+      requirePermission(ctx, "system.logo");
       const supabase = getAdminClient();
       const schema2 = external_exports.object({ logo: external_exports.string().max(25e5) });
       const { logo } = parse(schema2, req.body || {});
@@ -103854,7 +103857,7 @@ async function handler26(req, res) {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
     if (req.method === "GET") {
-      requirePermission(ctx, "user.read");
+      requireAnyPermission(ctx, ["system.users", "system.roles"]);
       const supabase = getAdminClient();
       const { data, error } = await supabase.from("roles").select("*, role_permissions(permission_id, permissions(code))").order("name", { ascending: true });
       if (error) throw error;
@@ -104624,7 +104627,7 @@ async function handler32(req, res) {
       return res.status(201).json({ data: after });
     }
     if (req.method === "GET") {
-      requirePermission(ctx, "user.read");
+      requirePermission(ctx, "system.users");
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query = supabase.from("profiles").select("*, user_roles(role_id, roles(id, name)), user_warehouses(warehouse_id)", { count: "exact" });
@@ -104661,7 +104664,7 @@ async function handler33(req, res) {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
     if (req.method === "GET") {
-      requirePermission(ctx, "inventory.read");
+      requireAnyPermission(ctx, ["inventory.read", "system.warehouses"]);
       const supabase = getAdminClient();
       const q = supabase.from("warehouses").select("*").order("created_at", { ascending: true });
       const { data, error } = await applyWarehouseFilter(q, ctx, "id");
@@ -105646,7 +105649,7 @@ async function handler38(req, res) {
     const ctx = await requireAuth(req);
     const supabase = getAdminClient();
     if (req.method === "GET") {
-      requirePermission(ctx, "system.manage");
+      requirePermission(ctx, "system.recycle");
       const typeRaw = typeof req.query.type === "string" ? req.query.type.trim() : "";
       const page = Math.max(1, parseInt(typeof req.query.page === "string" ? req.query.page : "1", 10) || 1);
       const pageSize = Math.min(100, Math.max(1, parseInt(typeof req.query.pageSize === "string" ? req.query.pageSize : "20", 10) || 20));
@@ -105680,7 +105683,7 @@ async function handler38(req, res) {
       const path = new URL(req.url || "/", "http://internal").pathname.replace(/^\/api/, "") || "/";
       const { type, id } = parse(actionSchema, req.body || {});
       const cfg = TYPES[type];
-      requirePermission(ctx, "system.manage");
+      requirePermission(ctx, "system.recycle");
       const { data: before, error: getErr } = await supabase.from(cfg.table).select("*").eq("id", id).maybeSingle();
       if (getErr) throw getErr;
       if (!before) throw Errors.notFound("\u8BB0\u5F55\u4E0D\u5B58\u5728");
@@ -105777,7 +105780,7 @@ async function handler39(req, res) {
     const ctx = await requireAuth(req);
     const supabase = getAdminClient();
     if (req.method === "GET") {
-      requirePermission(ctx, "system.manage");
+      requirePermission(ctx, "system.settings");
       const { data, error } = await supabase.from("system_settings").select("*");
       if (error) throw error;
       const map = {};
@@ -105793,7 +105796,7 @@ async function handler39(req, res) {
       });
     }
     if (req.method === "PUT") {
-      requirePermission(ctx, "system.manage");
+      requirePermission(ctx, "system.settings");
       const schema2 = external_exports.object({
         default_timezone: external_exports.string().min(1).max(64).optional(),
         default_currency: external_exports.string().min(1).max(8).optional(),

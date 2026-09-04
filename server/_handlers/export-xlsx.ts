@@ -15,6 +15,9 @@ const READ_PERMISSIONS = [
   'transfer.read',
   'after_sales.read',
   'replenishment.read',
+  'product_total.read',
+  'cost_profit.read',
+  'stocktake.read',
 ];
 
 // 单次导出行数上限，防止超大 aoa 撑爆内存/响应

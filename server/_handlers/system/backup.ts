@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
     }
     // 备份导出全部核心业务表，属于系统级敏感操作：仅限 system.manage 管理员
-    requirePermission(ctx, 'system.manage');
+    requirePermission(ctx, 'system.backup');
     const supabase = getAdminClient();
 
     const tables: Record<string, any[]> = {};

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
-import { requirePermission, applyWarehouseFilter } from './_lib/rbac';
+import { requirePermission, requireAnyPermission, applyWarehouseFilter } from './_lib/rbac';
 import { parse } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ctx = await requireAuth(req);
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'inventory.read');
+      requireAnyPermission(ctx, ['inventory.read', 'system.warehouses']);
       const supabase = getAdminClient();
       // 仓库级隔离：普通账号仅能查看其角色绑定仓库；super_admin 看全部
       const q = supabase.from('warehouses').select('*').order('created_at', { ascending: true });

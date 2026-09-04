@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
-import { requirePermission } from './_lib/rbac';
+import { requireAnyPermission } from './_lib/rbac';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { handleError } from './_lib/error';
@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ctx = await requireAuth(req);
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'system.manage');
+      requireAnyPermission(ctx, ['system.audit', 'system.logs']);
       const q = parse(paginationSchema, req.query);
       const supabase = getAdminClient();
       let query: any = supabase.from('audit_logs').select('*', { count: 'exact' });

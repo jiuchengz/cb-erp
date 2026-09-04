@@ -46,7 +46,7 @@
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
-          <button v-if="auth.hasPermission('system.manage')" class="topbar-btn" title="日志" @click="goLogs">
+          <button v-if="auth.hasPermission('system.logs')" class="topbar-btn" title="日志" @click="goLogs">
             <el-icon><document /></el-icon>
             <span v-if="localLogs.length" class="log-badge">{{ localLogs.length }}</span>
           </button>
@@ -166,12 +166,11 @@ const menuGroups = reactive([
     title: '系统管理',
     icon: Setting,
     open: true,
-    groupPerms: ['system.manage'],
     children: [
-      { path: '/users', label: '成员管理', icon: User, perms: ['user.read'] },
-      { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.manage'] },
-      { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.manage'] },
-      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.manage'] }
+      { path: '/users', label: '成员管理', icon: User, perms: ['system.users'] },
+      { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.logs'] },
+      { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] },
+      { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] }
     ]
   }
 ])
@@ -182,7 +181,7 @@ function permsPass(perms: string[]): boolean {
   return perms.some((p) => auth.permissions.includes(p))
 }
 
-// 过滤后的可见菜单：组若声明 groupPerms（整组门禁权限，如系统管理=system.manage），未命中整组不出现；组内子项仍按各自功能权限码单独显隐
+// 过滤后的可见菜单：组内任一子项命中即显示（业务组/系统管理组均按子项权限码独立显隐，不再设整组门禁）
 const visibleSoloMenus = computed(() => soloMenus.filter((m) => permsPass(m.perms)))
 const visibleMenuGroups = computed(() =>
   menuGroups.filter((g) => {

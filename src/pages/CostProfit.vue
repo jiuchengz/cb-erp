@@ -248,7 +248,7 @@ import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '
 import { addLog } from '../utils/log'
 
 const auth = useAuthStore()
-const canWrite = auth.hasPermission('products.write')
+const canWrite = auth.hasPermission('products.update')
 
 const rows = ref<any[]>([])
 const total = ref(0)

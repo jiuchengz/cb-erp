@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const parts = pathOf(req);
 
     if (req.method === 'GET') {
-      requirePermission(ctx, 'inventory.read');
+      requirePermission(ctx, 'stocktake.read');
 
       // GET /api/stocktakes/:id 详情
       if (parts.length === 2) {
