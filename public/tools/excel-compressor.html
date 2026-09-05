@@ -8,6 +8,15 @@
   * { box-sizing: border-box; }
   :root {
     /* 对齐 ERP 液态玻璃主题（style.css）亮色 */
+    /* 背景渐变 + 光斑：与 ERP style.css 一致，可被「设置→界面外观」/宿主快照动态覆盖 */
+    --bg-c1: #7dd3fc;
+    --bg-c2: #c4b5fd;
+    --bg-c3: #f9a8d4;
+    --bg-c4: #fde68a;
+    --bg-angle: 135deg;
+    --glow-c1: #f472b6;
+    --glow-c2: #60a5fa;
+    --glow-opacity: 0.55;
     --accent: #3b82f6;
     --accent-2: #8b5cf6;
     --ink: rgba(20, 24, 40, 0.92);
@@ -30,6 +39,12 @@
   }
   html.dark {
     /* 对齐 ERP 暗色主题 */
+    --bg-c1: #1e293b;
+    --bg-c2: #312e50;
+    --bg-c3: #3b2f4e;
+    --bg-c4: #1f2a44;
+    --glow-c1: #7c3aed;
+    --glow-c2: #2563eb;
     --accent: #60a5fa;
     --accent-2: #a78bfa;
     --ink: rgba(235, 240, 250, 0.92);
@@ -54,11 +69,38 @@
     margin: 0; padding: 22px;
     color: var(--ink);
     min-height: 100vh;
-    background: linear-gradient(135deg, #7dd3fc, #c4b5fd 33%, #f9a8d4 66%, #fde68a);
+    background: linear-gradient(var(--bg-angle, 135deg), var(--bg-c1) 0%, var(--bg-c2) 38%, var(--bg-c3) 70%, var(--bg-c4) 100%);
     background-attachment: fixed;
   }
-  html.dark body {
-    background: linear-gradient(135deg, #1e293b, #312e50 33%, #3b2f4e 66%, #1f2a44);
+  /* 动态光斑：与 ERP body::before/::after 一致，跟随界面外观的光斑开关与浓度 */
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: var(--glow-opacity, 0.55);
+    pointer-events: none;
+    z-index: -1;
+    transition: opacity 0.3s ease;
+  }
+  body.no-glow::before,
+  body.no-glow::after {
+    display: none;
+  }
+  body::before {
+    width: 520px;
+    height: 520px;
+    top: -120px;
+    right: -80px;
+    background: var(--glow-c1);
+  }
+  body::after {
+    width: 640px;
+    height: 640px;
+    bottom: -180px;
+    left: -120px;
+    background: var(--glow-c2);
   }
   .wrap { max-width: 860px; margin: 0 auto; }
   h1 { font-size: 22px; margin: 8px 0 4px; color: var(--ink); }
@@ -115,17 +157,83 @@
   .badge { display: inline-block; background: rgba(59, 130, 246, 0.12); color: var(--accent); border-radius: 6px; padding: 1px 6px; font-size: 12px; margin-left: 6px; }
 </style>
 <script>
-  // 主题桥接：读取 ERP 暗色偏好（cb_dark_mode），并监听宿主 Tools 页面发来的主题消息
+  // 主题桥接：与 ERP「界面外观」完全一致。
+  // 嵌入 Tools 页时宿主通过 postMessage(cb-appearance) 推送实时外观快照（背景配色/渐变方向/光斑/明暗/强调色）；
+  // 独立打开时按 localStorage(cb_appearance / cb_dark_mode) 自行还原同一套外观。
   (function () {
-    function applyDark(dark) {
-      document.documentElement.classList.toggle('dark', !!dark)
+    function colorsAreDark(arr) {
+      var valid = (arr || []).filter(function (c) { return !!c })
+      if (!valid.length) return false
+      var lum = function (hex) {
+        try {
+          var h = String(hex).trim().replace(/^#/, '')
+          if (h.length === 3) h = h.split('').map(function (c) { return c + c }).join('')
+          if (h.length !== 6) return 0.5
+          var r = parseInt(h.slice(0, 2), 16) / 255
+          var g = parseInt(h.slice(2, 4), 16) / 255
+          var b = parseInt(h.slice(4, 6), 16) / 255
+          var lin = function (v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+          return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+        } catch (e) { return 0.5 }
+      }
+      var sum = 0
+      for (var i = 0; i < valid.length; i++) sum += lum(valid[i])
+      return sum / valid.length < 0.34
     }
-    try {
-      applyDark(localStorage.getItem('cb_dark_mode') === '1')
-    } catch (e) {}
+
+    // 把宿主外观快照应用到当前文档：覆盖 CSS 变量 / dark / no-glow
+    function applySnapshot(s) {
+      if (!s) return
+      var h = document.documentElement
+      var st = h.style
+      h.classList.toggle('dark', !!s.dark)
+      h.classList.toggle('no-glow', !!s.noGlow)
+      if (s.bg && s.bg.length >= 4 && s.bg[0]) {
+        st.setProperty('--bg-c1', s.bg[0])
+        st.setProperty('--bg-c2', s.bg[1])
+        st.setProperty('--bg-c3', s.bg[2])
+        st.setProperty('--bg-c4', s.bg[3])
+      }
+      if (s.glow && s.glow.length >= 2 && s.glow[0]) {
+        st.setProperty('--glow-c1', s.glow[0])
+        st.setProperty('--glow-c2', s.glow[1])
+      }
+      if (s.angle) st.setProperty('--bg-angle', s.angle)
+      if (s.glowOpacity) st.setProperty('--glow-opacity', s.glowOpacity)
+      if (s.accent) st.setProperty('--accent', s.accent)
+    }
+
+    // 独立打开时按 ERP localStorage 还原同一外观
+    function readLocalSnapshot() {
+      var app = null
+      var manualDark = false
+      try { app = JSON.parse(localStorage.getItem('cb_appearance') || 'null') } catch (e) {}
+      try { manualDark = localStorage.getItem('cb_dark_mode') === '1' } catch (e) {}
+      var snap = { dark: !!manualDark, bg: null, glow: null, angle: '', glowOpacity: '', noGlow: false, accent: '' }
+      if (app) {
+        if (typeof app.accent === 'string' && app.accent) snap.accent = app.accent
+        if (app.glowEnabled === false) snap.noGlow = true
+        if (typeof app.glowOpacity === 'number') snap.glowOpacity = String(app.glowOpacity / 100)
+        if (Array.isArray(app.colors) && app.colors.length >= 2) {
+          var colors = app.colors.slice(0, 4)
+          // 手动深色开启且配色本身偏浅（对齐宿主行为：回退暗色默认底，避免浅底浅字）
+          if (!(manualDark && !colorsAreDark(colors))) {
+            snap.bg = colors
+            if (Array.isArray(app.glow) && app.glow.length >= 2) snap.glow = app.glow.slice(0, 2)
+            if (typeof app.angle === 'number') snap.angle = app.angle + 'deg'
+            snap.dark = manualDark || colorsAreDark(colors)
+          }
+        }
+      }
+      return snap
+    }
+
+    try { applySnapshot(readLocalSnapshot()) } catch (e) {}
     window.addEventListener('message', function (e) {
       var d = e && e.data
-      if (d && d.type === 'cb-theme' && typeof d.dark === 'boolean') applyDark(d.dark)
+      if (!d) return
+      if (d.type === 'cb-appearance') applySnapshot(d)
+      else if (d.type === 'cb-theme' && typeof d.dark === 'boolean') applySnapshot({ dark: d.dark })
     })
   })()
 </script>

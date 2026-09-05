@@ -24,10 +24,21 @@ const active = ref<'excel' | 'airsea'>('excel')
 const excelFrame = ref<HTMLIFrameElement>()
 const airseaFrame = ref<HTMLIFrameElement>()
 
-// 主题桥接：系统亮/暗模式切换时，通过 postMessage 同步给内嵌工具（工具页自身按 cb_dark_mode 与消息双通道切换）
+// 外观桥接：把 ERP「界面外观」实时快照（背景配色/渐变方向/光斑/明暗/强调色）同步给内嵌工具，
+// 使两个工具页与宿主页面使用完全一致的 CSS 变量值
 function syncTheme() {
-  const dark = document.documentElement.classList.contains('dark')
-  const msg = { type: 'cb-theme', dark }
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n: string) => (cs.getPropertyValue(n) || '').trim()
+  const msg = {
+    type: 'cb-appearance',
+    dark: document.documentElement.classList.contains('dark'),
+    noGlow: document.documentElement.classList.contains('no-glow'),
+    bg: [v('--bg-c1'), v('--bg-c2'), v('--bg-c3'), v('--bg-c4')],
+    glow: [v('--glow-c1'), v('--glow-c2')],
+    angle: v('--bg-angle') || '135deg',
+    glowOpacity: v('--glow-opacity') || '0.55',
+    accent: v('--accent') || '',
+  }
   const target = window.location.origin
   excelFrame.value?.contentWindow?.postMessage(msg, target)
   airseaFrame.value?.contentWindow?.postMessage(msg, target)
@@ -37,7 +48,7 @@ let themeObserver: MutationObserver | undefined
 onMounted(() => {
   syncTheme()
   themeObserver = new MutationObserver(() => syncTheme())
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] })
 })
 onUnmounted(() => {
   themeObserver?.disconnect()
@@ -58,12 +69,11 @@ onUnmounted(() => {
   min-height: 480px;
   border-radius: 18px;
   overflow: hidden;
-  background: linear-gradient(135deg, #7dd3fc, #c4b5fd 33%, #f9a8d4 66%, #fde68a);
+  background: linear-gradient(var(--bg-angle, 135deg), var(--bg-c1) 0%, var(--bg-c2) 38%, var(--bg-c3) 70%, var(--bg-c4) 100%);
   border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow: 0 12px 40px rgba(40, 60, 120, 0.14);
 }
 html.dark .tools-frame {
-  background: linear-gradient(135deg, #1e293b, #312e50 33%, #3b2f4e 66%, #1f2a44);
   border-color: rgba(255, 255, 255, 0.10);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }

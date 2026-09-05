@@ -15,7 +15,8 @@
 <style>
 :root{
   /* 对齐 ERP 液态玻璃主题（style.css）亮色 */
-  --bg1:#7dd3fc; --bg2:#c4b5fd; --bg3:#f9a8d4; --bg4:#fde68a;
+  --bg-c1:#7dd3fc; --bg-c2:#c4b5fd; --bg-c3:#f9a8d4; --bg-c4:#fde68a;
+  --bg-angle:135deg; --glow-c1:#f472b6; --glow-c2:#60a5fa; --glow-opacity:0.55;
   --panel:rgba(255,255,255,0.42); --card:rgba(255,255,255,0.5);
   --glass-border:rgba(255,255,255,0.7); --line:rgba(20,24,40,0.12);
   --accent:#3b82f6; --accent2:#8b5cf6; --muted:rgba(20,24,40,0.6);
@@ -24,7 +25,8 @@
   --shadow:0 20px 50px rgba(40,60,120,0.18);
 }
 html.dark{
-  --bg1:#1e293b; --bg2:#312e50; --bg3:#3b2f4e; --bg4:#1f2a44;
+  --bg-c1:#1e293b; --bg-c2:#312e50; --bg-c3:#3b2f4e; --bg-c4:#1f2a44;
+  --glow-c1:#7c3aed; --glow-c2:#2563eb;
   --panel:rgba(30,36,56,0.5); --card:rgba(40,48,72,0.55);
   --glass-border:rgba(255,255,255,0.14); --line:rgba(255,255,255,0.1);
   --accent:#60a5fa; --accent2:#a78bfa; --muted:rgba(220,228,240,0.62);
@@ -33,7 +35,12 @@ html.dark{
   --shadow:0 20px 50px rgba(0,0,0,0.35);
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:"微软雅黑","Segoe UI",Arial,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2) 33%,var(--bg3) 66%,var(--bg4));background-attachment:fixed;color:var(--text)}
+body{margin:0;font-family:"微软雅黑","Segoe UI",Arial,sans-serif;background:linear-gradient(var(--bg-angle,135deg),var(--bg-c1) 0%,var(--bg-c2) 38%,var(--bg-c3) 70%,var(--bg-c4) 100%);background-attachment:fixed;color:var(--text)}
+/* 动态光斑：与 ERP body::before/::after 一致，跟随界面外观的光斑开关与浓度 */
+body::before,body::after{content:'';position:fixed;border-radius:50%;filter:blur(90px);opacity:var(--glow-opacity,0.55);pointer-events:none;z-index:-1;transition:opacity .3s ease}
+body.no-glow::before,body.no-glow::after{display:none}
+body::before{width:520px;height:520px;top:-120px;right:-80px;background:var(--glow-c1)}
+body::after{width:640px;height:640px;bottom:-180px;left:-120px;background:var(--glow-c2)}
 header{background:rgba(255,255,255,0.22);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);border-bottom:1px solid var(--glass-border);padding:16px;text-align:center;box-shadow:var(--shadow)}
 html.dark header{background:rgba(30,36,56,0.5)}
 header h1{margin:0;font-size:18px}
@@ -83,17 +90,83 @@ input[type="number"]:focus, input[type="text"]:focus, select:focus{border-color:
 
 </style>
 <script>
-  // 主题桥接：读取 ERP 暗色偏好（cb_dark_mode），并监听宿主 Tools 页面发来的主题消息
+  // 主题桥接：与 ERP「界面外观」完全一致。
+  // 嵌入 Tools 页时宿主通过 postMessage(cb-appearance) 推送实时外观快照（背景配色/渐变方向/光斑/明暗/强调色）；
+  // 独立打开时按 localStorage(cb_appearance / cb_dark_mode) 自行还原同一套外观。
   (function () {
-    function applyDark(dark) {
-      document.documentElement.classList.toggle('dark', !!dark)
+    function colorsAreDark(arr) {
+      var valid = (arr || []).filter(function (c) { return !!c })
+      if (!valid.length) return false
+      var lum = function (hex) {
+        try {
+          var h = String(hex).trim().replace(/^#/, '')
+          if (h.length === 3) h = h.split('').map(function (c) { return c + c }).join('')
+          if (h.length !== 6) return 0.5
+          var r = parseInt(h.slice(0, 2), 16) / 255
+          var g = parseInt(h.slice(2, 4), 16) / 255
+          var b = parseInt(h.slice(4, 6), 16) / 255
+          var lin = function (v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+          return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+        } catch (e) { return 0.5 }
+      }
+      var sum = 0
+      for (var i = 0; i < valid.length; i++) sum += lum(valid[i])
+      return sum / valid.length < 0.34
     }
-    try {
-      applyDark(localStorage.getItem('cb_dark_mode') === '1')
-    } catch (e) {}
+
+    // 把宿主外观快照应用到当前文档：覆盖 CSS 变量 / dark / no-glow
+    function applySnapshot(s) {
+      if (!s) return
+      var h = document.documentElement
+      var st = h.style
+      h.classList.toggle('dark', !!s.dark)
+      h.classList.toggle('no-glow', !!s.noGlow)
+      if (s.bg && s.bg.length >= 4 && s.bg[0]) {
+        st.setProperty('--bg-c1', s.bg[0])
+        st.setProperty('--bg-c2', s.bg[1])
+        st.setProperty('--bg-c3', s.bg[2])
+        st.setProperty('--bg-c4', s.bg[3])
+      }
+      if (s.glow && s.glow.length >= 2 && s.glow[0]) {
+        st.setProperty('--glow-c1', s.glow[0])
+        st.setProperty('--glow-c2', s.glow[1])
+      }
+      if (s.angle) st.setProperty('--bg-angle', s.angle)
+      if (s.glowOpacity) st.setProperty('--glow-opacity', s.glowOpacity)
+      if (s.accent) st.setProperty('--accent', s.accent)
+    }
+
+    // 独立打开时按 ERP localStorage 还原同一外观
+    function readLocalSnapshot() {
+      var app = null
+      var manualDark = false
+      try { app = JSON.parse(localStorage.getItem('cb_appearance') || 'null') } catch (e) {}
+      try { manualDark = localStorage.getItem('cb_dark_mode') === '1' } catch (e) {}
+      var snap = { dark: !!manualDark, bg: null, glow: null, angle: '', glowOpacity: '', noGlow: false, accent: '' }
+      if (app) {
+        if (typeof app.accent === 'string' && app.accent) snap.accent = app.accent
+        if (app.glowEnabled === false) snap.noGlow = true
+        if (typeof app.glowOpacity === 'number') snap.glowOpacity = String(app.glowOpacity / 100)
+        if (Array.isArray(app.colors) && app.colors.length >= 2) {
+          var colors = app.colors.slice(0, 4)
+          // 手动深色开启且配色本身偏浅（对齐宿主行为：回退暗色默认底，避免浅底浅字）
+          if (!(manualDark && !colorsAreDark(colors))) {
+            snap.bg = colors
+            if (Array.isArray(app.glow) && app.glow.length >= 2) snap.glow = app.glow.slice(0, 2)
+            if (typeof app.angle === 'number') snap.angle = app.angle + 'deg'
+            snap.dark = manualDark || colorsAreDark(colors)
+          }
+        }
+      }
+      return snap
+    }
+
+    try { applySnapshot(readLocalSnapshot()) } catch (e) {}
     window.addEventListener('message', function (e) {
       var d = e && e.data
-      if (d && d.type === 'cb-theme' && typeof d.dark === 'boolean') applyDark(d.dark)
+      if (!d) return
+      if (d.type === 'cb-appearance') applySnapshot(d)
+      else if (d.type === 'cb-theme' && typeof d.dark === 'boolean') applySnapshot({ dark: d.dark })
     })
   })()
 </script>
