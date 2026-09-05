@@ -46,6 +46,8 @@ const updateSchema = z.object({
   items: z.array(z.object({ product_id: z.string().uuid(), quantity: z.coerce.number().positive(), remark: z.string().max(1000).nullable().optional() })).min(1).max(200).optional(),
   // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
   from_warehouse_id: z.string().uuid().nullable().optional(),
+  // 到达海外仓：调拨发货的目的海外仓，仅记录展示，不参与本地库存记账
+  to_warehouse_id: z.string().uuid().nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -225,6 +227,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         update.from_warehouse_id = body.from_warehouse_id;
       }
+      // 到达海外仓：纯记录展示字段，任何状态均可调整
+      if (body.to_warehouse_id !== undefined) update.to_warehouse_id = body.to_warehouse_id;
 
       // 调拨发货确认发货：货物状态由「待发货」变为其他状态时，按出库仓扣减国内库存（transfer_out）。
       // 库存不足时拦截（不允许负库存）：状态不落库，提示补货后再发货。

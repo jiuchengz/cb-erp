@@ -45,6 +45,8 @@ const createSchema = z.object({
   source: z.enum(['manual', 'transfer']).optional(),
   // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
   from_warehouse_id: z.string().uuid().nullable().optional(),
+  // 到达海外仓：调拨发货的目的海外仓，仅记录展示，不参与本地库存记账
+  to_warehouse_id: z.string().uuid().nullable().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -139,6 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               product_code: body.cargo_code ?? null,
               cargo_status: body.cargo_status ?? '待发货',
               from_warehouse_id: body.from_warehouse_id ?? null,
+              to_warehouse_id: body.to_warehouse_id ?? null,
             };
             const { data: boundShipment, error: boundErr } = await supabase
               .from('shipments')
@@ -227,6 +230,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           store: body.store ?? null,
           source: body.source ?? 'manual',
           from_warehouse_id: body.from_warehouse_id ?? null,
+          to_warehouse_id: body.to_warehouse_id ?? null,
           created_by: ctx.userId,
         })
         .select()

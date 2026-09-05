@@ -62,6 +62,11 @@
         <el-table-column label="发货时间" width="120">
           <template #default="{ row }">{{ row.ship_date || '-' }}</template>
         </el-table-column>
+        <el-table-column label="出库仓 → 到达仓" min-width="190" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.from_warehouse_id ? shortWhName(row.from_warehouse_id) : '-' }} → {{ row.to_warehouse_id ? shortWhName(row.to_warehouse_id) : '未填' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="货物状态" width="120">
           <template #default="{ row }">
             <span>{{ row.cargo_status || '-' }}</span>
@@ -152,6 +157,12 @@
           </el-select>
           <div class="muted-hint">确认发货后将从此仓扣减国内库存；仓库库存不足时无法点击发货，请先补货</div>
         </el-form-item>
+        <el-form-item label="到达海外仓">
+          <el-select v-model="form.to_warehouse_id" placeholder="请选择到达海外仓（仅记录展示，不写海外库存）" clearable filterable style="width: 100%">
+            <el-option v-for="w in overseasWarehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+          <div class="muted-hint">记录货物发往的目的海外仓；到仓后请用明细「签收」登记实收，海外库存与平台快照分开展示</div>
+        </el-form-item>
         <el-form-item label="商品明细" required>
           <div class="items-editor">
             <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
@@ -221,6 +232,7 @@
         <el-descriptions-item label="发货时间">{{ detail.ship_date || '-' }}</el-descriptions-item>
         <el-descriptions-item label="货物状态">{{ detail.cargo_status || '-' }}</el-descriptions-item>
         <el-descriptions-item label="出库仓库">{{ warehouseNameOf(detail.from_warehouse_id) }}</el-descriptions-item>
+        <el-descriptions-item label="到达海外仓">{{ warehouseNameOf(detail.to_warehouse_id) }}</el-descriptions-item>
         <el-descriptions-item label="签收状态">{{ receiveStateText(detail) }}</el-descriptions-item>
         <el-descriptions-item label="创建时间" :span="2">{{ formatDate(detail.created_at) }}</el-descriptions-item>
       </el-descriptions>
@@ -323,6 +335,12 @@
                 <el-option v-for="w in domesticWarehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
               </el-select>
               <div class="muted-hint">确认发货时从此仓扣减国内库存{{ editLockedWarehouse ? '；已进入发货流程的单据不可更换出库仓' : '' }}</div>
+            </el-form-item>
+            <el-form-item label="到达海外仓">
+              <el-select v-model="editForm.to_warehouse_id" style="width: 100%" placeholder="请选择到达海外仓（仅记录展示，不写海外库存）" clearable filterable>
+                <el-option v-for="w in overseasWarehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+              </el-select>
+              <div class="muted-hint">到达仓仅为记录展示；到仓实收请用明细「签收」登记</div>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -770,6 +788,7 @@ const form = reactive({
   ship_date: '',
   store: '',
   from_warehouse_id: '',
+  to_warehouse_id: '',
   items: [] as any[],
 })
 
@@ -778,6 +797,8 @@ const warehouseStoreOptions = ref<string[]>([])
 const warehousesAll = ref<any[]>([])
 // 国内出库仓（wh_type=domestic）下拉
 const domesticWarehouses = computed(() => warehousesAll.value.filter((w) => w.wh_type === 'domestic'))
+// 到达海外仓（wh_type=overseas）下拉：仅记录展示用，不参与库存记账
+const overseasWarehouses = computed(() => warehousesAll.value.filter((w) => w.wh_type === 'overseas'))
 const warehouseMap = computed(() => {
   const m = new Map<string, any>()
   for (const w of warehousesAll.value) m.set(w.id, w)
@@ -787,6 +808,11 @@ function warehouseNameOf(id: string | null | undefined) {
   if (!id) return '-'
   const w = warehouseMap.value.get(id)
   return w ? `${w.name}（${w.code}）` : '未知仓库'
+}
+function shortWhName(id: string | null | undefined) {
+  if (!id) return ''
+  const w = warehouseMap.value.get(id)
+  return w ? String(w.name || '') : '未知仓库'
 }
 async function loadWarehouseMeta() {
   try {
@@ -869,6 +895,7 @@ function openCreate() {
   form.ship_date = ''
   form.store = ''
   form.from_warehouse_id = ''
+  form.to_warehouse_id = ''
   form.items = []
   addItem()
   createVisible.value = true
@@ -1017,6 +1044,7 @@ const editForm = reactive({
   store: '',
   warehouse_no: '',
   from_warehouse_id: '',
+  to_warehouse_id: '',
   items: [] as any[],
 })
 const editTotalOfItems = computed(() => editForm.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0))
@@ -1081,6 +1109,7 @@ async function openEdit(id: string) {
     editForm.store = d.store || ''
     editForm.warehouse_no = d.warehouse_no || ''
     editForm.from_warehouse_id = d.from_warehouse_id || ''
+    editForm.to_warehouse_id = d.to_warehouse_id || ''
     editForm.items = (d.shipment_items || []).map((it: any) => ({
       product_id: it.product_id,
       quantity: it.quantity,
@@ -1160,6 +1189,7 @@ async function saveEdit() {
       store: editForm.store.trim() || null,
       warehouse_no: editForm.warehouse_no.trim() || null,
       from_warehouse_id: editForm.from_warehouse_id || null,
+      to_warehouse_id: editForm.to_warehouse_id || null,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
     })
     const saved = resp?.data?.data
@@ -1536,6 +1566,7 @@ async function exportRows(withImages = false) {
 onMounted(() => {
   load()
   loadOptions()
+  loadWarehouseMeta()
 })
 </script>
 
