@@ -6,47 +6,129 @@
 <title>Office 文档图片压缩瘦身工具（支持 .xls）</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: "Microsoft YaHei", "Segoe UI", sans-serif; background: #f5f7fa; margin: 0; padding: 20px; color: #2f3542; }
-  .wrap { max-width: 860px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 8px 0 4px; }
-  .sub { color: #747d8c; font-size: 13px; margin-bottom: 12px; }
-  .help { background: #fff; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #57606f; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 14px; }
-  .help code { background: #eef4ff; color: #1e90ff; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
-  .card { background: #fff; border-radius: 10px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-  .dropzone {
-    border: 2px dashed #ced6e0; border-radius: 10px; padding: 30px;
-    text-align: center; color: #747d8c; cursor: pointer; transition: all .2s;
+  :root {
+    /* 对齐 ERP 液态玻璃主题（style.css）亮色 */
+    --accent: #3b82f6;
+    --accent-2: #8b5cf6;
+    --ink: rgba(20, 24, 40, 0.92);
+    --ink-2: rgba(20, 24, 40, 0.6);
+    --ink-3: rgba(20, 24, 40, 0.38);
+    --glass-bg: rgba(255, 255, 255, 0.42);
+    --glass-strong: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.7);
+    --line: rgba(20, 24, 40, 0.12);
+    --input-bg: rgba(255, 255, 255, 0.65);
+    --muted-fill: rgba(255, 255, 255, 0.5);
+    --shadow: 0 20px 50px rgba(40, 60, 120, 0.18);
+    --ok: #16a34a;
+    --warn-bg: rgba(255, 247, 230, 0.85);
+    --warn-border: #ffd591;
+    --warn-ink: #ad6800;
+    --info-bg: rgba(232, 248, 239, 0.9);
+    --info-border: #a9e5c1;
+    --info-ink: #1e7a46;
   }
-  .dropzone.dragover { border-color: #1e90ff; background: #f0f8ff; color: #1e90ff; }
+  html.dark {
+    /* 对齐 ERP 暗色主题 */
+    --accent: #60a5fa;
+    --accent-2: #a78bfa;
+    --ink: rgba(235, 240, 250, 0.92);
+    --ink-2: rgba(220, 228, 240, 0.62);
+    --ink-3: rgba(200, 210, 230, 0.42);
+    --glass-bg: rgba(30, 36, 56, 0.5);
+    --glass-strong: rgba(48, 58, 86, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --line: rgba(255, 255, 255, 0.1);
+    --input-bg: rgba(255, 255, 255, 0.08);
+    --muted-fill: rgba(255, 255, 255, 0.06);
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    --warn-bg: rgba(120, 90, 20, 0.22);
+    --warn-border: rgba(255, 213, 145, 0.4);
+    --warn-ink: #ffce85;
+    --info-bg: rgba(22, 101, 52, 0.22);
+    --info-border: rgba(169, 229, 193, 0.35);
+    --info-ink: #86efac;
+  }
+  body {
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    margin: 0; padding: 22px;
+    color: var(--ink);
+    min-height: 100vh;
+    background: linear-gradient(135deg, #7dd3fc, #c4b5fd 33%, #f9a8d4 66%, #fde68a);
+    background-attachment: fixed;
+  }
+  html.dark body {
+    background: linear-gradient(135deg, #1e293b, #312e50 33%, #3b2f4e 66%, #1f2a44);
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 8px 0 4px; color: var(--ink); }
+  .sub { color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+  .help, .card {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px; box-shadow: var(--shadow);
+  }
+  .help { padding: 14px 16px; font-size: 13px; line-height: 1.8; color: var(--ink-2); margin-bottom: 14px; }
+  .help code { background: rgba(59, 130, 246, 0.12); color: var(--accent); border-radius: 6px; padding: 1px 6px; font-size: 12px; }
+  .card { padding: 18px; margin-bottom: 14px; }
+  .dropzone {
+    border: 2px dashed rgba(20, 24, 40, 0.22); border-radius: 14px; padding: 30px;
+    text-align: center; color: var(--ink-2); cursor: pointer; transition: all .2s;
+    background: rgba(255, 255, 255, 0.16);
+  }
+  html.dark .dropzone { border-color: rgba(255, 255, 255, 0.24); background: rgba(255, 255, 255, 0.03); }
+  .dropzone.dragover { border-color: var(--accent); background: rgba(59, 130, 246, 0.12); color: var(--accent); }
+  html.dark .dropzone.dragover { background: rgba(96, 165, 250, 0.14); }
   .dropzone input { display: none; }
-  .dropzone strong { color: #1e90ff; }
+  .dropzone strong { color: var(--accent); }
   .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 14px 0; }
   .field { display: flex; flex-direction: column; gap: 6px; }
-  .field label { font-size: 13px; color: #57606f; }
+  .field label { font-size: 13px; color: var(--ink-2); }
   .field input[type=number], .field select {
-    border: 1px solid #ced6e0; border-radius: 6px; padding: 8px 10px; width: 160px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; width: 160px; font-size: 14px;
+    background: var(--input-bg); color: var(--ink); outline: none;
   }
-  .field input[type=range] { width: 260px; }
-  .hint { font-size: 12px; color: #a4b0be; }
-  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #57606f; margin-top: 10px; }
+  .field input[type=number]:focus, .field select:focus { border-color: var(--accent); }
+  .field input[type=range] { width: 260px; accent-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--ink-3); }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
   .btn {
-    background: #1e90ff; color: #fff; border: none; border-radius: 6px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    color: #fff; border: none; border-radius: 10px;
     padding: 10px 22px; font-size: 15px; cursor: pointer; margin-right: 8px;
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.28); transition: filter .15s;
   }
-  .btn:disabled { background: #a4b0be; cursor: not-allowed; }
-  .btn.gray { background: #dfe4ea; color: #57606f; }
-  .status { margin-top: 12px; font-size: 14px; color: #57606f; white-space: pre-wrap; }
+  .btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn:disabled { background: rgba(164, 176, 190, 0.6); cursor: not-allowed; box-shadow: none; }
+  .btn.gray { background: var(--muted-fill); color: var(--ink-2); box-shadow: none; }
+  .status { margin-top: 12px; font-size: 14px; color: var(--ink-2); white-space: pre-wrap; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-  th, td { border-bottom: 1px solid #f1f2f6; padding: 8px 6px; text-align: left; }
-  th { color: #747d8c; font-weight: 600; background: #fafbfc; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; background: var(--muted-fill); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .save { color: #2ed573; font-weight: 600; }
+  .save { color: var(--ok); font-weight: 600; }
   .big { font-size: 18px; font-weight: 700; }
-  .percent { color: #2ed573; }
-  .warn { background: #fff7e6; border: 1px solid #ffd591; color: #ad6800; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
-  .info { background: #e8f8ef; border: 1px solid #a9e5c1; color: #1e7a46; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
-  .badge { display: inline-block; background: #eef4ff; color: #1e90ff; border-radius: 4px; padding: 1px 6px; font-size: 12px; margin-left: 6px;}
+  .percent { color: var(--ok); }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-ink); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
+  .info { background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info-ink); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
+  .badge { display: inline-block; background: rgba(59, 130, 246, 0.12); color: var(--accent); border-radius: 6px; padding: 1px 6px; font-size: 12px; margin-left: 6px; }
 </style>
+<script>
+  // 主题桥接：读取 ERP 暗色偏好（cb_dark_mode），并监听宿主 Tools 页面发来的主题消息
+  (function () {
+    function applyDark(dark) {
+      document.documentElement.classList.toggle('dark', !!dark)
+    }
+    try {
+      applyDark(localStorage.getItem('cb_dark_mode') === '1')
+    } catch (e) {}
+    window.addEventListener('message', function (e) {
+      var d = e && e.data
+      if (d && d.type === 'cb-theme' && typeof d.dark === 'boolean') applyDark(d.dark)
+    })
+  })()
+</script>
 </head>
 <body>
 <div class="wrap">

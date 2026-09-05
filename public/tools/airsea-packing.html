@@ -14,55 +14,89 @@
 
 <style>
 :root{
-  --bg:#0a1018; --panel:rgba(20,30,40,0.9); --card:#0f1720; --accent:#1fb6ff;
-  --muted:#9fbfcd; --text:#e0f8ff; --success:#27ae60; --danger:#e74c3c;
+  /* 对齐 ERP 液态玻璃主题（style.css）亮色 */
+  --bg1:#7dd3fc; --bg2:#c4b5fd; --bg3:#f9a8d4; --bg4:#fde68a;
+  --panel:rgba(255,255,255,0.42); --card:rgba(255,255,255,0.5);
+  --glass-border:rgba(255,255,255,0.7); --line:rgba(20,24,40,0.12);
+  --accent:#3b82f6; --accent2:#8b5cf6; --muted:rgba(20,24,40,0.6);
+  --text:rgba(20,24,40,0.92); --input-bg:rgba(255,255,255,0.65);
+  --table-bg:rgba(255,255,255,0.55); --success:#16a34a; --danger:#e74c3c;
+  --shadow:0 20px 50px rgba(40,60,120,0.18);
+}
+html.dark{
+  --bg1:#1e293b; --bg2:#312e50; --bg3:#3b2f4e; --bg4:#1f2a44;
+  --panel:rgba(30,36,56,0.5); --card:rgba(40,48,72,0.55);
+  --glass-border:rgba(255,255,255,0.14); --line:rgba(255,255,255,0.1);
+  --accent:#60a5fa; --accent2:#a78bfa; --muted:rgba(220,228,240,0.62);
+  --text:rgba(235,240,250,0.92); --input-bg:rgba(255,255,255,0.08);
+  --table-bg:rgba(30,36,56,0.6); --success:#34d399; --danger:#f87171;
+  --shadow:0 20px 50px rgba(0,0,0,0.35);
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:"微软雅黑","Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
-header{background:linear-gradient(90deg,#06384f,#0b2a3a);padding:16px;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,0.5)}
+body{margin:0;font-family:"微软雅黑","Segoe UI",Arial,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2) 33%,var(--bg3) 66%,var(--bg4));background-attachment:fixed;color:var(--text)}
+header{background:rgba(255,255,255,0.22);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);border-bottom:1px solid var(--glass-border);padding:16px;text-align:center;box-shadow:var(--shadow)}
+html.dark header{background:rgba(30,36,56,0.5)}
 header h1{margin:0;font-size:18px}
-.privacy-tip{margin-top:8px;font-size:12px;color:#9fbfcd;background:rgba(31,182,255,0.08);border:1px solid rgba(31,182,255,0.2);display:inline-block;padding:4px 12px;border-radius:20px}
+.privacy-tip{margin-top:8px;font-size:12px;color:var(--accent);background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.28);display:inline-block;padding:4px 12px;border-radius:20px}
 .topbar{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap}
-.btn{background:linear-gradient(180deg,#fff,#e6f7ff);color:#042029;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,0.15)}
-.btn.secondary{background:#0b2a3a;color:var(--text);border:1px solid rgba(255,255,255,0.04)}
-.btn.danger{background:rgba(231,76,60,0.15);color:#ffb3a7;border:1px solid rgba(231,76,60,0.35)}
+.btn{background:linear-gradient(180deg,var(--accent),var(--accent2));color:#fff;border:none;padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:700;box-shadow:0 6px 16px rgba(59,130,246,0.26)}
+.btn:hover{filter:brightness(1.08)}
+.btn.secondary{background:var(--card);color:var(--text);border:1px solid var(--line);box-shadow:none}
+.btn.danger{background:rgba(231,76,60,0.15);color:var(--danger);border:1px solid rgba(231,76,60,0.35)}
 .container{max-width:1180px;margin:16px auto;padding:12px}
 .tabs{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
-.tab{padding:10px 14px;border-radius:10px;background:rgba(255,255,255,0.02);cursor:pointer;color:var(--text)}
-.tab.active{background:linear-gradient(90deg,var(--accent),#2b9bd2);color:#001;font-weight:800}
+.tab{padding:10px 14px;border-radius:10px;background:var(--card);cursor:pointer;color:var(--text);border:1px solid transparent}
+.tab.active{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;font-weight:800}
 .module{display:none;padding:8px;border-radius:8px}
 .module.active{display:block}
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
 label{font-size:14px;color:var(--muted);display:flex;gap:6px;align-items:center}
-input[type="number"], input[type="text"], select{padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.05);background:rgba(255,255,255,0.02);color:var(--text)}
+input[type="number"], input[type="text"], select{padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--input-bg);color:var(--text);outline:none}
+input[type="number"]:focus, input[type="text"]:focus, select:focus{border-color:var(--accent)}
 /* box grid: 3 columns max */
 .box-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
 @media(max-width:1024px){.box-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.box-grid{grid-template-columns:repeat(1,1fr)}}
-.box-card{background:var(--card);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);display:flex;gap:10px;align-items:center}
+.box-card{background:var(--card);padding:10px;border-radius:12px;border:1px solid var(--glass-border);display:flex;gap:10px;align-items:center;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 .box-title{min-width:60px;font-weight:800;color:var(--accent)}
 .box-inputs{display:flex;gap:8px;align-items:center;flex-wrap: nowrap}
 .box-inputs input{width:65px;padding:6px;border-radius:6px}
 .box-actions{margin-left:auto;display:flex;gap:6px}
-.remove-btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:6px;border-radius:6px;cursor:pointer}
-#results{margin-top:12px;padding:12px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.06));white-space:pre-wrap;font-family:monospace;border:1px solid rgba(255,255,255,0.03)}
+.remove-btn{background:transparent;border:1px solid var(--line);color:var(--text);padding:6px;border-radius:6px;cursor:pointer}
+#results{margin-top:12px;padding:12px;border-radius:12px;background:var(--card);white-space:pre-wrap;font-family:monospace;border:1px solid var(--glass-border);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 .chart-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-.chart-card{flex:1;min-width:250px;padding:12px;border-radius:8px;background:var(--panel)}
+.chart-card{flex:1;min-width:250px;padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--glass-border);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
 .chart-card canvas{width:100% !important;height:260px !important;display:block}
 .status{margin-top:8px;padding:8px;border-radius:6px}
-.status.success{background:rgba(39,174,96,0.08);color:var(--success)}
-.status.error{background:rgba(231,76,60,0.08);color:var(--danger)}
+.status.success{background:rgba(39,174,96,0.12);color:var(--success)}
+.status.error{background:rgba(231,76,60,0.12);color:var(--danger)}
 .download-list a{display:block;color:var(--accent);margin:6px 0;text-decoration:none}
 .small{font-size:13px;color:var(--muted)}
 .section-title{text-align:center;color:var(--accent);margin:6px 0 12px 0}
 /* 装箱单预览表格 */
-.table-preview{max-height:300px;overflow:auto;border:1px solid rgba(255,255,255,0.12);margin-bottom:10px;border-radius:6px}
-.table-preview table{border-collapse:collapse;background:#0f1720;width:100%;font-size:12px}
-.table-preview th,.table-preview td{border:1px solid rgba(255,255,255,0.1);padding:4px 6px;white-space:nowrap;color:var(--text)}
-.table-preview th{background:rgba(31,182,255,0.12);color:var(--accent);position:sticky;top:0}
+.table-preview{max-height:300px;overflow:auto;border:1px solid var(--line);margin-bottom:10px;border-radius:6px}
+.table-preview table{border-collapse:collapse;background:var(--table-bg);width:100%;font-size:12px}
+.table-preview th,.table-preview td{border:1px solid var(--line);padding:4px 6px;white-space:nowrap;color:var(--text)}
+.table-preview th{background:rgba(59,130,246,0.14);color:var(--accent);position:sticky;top:0}
 /* small screen tweaks */
 @media(max-width:420px){ .box-inputs input{width:72px} .btn{padding:8px 10px} }
+
 </style>
+<script>
+  // 主题桥接：读取 ERP 暗色偏好（cb_dark_mode），并监听宿主 Tools 页面发来的主题消息
+  (function () {
+    function applyDark(dark) {
+      document.documentElement.classList.toggle('dark', !!dark)
+    }
+    try {
+      applyDark(localStorage.getItem('cb_dark_mode') === '1')
+    } catch (e) {}
+    window.addEventListener('message', function (e) {
+      var d = e && e.data
+      if (d && d.type === 'cb-theme' && typeof d.dark === 'boolean') applyDark(d.dark)
+    })
+  })()
+</script>
 </head>
 <body>
 <header>

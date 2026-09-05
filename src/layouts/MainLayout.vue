@@ -16,21 +16,44 @@
           <span class="mico"><component :is="item.icon" /></span>
           <span class="mlabel">{{ item.label }}</span>
         </router-link>
-        <div v-for="group in visibleMenuGroups" :key="group.title" class="menu-group" :class="{ open: group.open }">
-          <div class="group-title" @click="toggleGroup(group)">
-            <span class="mico"><component :is="group.icon" /></span>
-            <span class="mlabel">{{ group.title }}</span>
-            <span class="garrow"><el-icon><arrow-down /></el-icon></span>
+        <template v-for="group in businessGroups" :key="group.title">
+          <div class="menu-group" :class="{ open: group.open }">
+            <div class="group-title" @click="toggleGroup(group)">
+              <span class="mico"><component :is="group.icon" /></span>
+              <span class="mlabel">{{ group.title }}</span>
+              <span class="garrow"><el-icon><arrow-down /></el-icon></span>
+            </div>
+            <div class="group-items">
+              <template v-for="item in group.children" :key="item.path">
+                <router-link v-if="permsPass(item.perms)" :to="item.path" @click="closeDrawer">
+                  <span class="mico"><component :is="item.icon" /></span>
+                  <span class="mlabel">{{ item.label }}</span>
+                </router-link>
+              </template>
+            </div>
           </div>
-          <div class="group-items">
-            <template v-for="item in group.children" :key="item.path">
-              <router-link v-if="permsPass(item.perms)" :to="item.path" @click="closeDrawer">
-                <span class="mico"><component :is="item.icon" /></span>
-                <span class="mlabel">{{ item.label }}</span>
-              </router-link>
-            </template>
+        </template>
+        <router-link v-if="permsPass(toolEntry.perms)" :to="toolEntry.path" class="solo-link tool-solo" @click="closeDrawer">
+          <span class="mico"><component :is="toolEntry.icon" /></span>
+          <span class="mlabel">{{ toolEntry.label }}</span>
+        </router-link>
+        <template v-for="group in adminGroups" :key="group.title">
+          <div class="menu-group" :class="{ open: group.open }">
+            <div class="group-title" @click="toggleGroup(group)">
+              <span class="mico"><component :is="group.icon" /></span>
+              <span class="mlabel">{{ group.title }}</span>
+              <span class="garrow"><el-icon><arrow-down /></el-icon></span>
+            </div>
+            <div class="group-items">
+              <template v-for="item in group.children" :key="item.path">
+                <router-link v-if="permsPass(item.perms)" :to="item.path" @click="closeDrawer">
+                  <span class="mico"><component :is="item.icon" /></span>
+                  <span class="mlabel">{{ item.label }}</span>
+                </router-link>
+              </template>
+            </div>
           </div>
-        </div>
+        </template>
       </nav>
     </aside>
     <div v-if="drawerOpen" class="drawer-mask" @click="closeDrawer"></div>
@@ -126,9 +149,11 @@ auth.init().finally(() => {
 // 非空数组时用户须拥有其中任意一项权限才显示该菜单
 const soloMenus = [
   { path: '/dashboard', label: '首页概览', icon: HomeFilled, perms: [] as string[] },
-  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] },
-  { path: '/tools-page', label: '工具', icon: Tools, perms: [] as string[] }
+  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] }
 ]
+
+// 工具独立入口：置于系统管理组上方，任何登录用户可见（与登录页内嵌工具一致）
+const toolEntry = { path: '/tools-page', label: '工具', icon: Tools, perms: [] as string[] }
 
 const menuGroups = reactive([
   {
@@ -190,6 +215,9 @@ const visibleMenuGroups = computed(() =>
     return g.children.some((c) => permsPass(c.perms))
   })
 )
+// 菜单渲染顺序：业务组（商品/仓储/销售）→ 工具独立入口 → 系统管理组
+const businessGroups = computed(() => visibleMenuGroups.value.filter((g) => g.title !== '系统管理'))
+const adminGroups = computed(() => visibleMenuGroups.value.filter((g) => g.title === '系统管理'))
 
 function toggleGroup(group: { open: boolean }) {
   group.open = !group.open
