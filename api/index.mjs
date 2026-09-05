@@ -104206,7 +104206,9 @@ var createSchema8 = external_exports.object({
   store: external_exports.string().max(100).nullable().optional(),
   source: external_exports.enum(["manual", "transfer"]).optional(),
   // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
-  from_warehouse_id: external_exports.string().uuid().nullable().optional()
+  from_warehouse_id: external_exports.string().uuid().nullable().optional(),
+  // 到达海外仓：调拨发货的目的海外仓，仅记录展示，不参与本地库存记账
+  to_warehouse_id: external_exports.string().uuid().nullable().optional()
 });
 async function handler29(req, res) {
   try {
@@ -104280,7 +104282,8 @@ async function handler29(req, res) {
               ship_date: body.ship_date ?? null,
               product_code: body.cargo_code ?? null,
               cargo_status: body.cargo_status ?? "\u5F85\u53D1\u8D27",
-              from_warehouse_id: body.from_warehouse_id ?? null
+              from_warehouse_id: body.from_warehouse_id ?? null,
+              to_warehouse_id: body.to_warehouse_id ?? null
             };
             const { data: boundShipment, error: boundErr } = await supabase.from("shipments").update(boundUpdate).eq("id", existing.id).select().single();
             if (boundErr) throw boundErr;
@@ -104349,6 +104352,7 @@ async function handler29(req, res) {
         store: body.store ?? null,
         source: body.source ?? "manual",
         from_warehouse_id: body.from_warehouse_id ?? null,
+        to_warehouse_id: body.to_warehouse_id ?? null,
         created_by: ctx.userId
       }).select().single();
       if (error) {
@@ -107083,7 +107087,9 @@ var updateSchema12 = external_exports.object({
   tracking_no: external_exports.string().max(100).nullable().optional(),
   items: external_exports.array(external_exports.object({ product_id: external_exports.string().uuid(), quantity: external_exports.coerce.number().positive(), remark: external_exports.string().max(1e3).nullable().optional() })).min(1).max(200).optional(),
   // 出库仓库：确认发货时从此仓扣减国内库存；不传则回退第一个国内仓
-  from_warehouse_id: external_exports.string().uuid().nullable().optional()
+  from_warehouse_id: external_exports.string().uuid().nullable().optional(),
+  // 到达海外仓：调拨发货的目的海外仓，仅记录展示，不参与本地库存记账
+  to_warehouse_id: external_exports.string().uuid().nullable().optional()
 });
 async function handler55(req, res) {
   try {
@@ -107223,6 +107229,7 @@ async function handler55(req, res) {
         }
         update.from_warehouse_id = body.from_warehouse_id;
       }
+      if (body.to_warehouse_id !== void 0) update.to_warehouse_id = body.to_warehouse_id;
       const confirmItems = (body.items && body.items.length ? body.items : before.shipment_items) || [];
       const willConfirmShipment = before.source === "transfer" && before.cargo_status === "\u5F85\u53D1\u8D27" && body.cargo_status !== void 0 && body.cargo_status !== "\u5F85\u53D1\u8D27";
       let deductedDomestic = false;
