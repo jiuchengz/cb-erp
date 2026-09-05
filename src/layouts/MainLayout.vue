@@ -126,7 +126,8 @@ auth.init().finally(() => {
 // 非空数组时用户须拥有其中任意一项权限才显示该菜单
 const soloMenus = [
   { path: '/dashboard', label: '首页概览', icon: HomeFilled, perms: [] as string[] },
-  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] }
+  { path: '/analysis', label: '经营分析', icon: TrendCharts, perms: ['products.read', 'inventory.read', 'sales.read', 'shipment.read', 'procurement.read', 'transfer.read', 'after_sales.read'] },
+  { path: '/tools-page', label: '工具', icon: Tools, perms: [] as string[] }
 ]
 
 const menuGroups = reactive([
