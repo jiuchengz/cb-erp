@@ -83,9 +83,12 @@ export function cellDateValue(v: unknown): string {
   if (v instanceof Date && !isNaN(v.getTime())) return fmt(v)
   const s = String(v).trim()
   if (!s) return s
-  // 已是日期格式文本（2026-08-27 / 2026/8/27），统一为 YYYY-MM-DD
-  const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  // 已是日期格式文本（2026-08-27 / 2026/8/27 / 2026.8.27），统一为 YYYY-MM-DD
+  const m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
   if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  // 中文日期写法（2026年8月27日 / 2026年08月27日），统一为 YYYY-MM-DD
+  const cn = s.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/)
+  if (cn) return `${cn[1]}-${cn[2].padStart(2, '0')}-${cn[3].padStart(2, '0')}`
   const n = Number(s)
   // Excel 日期序列号范围：1900-01-01(1) ~ 2100-12-31(73414)
   if (Number.isFinite(n) && n >= 1 && n <= 73414) {

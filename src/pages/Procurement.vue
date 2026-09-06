@@ -282,7 +282,7 @@ import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { buildExportPayload, exportViaServer, todayStr } from '../utils/export'
-import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum } from '../utils/import'
+import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, cellDateStr } from '../utils/import'
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('procurement.write'))
@@ -685,40 +685,72 @@ async function onImportFile(e: Event) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"和"数量"列')
       return
     }
-    let ok = 0
-    const failures: string[] = []
+    // 基础行校验（编码/数量），合法行一次性提交批量接口创建
+    const preFailures: string[] = []
+    const batchRows: any[] = []
     for (let i = 0; i < rows.length; i++) {
       const lineNo = i + 2
       const row = rows[i]
       const code = cellStr(row, col.product_code)
       const qty = cellNum(row, col.quantity)
-      const dateStr = col.receive_date !== undefined ? cellStr(row, col.receive_date) : ''
+      const dateStr = col.receive_date !== undefined ? cellDateStr(row, col.receive_date) : ''
       const remarkStr = col.remark !== undefined ? cellStr(row, col.remark) : ''
       const sourceStr = col.source_type !== undefined ? cellStr(row, col.source_type) : ''
       if (!code) {
-        failures.push(`第${lineNo}行：产品编码为空`)
+        preFailures.push(`第${lineNo}行：产品编码为空`)
         continue
       }
       if (qty <= 0) {
-        failures.push(`第${lineNo}行：数量必须大于 0`)
+        preFailures.push(`第${lineNo}行：数量必须大于 0`)
         continue
       }
-      const payload: any = { product_code: code, quantity: qty, warehouse_id: whId }
-      if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) payload.receive_date = dateStr
-      if (remarkStr) payload.remark = remarkStr
+      const item: any = { row_no: lineNo, product_code: code, quantity: qty }
+      // 拿货日期：用单元格日期取值函数归一化为 YYYY-MM-DD 才写入，
+      // 支持用户在表格中填写的点号（2026.8.27）/中文（2026年8月27日）等常见写法
+      if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) item.receive_date = dateStr
+      if (remarkStr) item.remark = remarkStr
       // 来货状态：模板中文 label 映射为语义码，自定义文本原样保存；列缺失默认 purchase
-      if (sourceStr) payload.source_type = sourceTypeToValue(sourceStr)
-      else payload.source_type = 'purchase'
+      item.source_type = sourceStr ? sourceTypeToValue(sourceStr) : 'purchase'
+      batchRows.push(item)
+    }
+    let ok = 0
+    const failures = [...preFailures]
+    const dupList: { row_no: number; product_code: string; quantity: number; receive_date?: string }[] = []
+    if (batchRows.length) {
       try {
-        await api.post('/purchase-orders', payload)
-        ok++
+        // 一次性批量创建（替代原逐行 await POST /purchase-orders），后端逐行返回成功/重复/失败明细
+        const resp: any = await api.post('/purchase-orders/batch', { warehouse_id: whId, rows: batchRows })
+        const d = resp?.data || {}
+        ok = d.created ?? 0
+        for (const r of d.results ?? []) {
+          if (r.status === 'duplicate') {
+            dupList.push({ row_no: r.row_no, product_code: r.product_code, quantity: r.quantity, receive_date: r.receive_date })
+          } else if (r.status === 'failed') {
+            failures.push(`第${r.row_no}行：${r.message || '创建失败'}`)
+          }
+        }
       } catch (err: any) {
-        failures.push(`第${lineNo}行：${err?.response?.data?.error?.message || '创建失败'}`)
+        failures.push(err?.response?.data?.error?.message || '批量导入失败')
       }
+    }
+    // 重复行汇总弹窗（最多展示前 10 条明细，超出说明总数）
+    if (dupList.length) {
+      const esc = (s: string) =>
+        s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c)
+      const lines = dupList
+        .slice(0, 10)
+        .map((x) => `<div>第${x.row_no}行：${esc(x.product_code)}（数量 ${x.quantity}，拿货日期 ${esc(x.receive_date || '-')}）</div>`)
+        .join('')
+      const suffix = dupList.length > 10 ? `<div>……等共 ${dupList.length} 条</div>` : ''
+      await ElMessageBox.alert(
+        `<div style="margin-bottom: 8px; color: #e6a23c">重复 ${dupList.length} 条已跳过、未录入：</div>` + lines + suffix,
+        '导入提示',
+        { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' }
+      )
     }
     if (failures.length) {
       ElMessage.warning(`成功导入 ${ok} 条，失败 ${failures.length} 条：` + failures.slice(0, 5).join('；') + (failures.length > 5 ? ` 等 ${failures.length} 条` : ''))
-    } else {
+    } else if (!dupList.length) {
       ElMessage.success(`成功导入 ${ok} 条`)
     }
     load()

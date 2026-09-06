@@ -23,6 +23,7 @@ import systemLogo from './_handlers/system/logo';
 import stocktakesSummary from './_handlers/stocktakes/summary';
 import uploadImage from './_handlers/upload-image';
 import purchaseOrders from './_handlers/purchase-orders';
+import purchaseOrdersBatch from './_handlers/purchase-orders/batch';
 import replenishment from './_handlers/replenishment';
 import roles from './_handlers/roles';
 import rolesId from './_handlers/roles/[id]';
@@ -109,6 +110,7 @@ const routes: Route[] = [
   { pattern: /^\/product-total$/, handler: productTotal },
   { pattern: /^\/products\/([^/]+)$/, handler: productsId, params: ['id'] },
   { pattern: /^\/products$/, handler: products },
+  { pattern: /^\/purchase-orders\/batch$/, handler: purchaseOrdersBatch },
   { pattern: /^\/purchase-orders\/([^/]+)$/, handler: purchaseOrdersId, params: ['id'] },
   { pattern: /^\/purchase-orders$/, handler: purchaseOrders },
   { pattern: /^\/replenishment\/([^/]+)$/, handler: replenishmentId, params: ['id'] },
