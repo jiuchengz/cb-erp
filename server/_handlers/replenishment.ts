@@ -57,12 +57,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (productIds.length) {
         const { data: purchaseRows, error: purchaseErr } = await supabase
           .from('purchase_orders')
-          .select('receive_date, purchase_order_items(product_id, quantity)')
+          .select('receive_date, source_type, purchase_order_items(product_id, quantity)')
           .in('status', ['ARRIVED', 'RECEIVED'])
           .is('deleted_at', null)
           .not('receive_date', 'is', null);
         if (purchaseErr) throw purchaseErr;
         for (const po of purchaseRows || []) {
+          // 仅采购来货（source_type='purchase'，历史 NULL 兼容视为采购来货）参与补货联动；
+          // 调拨拿货 / 补货来货 / 自定义来货不触发补货单自动完成
+          const poSourceType = po.source_type ?? 'purchase';
+          if (poSourceType !== 'purchase') continue;
           for (const it of po.purchase_order_items || []) {
             if (productIds.includes(it.product_id)) {
               (purchaseByProduct[it.product_id] = purchaseByProduct[it.product_id] || []).push({

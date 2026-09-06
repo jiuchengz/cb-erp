@@ -11,7 +11,7 @@
         <el-button v-if="canWrite" type="primary" :disabled="!selected.length" :loading="receiving" @click="batchReceive">
           批量入库{{ selected.length ? `(${selected.length})` : '' }}
         </el-button>
-        <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
+        <el-button v-if="canWrite" type="warning" :loading="importing" @click="openImportDialog">批量导入</el-button>
         <el-button v-if="canWrite" type="primary" @click="openCreate">新增拿货</el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
@@ -56,6 +56,9 @@
       </el-table-column>
       <el-table-column label="备注" min-width="160">
         <template #default="{ row }">{{ row.remark || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="来货状态" width="110">
+        <template #default="{ row }">{{ sourceTypeLabel(row.source_type) }}</template>
       </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
@@ -116,6 +119,19 @@
         <el-form-item label="备注">
           <el-input v-model="form.remark" maxlength="500" placeholder="选填，手动填写备注" />
         </el-form-item>
+        <el-form-item label="来货状态">
+          <el-select
+            v-model="form.source_type"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择或输入自定义来货状态"
+            style="width: 100%"
+          >
+            <el-option v-for="o in sourceTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+          <div style="color: #909399; font-size: 12px; line-height: 1.5">采购来货默认值；可输入调拨拿货/补货来货或任意自定义文本</div>
+        </el-form-item>
         <el-form-item label="入库仓库" required>
           <el-select v-model="form.warehouse_id" placeholder="选择国内仓库" style="width: 100%">
             <el-option v-for="w in domesticWarehouses" :key="w.id" :label="w.name" :value="w.id" />
@@ -172,6 +188,7 @@
           <el-descriptions-item label="拿货数量">{{ firstItem(detail)?.quantity ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="拿货日期">{{ detail.receive_date || '-' }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="来货状态">{{ sourceTypeLabel(detail.source_type) }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
           </el-descriptions-item>
@@ -192,6 +209,18 @@
           </el-form-item>
           <el-form-item label="备注">
             <el-input v-model="detailForm.remark" maxlength="500" placeholder="请输入备注" />
+          </el-form-item>
+          <el-form-item label="来货状态">
+            <el-select
+              v-model="detailForm.source_type"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择或输入自定义来货状态"
+              style="width: 180px"
+            >
+              <el-option v-for="o in sourceTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+            </el-select>
           </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="detailForm.status" style="width: 180px">
@@ -224,6 +253,25 @@
         <el-button type="primary" :loading="saving" @click="submitFlow">确认流转</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量导入前置：选择入库仓库 -->
+    <el-dialog v-model="importDialogVisible" title="选择入库仓库" width="440px" destroy-on-close>
+      <div class="import-wh-tip">批量导入前请先选择入库的国内仓库，导入行将统一写入该仓库。</div>
+      <el-form label-width="90px" style="margin-top: 6px">
+        <el-form-item label="入库仓库" required>
+          <el-select v-model="importWarehouseId" placeholder="选择国内仓库" style="width: 100%">
+            <el-option v-for="w in domesticWarehouses" :key="w.id" :label="w.name" :value="w.id" />
+          </el-select>
+          <div v-if="domesticWarehouses.length === 0" style="color: #f56c6c; font-size: 12px; line-height: 1.5">
+            暂无国内仓库，请先在「设置-仓库管理」创建国内仓库后再导入
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!importWarehouseId" @click="confirmImportDialog">选择文件</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -245,12 +293,13 @@ const PURCHASE_FLOW: Record<string, string[]> = {
 }
 
 const statusOptions = [
-  { label: '已到货', value: 'ARRIVED' },
+  { label: '待入库', value: 'ARRIVED' },
   { label: '已入库', value: 'RECEIVED' },
 ]
 
 const statusMap: Record<string, { label: string; type: string }> = {
-  ARRIVED: { label: '已到货', type: 'warning' },
+  // 新增拿货默认 ARRIVED（待入库），流转/批量入库后置 RECEIVED（已入库）
+  ARRIVED: { label: '待入库', type: 'warning' },
   RECEIVED: { label: '已入库', type: 'success' },
   DRAFT: { label: '草稿', type: 'info' },
   SUBMITTED: { label: '已提交', type: 'primary' },
@@ -258,6 +307,26 @@ const statusMap: Record<string, { label: string; type: string }> = {
   PURCHASING: { label: '采购中', type: 'warning' },
   PARTIAL: { label: '部分收货', type: 'warning' },
   CANCELLED: { label: '已取消', type: 'danger' },
+}
+
+// 来货状态（source_type）：语义码非数据库枚举约束，允许任意自定义文本直接存储
+const SOURCE_TYPE_MAP: Record<string, string> = {
+  purchase: '采购来货',
+  transfer: '调拨拿货',
+  replenish: '补货来货',
+}
+const sourceTypeOptions = [
+  { label: '采购来货', value: 'purchase' },
+  { label: '调拨拿货', value: 'transfer' },
+  { label: '补货来货', value: 'replenish' },
+]
+function sourceTypeLabel(v?: string | null) {
+  if (!v) return '采购来货' // 历史数据无 source_type 时兼容显示为采购来货
+  return SOURCE_TYPE_MAP[v] || v // 自定义文本原样显示
+}
+function sourceTypeToValue(label: string) {
+  const hit = sourceTypeOptions.find((o) => o.label === label)
+  return hit ? hit.value : label // 其它文本原样作为自定义值保存
 }
 
 function statusLabel(s: string) {
@@ -335,6 +404,7 @@ const form = reactive({
   receive_date: '',
   warehouse_id: '',
   remark: '',
+  source_type: 'purchase',
   productInfo: null as any,
   lookupMsg: '',
 })
@@ -345,6 +415,7 @@ function openCreate() {
   form.receive_date = ''
   form.warehouse_id = domesticWarehouses.value[0]?.id ?? ''
   form.remark = ''
+  form.source_type = 'purchase'
   form.productInfo = null
   form.lookupMsg = ''
   createVisible.value = true
@@ -384,10 +455,11 @@ async function save() {
   if (form.receive_date) payload.receive_date = form.receive_date
   if (form.warehouse_id) payload.warehouse_id = form.warehouse_id
   if (form.remark) payload.remark = form.remark
+  if (form.source_type) payload.source_type = form.source_type
   saving.value = true
   try {
     await api.post('/purchase-orders', payload)
-    ElMessage.success('创建成功，状态：已到货')
+    ElMessage.success('创建成功，状态：待入库，可在列表批量入库或手动流转入库')
     createVisible.value = false
     load()
   } catch (e: any) {
@@ -400,7 +472,7 @@ async function save() {
 const detailVisible = ref(false)
 const detail = ref<any>(null)
 const detailEditing = ref(false)
-const detailForm = reactive({ quantity: 1, receive_date: '', remark: '', status: '' })
+const detailForm = reactive({ quantity: 1, receive_date: '', remark: '', status: '', source_type: 'purchase' })
 const detailStatusOptions = computed(() => {
   if (!detail.value) return []
   const cur = detail.value.status
@@ -422,6 +494,7 @@ function startDetailEdit() {
   detailForm.receive_date = detail.value.receive_date || ''
   detailForm.remark = detail.value.remark || ''
   detailForm.status = detail.value.status
+  detailForm.source_type = detail.value.source_type || 'purchase'
   detailEditing.value = true
 }
 function cancelDetailEdit() {
@@ -434,6 +507,8 @@ async function saveDetailEdit() {
   if ((detailForm.receive_date || '') !== (detail.value.receive_date || '')) payload.receive_date = detailForm.receive_date || null
   if ((detailForm.remark || '') !== (detail.value.remark || '')) payload.remark = detailForm.remark || null
   if (detailForm.status !== detail.value.status) payload.status = detailForm.status
+  if ((detailForm.source_type || 'purchase') !== (detail.value.source_type || 'purchase'))
+    payload.source_type = detailForm.source_type || 'purchase'
   if (!Object.keys(payload).length) {
     detailEditing.value = false
     return
@@ -505,13 +580,13 @@ const receiving = ref(false)
 async function batchReceive() {
   const targets = selected.value.filter((r) => r.status === 'ARRIVED')
   if (!targets.length) {
-    ElMessage.warning('选中的记录中没有「已到货」状态，无需入库')
+    ElMessage.warning('选中的记录中没有「待入库」状态，无需入库')
     return
   }
   const skip = selected.value.length - targets.length
   try {
     await ElMessageBox.confirm(
-      `确定将选中的 ${targets.length} 条「已到货」记录批量入库吗？入库后拿货数量将自动计入对应产品的国内库存，并在库存流水（采购入库）中留痕。` +
+      `确定将选中的 ${targets.length} 条「待入库」记录批量入库吗？入库后拿货数量将自动计入对应产品的国内库存，并在库存流水（采购入库）中留痕。` +
         (skip ? `\n另有 ${skip} 条已入库记录将跳过。` : ''),
       '批量入库确认',
       { type: 'warning', confirmButtonText: '入库', cancelButtonText: '取消' }
@@ -548,6 +623,23 @@ async function batchReceive() {
 
 const importing = ref(false)
 const importFile = ref<any>(null)
+const importDialogVisible = ref(false)
+const importWarehouseId = ref('')
+
+function openImportDialog() {
+  if (!domesticWarehouses.value.length) {
+    ElMessage.error('暂无国内仓库，无法批量导入，请先在「设置-仓库管理」创建国内仓库')
+    return
+  }
+  importWarehouseId.value = domesticWarehouses.value[0]?.id ?? ''
+  importDialogVisible.value = true
+}
+
+function confirmImportDialog() {
+  if (!importWarehouseId.value) return
+  importDialogVisible.value = false
+  triggerImport()
+}
 
 function downloadTpl() {
   downloadTemplate(
@@ -556,6 +648,7 @@ function downloadTpl() {
       { label: '数量', sample: 100 },
       { label: '拿货日期', sample: '2026-08-17' },
       { label: '备注', sample: '选填' },
+      { label: '来货状态', sample: '采购来货' },
     ],
     '拿货导入模板',
     '拿货批量导入模板.xlsx'
@@ -572,6 +665,13 @@ async function onImportFile(e: Event) {
   input.value = ''
   if (!file) return
   importing.value = true
+  // 批量导入行统一写入用户所选入库仓库（受限账号必须显式传可见仓库）
+  const whId = importWarehouseId.value || domesticWarehouses.value[0]?.id || ''
+  if (!whId) {
+    ElMessage.error('暂无国内仓库，无法批量导入，请先在「设置-仓库管理」创建国内仓库')
+    importing.value = false
+    return
+  }
   try {
     const { headers, rows } = await readExcelFile(file)
     const col = buildColMap(headers, {
@@ -579,6 +679,7 @@ async function onImportFile(e: Event) {
       quantity: ['数量', 'quantity', 'qty'],
       receive_date: ['拿货日期', '日期', '时间', 'receive_date', 'date'],
       remark: ['备注', 'remark', 'note'],
+      source_type: ['来货状态', 'source_type', '来货类型'],
     })
     if (col.product_code === undefined || col.quantity === undefined) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"产品编码"和"数量"列')
@@ -593,6 +694,7 @@ async function onImportFile(e: Event) {
       const qty = cellNum(row, col.quantity)
       const dateStr = col.receive_date !== undefined ? cellStr(row, col.receive_date) : ''
       const remarkStr = col.remark !== undefined ? cellStr(row, col.remark) : ''
+      const sourceStr = col.source_type !== undefined ? cellStr(row, col.source_type) : ''
       if (!code) {
         failures.push(`第${lineNo}行：产品编码为空`)
         continue
@@ -601,9 +703,12 @@ async function onImportFile(e: Event) {
         failures.push(`第${lineNo}行：数量必须大于 0`)
         continue
       }
-      const payload: any = { product_code: code, quantity: qty }
+      const payload: any = { product_code: code, quantity: qty, warehouse_id: whId }
       if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) payload.receive_date = dateStr
       if (remarkStr) payload.remark = remarkStr
+      // 来货状态：模板中文 label 映射为语义码，自定义文本原样保存；列缺失默认 purchase
+      if (sourceStr) payload.source_type = sourceTypeToValue(sourceStr)
+      else payload.source_type = 'purchase'
       try {
         await api.post('/purchase-orders', payload)
         ok++
@@ -632,6 +737,7 @@ async function exportRows() {
     { key: 'name', label: '产品名称', value: (r: any) => firstItem(r)?.products?.name || '-' },
     { key: 'quantity', label: '拿货数量', value: (r: any) => firstItem(r)?.quantity ?? '-' },
     { key: 'receive_date', label: '拿货日期', value: (r: any) => r.receive_date || '-' },
+    { key: 'source_type', label: '来货状态', value: (r: any) => sourceTypeLabel(r.source_type) },
     { key: 'remark', label: '备注', value: (r: any) => r.remark || '-' },
     { key: 'status', label: '状态', value: (r: any) => statusLabel(r.status) },
     { key: 'created_at', label: '创建时间', value: (r: any) => formatDate(r.created_at) },
@@ -811,5 +917,14 @@ onMounted(() => {
   padding: 8px 10px;
   line-height: 1.7;
   margin-left: 90px;
+}
+.import-wh-tip {
+  font-size: 12px;
+  color: #909399;
+  background: rgba(255, 194, 64, 0.1);
+  border: 1px solid rgba(230, 162, 60, 0.35);
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 1.7;
 }
 </style>
