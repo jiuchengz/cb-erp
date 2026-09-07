@@ -190,7 +190,7 @@
       </el-select>
     </div>
 
-    <el-drawer v-model="trackVisible" :title="trackTitle" size="720px" destroy-on-close>
+        <el-drawer v-model="trackVisible" :title="trackTitle" size="900px" destroy-on-close class="track-drawer">
       <div v-loading="trackLoading">
         <template v-if="trackData">
           <div class="track-summary">
@@ -203,68 +203,99 @@
           </div>
 
           <div class="track-filter-bar">
-            <span class="track-filter-label">筛选状态：</span>
-            <el-radio-group v-model="trackShipFilter" size="small">
-              <el-radio-button value="全部">全部</el-radio-button>
-              <el-radio-button v-for="st in trackCargoStatuses" :key="st.name" :value="st.name">{{ st.name }}</el-radio-button>
-            </el-radio-group>
-          </div>
-          <h4 class="track-section-title">在途 / 发货批次（{{ trackShipments.length }} / {{ trackData.shipments.length }}）</h4>
-          <el-table :resizable="false" :data="trackShipments" border size="small" max-height="300">
-            <el-table-column label="货件号" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.tracking_no || row.cargo_code || '—' }}</template>
-            </el-table-column>
-            <el-table-column prop="ship_date" label="发货日期" width="110" />
-            <el-table-column label="货物状态" width="110">
-              <template #default="{ row }">
-                <el-tag v-if="row.cargo_status === '已入仓'" type="success" size="small">{{ row.cargo_status || '—' }}</el-tag>
-                <el-tag v-else type="warning" size="small">{{ row.cargo_status || '—' }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="estimated_arrival" label="预计到港" width="110" />
-            <el-table-column label="状态更新" width="160">
-              <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
-            </el-table-column>
-            <el-table-column prop="quantity" label="数量" width="80" align="right" />
-            <el-table-column prop="forwarder" label="货代" min-width="100" show-overflow-tooltip />
-          </el-table>
-          <div v-if="!trackData.shipments.length" class="track-empty">暂无发货批次记录</div>
-
-          <div class="track-filter-bar">
-            <span class="track-filter-label">选择时间：</span>
-            <el-radio-group v-model="trackSalesRange" size="small">
+            <span class="track-filter-label">统计周期：</span>
+            <el-radio-group v-model="trackSalesRange" size="small" @change="onTrackRangeChange">
               <el-radio-button value="7d">近7天</el-radio-button>
               <el-radio-button value="15d">近15天</el-radio-button>
               <el-radio-button value="30d">近30天</el-radio-button>
-              <el-radio-button value="all">全部</el-radio-button>
-              <el-radio-button value="custom">自定义</el-radio-button>
             </el-radio-group>
-            <el-date-picker
-              v-if="trackSalesRange === 'custom'"
-              v-model="trackCustomRange"
-              type="daterange"
-              value-format="YYYY-MM-DD"
-              range-separator="至"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              size="small"
-              style="width: 250px"
-            />
+            <span class="track-filter-hint">曲线图自动对比上一周期（环比）</span>
           </div>
-          <h4 class="track-section-title">销量明细（{{ trackSalesRangeLabel }}，{{ trackSales.length }} 天）</h4>
-          <el-table :resizable="false" :data="trackSales" border size="small" max-height="300">
-            <el-table-column prop="sale_date" label="日期" width="120" />
-            <el-table-column prop="platform" label="平台" width="140" />
-            <el-table-column prop="quantity" label="销量" width="100" align="right" />
-            <el-table-column prop="refund_qty" label="退款" width="100" align="right" />
-            <el-table-column label="实际销量" width="100" align="right">
-              <template #default="{ row }">{{ Number(row.quantity || 0) - Number(row.refund_qty || 0) }}</template>
-            </el-table-column>
-            <el-table-column :label="'单价(' + getCurrencyCode() + ')'" width="110" align="right">
-              <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
-            </el-table-column>
-          </el-table>
-          <div v-if="!trackSales.length" class="track-empty">所选时间范围内暂无销量数据</div>
+
+          <!-- 曲线图：统计周期 vs 环比周期 -->
+          <div class="chart-card">
+            <div class="chart-head">
+              <span class="chart-title">销量趋势（实际销量 = 销量 − 退款）</span>
+              <span class="chart-legend">
+                <span class="legend-item"><i class="dot blue"></i>统计周期：{{ trackChart.curLabel || '—' }}</span>
+                <span class="legend-item"><i class="dot orange"></i>环比周期：{{ trackChart.prevLabel || '—' }}</span>
+              </span>
+            </div>
+            <div class="chart-wrap">
+              <div ref="lineTipEl" class="chart-tip"></div>
+              <svg ref="lineSvgEl" viewBox="0 0 760 240"></svg>
+              <div v-if="!hasLineData" class="chart-empty">所选周期暂无销量数据</div>
+            </div>
+          </div>
+
+          <!-- 直方图：平台销量分布 -->
+          <div class="chart-card">
+            <div class="chart-head">
+              <span class="chart-title">平台销量分布（{{ trackChart.curLabel || '统计周期' }} 合计 {{ trackChart.total }} 件）</span>
+            </div>
+            <div class="chart-wrap">
+              <div ref="barTipEl" class="chart-tip"></div>
+              <svg ref="barSvgEl" viewBox="0 0 760 210"></svg>
+              <div v-if="!trackChart.platforms.length" class="chart-empty">暂无平台销量数据</div>
+            </div>
+          </div>
+
+          <el-collapse v-model="trackOpenPanels" class="track-collapse">
+            <el-collapse-item name="shipments">
+              <template #title>
+                <span class="collapse-title">在途 / 发货批次（{{ trackShipments.length }} / {{ trackData.shipments.length }}）</span>
+              </template>
+              <div class="collapse-body">
+                <div class="track-filter-bar">
+                  <span class="track-filter-label">筛选状态：</span>
+                  <el-radio-group v-model="trackShipFilter" size="small">
+                    <el-radio-button value="全部">全部</el-radio-button>
+                    <el-radio-button v-for="st in trackCargoStatuses" :key="st.name" :value="st.name">{{ st.name }}</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <el-table :resizable="false" :data="trackShipments" border size="small" max-height="280">
+                  <el-table-column label="货件号" min-width="150" show-overflow-tooltip>
+                    <template #default="{ row }">{{ row.tracking_no || row.cargo_code || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column prop="ship_date" label="发货日期" width="110" />
+                  <el-table-column label="货物状态" width="110">
+                    <template #default="{ row }">
+                      <el-tag v-if="row.cargo_status === '已入仓'" type="success" size="small">{{ row.cargo_status || '—' }}</el-tag>
+                      <el-tag v-else type="warning" size="small">{{ row.cargo_status || '—' }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="estimated_arrival" label="预计到港" width="110" />
+                  <el-table-column label="状态更新" width="160">
+                    <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
+                  </el-table-column>
+                  <el-table-column prop="quantity" label="数量" width="80" align="right" />
+                  <el-table-column prop="forwarder" label="货代" min-width="100" show-overflow-tooltip />
+                </el-table>
+                <div v-if="!trackData.shipments.length" class="track-empty">暂无发货批次记录</div>
+              </div>
+            </el-collapse-item>
+
+            <el-collapse-item name="sales">
+              <template #title>
+                <span class="collapse-title">销量明细（{{ trackSalesRangeLabel }}，{{ trackSales.length }} 行）</span>
+              </template>
+              <div class="collapse-body">
+                <el-table :resizable="false" :data="trackSales" border size="small" max-height="300">
+                  <el-table-column prop="sale_date" label="日期" width="120" />
+                  <el-table-column prop="platform" label="平台" width="140" />
+                  <el-table-column prop="quantity" label="销量" width="100" align="right" />
+                  <el-table-column prop="refund_qty" label="退款" width="100" align="right" />
+                  <el-table-column label="实际销量" width="100" align="right">
+                    <template #default="{ row }">{{ Number(row.quantity || 0) - Number(row.refund_qty || 0) }}</template>
+                  </el-table-column>
+                  <el-table-column :label="'单价(' + getCurrencyCode() + ')'" width="110" align="right">
+                    <template #default="{ row }">{{ formatMoney(row.unit_price) }}</template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="!trackSales.length" class="track-empty">所选时间范围内暂无销量数据</div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </template>
       </div>
     </el-drawer>
@@ -468,7 +499,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, nextTick, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowUp, Sort } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
@@ -591,7 +622,7 @@ function onDateRangeChange(val: [string, string] | null) {
   load()
 }
 
-// 商品跟踪明细（在途批次时间线 + 按天销量）
+// 商品跟踪明细（在途批次时间线 + 按天销量 + 趋势图表）
 const trackVisible = ref(false)
 const trackLoading = ref(false)
 const trackData = ref<any>(null)
@@ -599,9 +630,15 @@ const trackRow = ref<any>(null)
 const trackTitle = computed(() => `商品明细：${trackRow.value?.name || ''}`)
 const trackShipFilter = ref('全部')
 const trackSalesRange = ref('15d')
-const trackCustomRange = ref<[string, string] | null>(null)
+const trackOpenPanels = ref<string[]>(['shipments', 'sales'])
 // 货物状态字典：与发货管理「状态管理」共用 /api/cargo-statuses，动态同步
 const trackCargoStatuses = ref<any[]>([])
+
+const trackRangeDays: Record<string, number> = { '7d': 7, '15d': 15, '30d': 30 }
+const trackSalesRangeLabel = computed(() => {
+  const map: Record<string, string> = { '7d': '近7天', '15d': '近15天', '30d': '近30天' }
+  return map[trackSalesRange.value] || '近15天'
+})
 
 const trackShipments = computed(() => {
   const list = trackData.value?.shipments || []
@@ -609,50 +646,331 @@ const trackShipments = computed(() => {
   return list.filter((s: any) => s.cargo_status === trackShipFilter.value)
 })
 
-const trackSales = computed(() => {
-  const list = trackData.value?.sales || []
-  if (trackSalesRange.value === 'custom') {
-    const [from, to] = trackCustomRange.value || []
-    if (from && to) return list.filter((s: any) => s.sale_date >= from && s.sale_date <= to)
-    return list
-  }
-  if (trackSalesRange.value === 'all') return list
-  const days = { '7d': 7, '15d': 15, '30d': 30 }[trackSalesRange.value as '7d' | '15d' | '30d']
-  const from = daysAgoStr(days - 1)
-  const to = todayStr()
-  return list.filter((s: any) => s.sale_date >= from && s.sale_date <= to)
-})
+// 当期周期销量明细（后端已按时间倒序返回）
+const trackSales = computed(() => trackData.value?.sales || [])
 
-const trackSalesRangeLabel = computed(() => {
-  const map: Record<string, string> = { '7d': '近7天', '15d': '近15天', '30d': '近30天', all: '全部时间', custom: '自定义' }
-  return map[trackSalesRange.value] || '近15天'
+// 图表数据
+const trackChart = reactive({
+  dates: [] as string[],
+  cur: [] as number[],
+  prev: [] as number[],
+  curLabel: '',
+  prevLabel: '',
+  platforms: [] as { name: string; value: number }[],
+  total: 0,
 })
+const hasLineData = computed(() => trackChart.dates.length > 0)
 
 function openTrack(row: any) {
   trackRow.value = row
   trackShipFilter.value = '全部'
   trackSalesRange.value = '15d'
-  trackCustomRange.value = null
   trackVisible.value = true
   loadTrack(row.id)
+}
+
+function onTrackRangeChange() {
+  if (trackRow.value?.id) loadTrack(trackRow.value.id)
 }
 
 async function loadTrack(id: string) {
   trackLoading.value = true
   try {
-    const params: Record<string, any> = { id }
-    const [tr, cs] = await Promise.all([
-      api.get('/products/tracking', { params }),
+    const days = trackRangeDays[trackSalesRange.value] || 15
+    const statTo = todayStr()
+    const statFrom = daysAgoStr(days - 1)
+    const prevTo = daysAgoStr(days)
+    const prevFrom = daysAgoStr(days * 2 - 1)
+    const curParams: Record<string, any> = { id, sales_from: statFrom, sales_to: statTo }
+    const prevParams: Record<string, any> = { id, sales_from: prevFrom, sales_to: prevTo }
+    const [tr, cs, prevTr] = await Promise.all([
+      api.get('/products/tracking', { params: curParams }),
       api.get('/cargo-statuses').catch(() => null),
+      api.get('/products/tracking', { params: prevParams }).catch(() => null),
     ])
     trackData.value = tr.data.data ?? null
     if (cs?.data?.data?.length) trackCargoStatuses.value = cs.data.data
+    buildTrackChart(
+      tr.data.data?.sales || [],
+      prevTr?.data?.data?.sales || [],
+      statFrom,
+      statTo,
+      prevFrom,
+      prevTo,
+    )
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '加载明细失败')
     trackData.value = null
   } finally {
     trackLoading.value = false
   }
+}
+
+function netQty(r: any) {
+  return Number(r.quantity || 0) - Number(r.refund_qty || 0)
+}
+
+function fmtLocalDate(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function dateRange(from: string, to: string): string[] {
+  const out: string[] = []
+  const cur = new Date(`${from}T00:00:00`)
+  const end = new Date(`${to}T00:00:00`)
+  while (cur.getTime() <= end.getTime()) {
+    out.push(fmtLocalDate(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return out
+}
+
+function buildTrackChart(curRows: any[], prevRows: any[], statFrom: string, statTo: string, prevFrom: string, prevTo: string) {
+  const dates = dateRange(statFrom, statTo)
+  const cur = new Array(dates.length).fill(0)
+  const prev = new Array(dates.length).fill(0)
+  const curMap: Record<string, number> = {}
+  const prevMap: Record<string, number> = {}
+  for (const r of curRows) {
+    const k = r.sale_date
+    curMap[k] = (curMap[k] || 0) + netQty(r)
+  }
+  for (const r of prevRows) {
+    const k = r.sale_date
+    prevMap[k] = (prevMap[k] || 0) + netQty(r)
+  }
+  dates.forEach((dt, i) => {
+    cur[i] = curMap[dt] || 0
+    prev[i] = prevMap[dt] || 0
+  })
+  const pm: Record<string, number> = {}
+  let total = 0
+  for (const r of curRows) {
+    const nm = r.platform || '未知'
+    const v = netQty(r)
+    pm[nm] = (pm[nm] || 0) + v
+    total += v
+  }
+  let platforms = Object.keys(pm)
+    .map((name) => ({ name, value: pm[name] }))
+    .filter((p) => p.value > 0)
+    .sort((a, b) => b.value - a.value)
+  if (platforms.length > 6) {
+    const rest = platforms.slice(5).reduce((s, p) => s + p.value, 0)
+    platforms = platforms.slice(0, 5)
+    if (rest > 0) platforms.push({ name: '其他', value: rest })
+  }
+  trackChart.dates = dates
+  trackChart.cur = cur
+  trackChart.prev = prev
+  trackChart.curLabel = `${statFrom} ~ ${statTo}`
+  trackChart.prevLabel = `${prevFrom} ~ ${prevTo}`
+  trackChart.platforms = platforms
+  trackChart.total = total
+  nextTick(() => {
+    renderLineChart()
+    renderBarChart()
+  })
+}
+
+// ---- 图表渲染（原生 SVG，不依赖图表库） ----
+const lineSvgEl = ref<SVGSVGElement | null>(null)
+const lineTipEl = ref<HTMLDivElement | null>(null)
+const barSvgEl = ref<SVGSVGElement | null>(null)
+const barTipEl = ref<HTMLDivElement | null>(null)
+
+const CHART_NS = 'http://www.w3.org/2000/svg'
+const CHART_COLORS = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#9254de', '#36cfc9', '#909399']
+
+function svgEl(svg: SVGSVGElement, tag: string, attrs: Record<string, string | number>) {
+  const node = document.createElementNS(CHART_NS, tag)
+  Object.keys(attrs).forEach((k) => node.setAttribute(k, String(attrs[k])))
+  svg.appendChild(node)
+  return node
+}
+
+function moveTip(tip: HTMLDivElement, ev: MouseEvent) {
+  const wrap = tip.parentElement
+  if (!wrap) return
+  const r = wrap.getBoundingClientRect()
+  let x = ev.clientX - r.left + 14
+  let y = ev.clientY - r.top + 12
+  const tw = tip.offsetWidth
+  const th = tip.offsetHeight
+  if (x + tw > r.width - 4) x = ev.clientX - r.left - tw - 12
+  if (y + th > r.height - 4) y = ev.clientY - r.top - th - 10
+  tip.style.left = `${x}px`
+  tip.style.top = `${y}px`
+}
+
+function renderLineChart() {
+  const svg = lineSvgEl.value
+  const tip = lineTipEl.value
+  if (!svg || !tip) return
+  svg.innerHTML = ''
+  tip.style.display = 'none'
+  const dates = trackChart.dates
+  const cur = trackChart.cur
+  const prev = trackChart.prev
+  if (!dates.length) return
+  const W = 760
+  const H = 240
+  const ml = 46
+  const mr = 18
+  const mt = 16
+  const mb = 34
+  const pw = W - ml - mr
+  const ph = H - mt - mb
+  const n = dates.length
+  let maxV = 0
+  cur.concat(prev).forEach((v) => {
+    if (v > maxV) maxV = v
+  })
+  maxV = Math.max(5, Math.ceil((maxV * 1.15) / 5) * 5)
+  const X = (i: number) => (n === 1 ? ml + pw / 2 : ml + (i / (n - 1)) * pw)
+  const Y = (v: number) => mt + ph - (v / maxV) * ph
+  // 渐变
+  const defs = svgEl(svg, 'defs', {})
+  const gradBlue = svgEl(defs, 'linearGradient', { id: 'lgBlue', x1: '0', y1: '0', x2: '0', y2: '1' })
+  svgEl(gradBlue, 'stop', { offset: '0%', 'stop-color': '#409eff', 'stop-opacity': 0.28 })
+  svgEl(gradBlue, 'stop', { offset: '100%', 'stop-color': '#409eff', 'stop-opacity': 0.02 })
+  const gradOrange = svgEl(defs, 'linearGradient', { id: 'lgOrange', x1: '0', y1: '0', x2: '0', y2: '1' })
+  svgEl(gradOrange, 'stop', { offset: '0%', 'stop-color': '#e6a23c', 'stop-opacity': 0.26 })
+  svgEl(gradOrange, 'stop', { offset: '100%', 'stop-color': '#e6a23c', 'stop-opacity': 0.02 })
+  // 网格与 Y 轴
+  for (let t = 0; t <= 4; t++) {
+    const gv = (maxV / 4) * t
+    const gy = Y(gv)
+    svgEl(svg, 'line', { x1: ml, y1: gy, x2: W - mr, y2: gy, stroke: '#ebeef5', 'stroke-width': 1 })
+    const tx = svgEl(svg, 'text', { x: ml - 8, y: gy + 4, 'text-anchor': 'end', fill: '#909399', 'font-size': 11 })
+    tx.textContent = String(Math.round(gv))
+  }
+  // X 轴标签
+  const step = Math.max(1, Math.ceil(n / 10))
+  for (let i = 0; i < n; i++) {
+    if (i % step !== 0 && i !== n - 1) continue
+    const tx = svgEl(svg, 'text', { x: X(i), y: H - mb + 16, 'text-anchor': 'middle', fill: '#909399', 'font-size': 11 })
+    tx.textContent = dates[i].slice(5)
+  }
+  const linePath = (vals: number[]) =>
+    vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('')
+  const areaPath = (vals: number[]) =>
+    `${linePath(vals)}L${X(vals.length - 1).toFixed(1)},${(mt + ph).toFixed(1)}L${X(0).toFixed(1)},${(mt + ph).toFixed(1)}Z`
+  if (prev.some((v) => v > 0)) {
+    svgEl(svg, 'path', { d: areaPath(prev), fill: 'url(#lgOrange)' })
+    svgEl(svg, 'path', {
+      d: linePath(prev),
+      fill: 'none',
+      stroke: '#e6a23c',
+      'stroke-width': 2,
+      'stroke-linejoin': 'round',
+      'stroke-linecap': 'round',
+      'stroke-dasharray': '5 4',
+    })
+  }
+  if (cur.some((v) => v > 0)) {
+    svgEl(svg, 'path', { d: areaPath(cur), fill: 'url(#lgBlue)' })
+    svgEl(svg, 'path', {
+      d: linePath(cur),
+      fill: 'none',
+      stroke: '#409eff',
+      'stroke-width': 2,
+      'stroke-linejoin': 'round',
+      'stroke-linecap': 'round',
+    })
+  }
+  // 悬浮提示
+  const hot = svgEl(svg, 'rect', { x: ml, y: mt, width: pw, height: ph, fill: 'transparent' })
+  hot.addEventListener('mousemove', (ev) => {
+    const r = (hot as SVGRectElement).getBoundingClientRect()
+    const ratio = r.width / pw
+    const rel = ev.clientX - r.left
+    const idx = Math.min(n - 1, Math.max(0, Math.round((rel / ratio - ml) / (pw / Math.max(1, n - 1)))))
+    svg.querySelectorAll('.h-dot').forEach((d) => d.remove())
+    svg.querySelectorAll('.h-line').forEach((d) => d.remove())
+    if (prev[idx] > 0 || cur[idx] > 0) {
+      svgEl(svg, 'line', { class: 'h-line', x1: X(idx), y1: mt, x2: X(idx), y2: mt + ph, stroke: '#c0c4cc', 'stroke-width': 1, 'stroke-dasharray': '3 3' })
+    }
+    if (prev[idx] > 0) {
+      svgEl(svg, 'circle', { class: 'h-dot', cx: X(idx), cy: Y(prev[idx]), r: 3.5, fill: '#e6a23c', stroke: '#fff', 'stroke-width': 1.5 })
+    }
+    if (cur[idx] > 0) {
+      svgEl(svg, 'circle', { class: 'h-dot', cx: X(idx), cy: Y(cur[idx]), r: 3.5, fill: '#409eff', stroke: '#fff', 'stroke-width': 1.5 })
+    }
+    tip.innerHTML = `<div style="font-weight:600;color:#303133;margin-bottom:3px">${dates[idx]}</div><div style="display:flex;align-items:center;gap:6px;line-height:1.7"><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#409eff"></i>统计周期<b style="font-weight:600;color:#303133">${cur[idx]}</b></div><div style="display:flex;align-items:center;gap:6px;line-height:1.7"><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e6a23c"></i>环比周期<b style="font-weight:600;color:#303133">${prev[idx]}</b></div>`
+    tip.style.display = 'block'
+    moveTip(tip, ev)
+  })
+  hot.addEventListener('mouseleave', () => {
+    svg.querySelectorAll('.h-dot').forEach((d) => d.remove())
+    svg.querySelectorAll('.h-line').forEach((d) => d.remove())
+    tip.style.display = 'none'
+  })
+}
+
+function renderBarChart() {
+  const svg = barSvgEl.value
+  const tip = barTipEl.value
+  if (!svg || !tip) return
+  svg.innerHTML = ''
+  tip.style.display = 'none'
+  const platforms = trackChart.platforms
+  if (!platforms.length) return
+  const W = 760
+  const H = 210
+  const ml = 46
+  const mr = 16
+  const mt = 24
+  const mb = 44
+  const pw = W - ml - mr
+  const ph = H - mt - mb
+  const n = platforms.length
+  const slotW = pw / n
+  let maxV = 0
+  platforms.forEach((p) => {
+    if (p.value > maxV) maxV = p.value
+  })
+  maxV = Math.max(1, Math.ceil((maxV * 1.15) / 5) * 5)
+  const Y = (v: number) => mt + ph - (v / maxV) * ph
+  for (let t = 0; t <= 4; t++) {
+    const gv = (maxV / 4) * t
+    const gy = Y(gv)
+    svgEl(svg, 'line', { x1: ml, y1: gy, x2: W - mr, y2: gy, stroke: '#ebeef5', 'stroke-width': 1 })
+    const tx = svgEl(svg, 'text', { x: ml - 8, y: gy + 4, 'text-anchor': 'end', fill: '#909399', 'font-size': 11 })
+    tx.textContent = String(Math.round(gv))
+  }
+  const colorFor = (i: number) => CHART_COLORS[i % CHART_COLORS.length]
+  platforms.forEach((p, i) => {
+    const cx = ml + slotW * i + slotW / 2
+    const bw = Math.max(8, Math.min(64, slotW * 0.6))
+    const bh = Y(0) - Y(p.value)
+    const color = colorFor(i)
+    const rect = svgEl(svg, 'rect', { x: cx - bw / 2, y: Y(p.value), width: bw, height: Math.max(bh, p.value > 0 ? 2 : 0), rx: 3, fill: color })
+    if (p.value > 0) {
+      const tx = svgEl(svg, 'text', { x: cx, y: Y(p.value) - 5, 'text-anchor': 'middle', fill: '#606266', 'font-size': 12, 'font-weight': 600 })
+      tx.textContent = String(p.value)
+    }
+    const firstLine = p.name.length > 10 ? `${p.name.slice(0, 10)}…` : p.name
+    const tx = svgEl(svg, 'text', { x: cx, y: H - mb + 16, 'text-anchor': 'middle', fill: '#606266', 'font-size': 11 })
+    tx.textContent = firstLine
+    if (p.name.length > 10) {
+      const tx2 = svgEl(svg, 'text', { x: cx, y: H - mb + 32, 'text-anchor': 'middle', fill: '#909399', 'font-size': 10 })
+      tx2.textContent = p.name.slice(10)
+    }
+    const pctV = trackChart.total > 0 ? ((p.value / trackChart.total) * 100).toFixed(1) : '0.0'
+    rect.addEventListener('mouseenter', (ev) => {
+      tip.innerHTML = `<div style="font-weight:600;color:#303133;margin-bottom:3px">${p.name}</div><div style="display:flex;align-items:center;gap:6px;line-height:1.7"><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color}"></i>销量<b style="font-weight:600;color:#303133">${p.value}</b></div><div>占比 ${pctV}%</div>`
+      tip.style.display = 'block'
+      moveTip(tip, ev)
+    })
+    rect.addEventListener('mousemove', (ev) => moveTip(tip, ev))
+    rect.addEventListener('mouseleave', () => {
+      tip.style.display = 'none'
+    })
+  })
 }
 
 // 支持全局搜索跳转：/products?search=关键词（MainLayout 顶栏搜索 Ctrl/⌘K）
@@ -1570,4 +1888,102 @@ html.dark .table-wrap :deep(.el-table__body .el-table-fixed-column--right) {
   border: 1px dashed var(--color-border, #dcdfe6);
   border-radius: 4px;
 }
+
+/* ===== 商品跟踪图表（原生 SVG 卡片） ===== */
+.track-filter-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 10px;
+}
+.chart-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+.chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #606266;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.chart-wrap {
+  position: relative;
+  width: 100%;
+}
+.chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart-tip {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.14);
+  padding: 7px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #606266;
+  white-space: nowrap;
+  top: 0;
+  left: 0;
+}
+.chart-empty {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  z-index: 2;
+}
+.track-collapse {
+  margin-bottom: 6px;
+  border-top: none;
+}
+.track-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+}
+.collapse-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.collapse-body {
+  padding: 4px 2px 8px;
+}
+.track-drawer .el-drawer__body {
+  padding-bottom: 18px;
+}
+
 </style>
