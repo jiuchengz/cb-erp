@@ -586,6 +586,10 @@ async function onImportFile(e: Event) {
     const payloadRows: any[] = []
     const errLines: string[] = []
     const stockMap = new Map<string, { sale_date: string; stock: number }>()
+    // 无销量但有库存的行：只参与海外库存快照更新，不写入销售统计
+    const stockOnlyMap = new Map<string, { sale_date: string; stock: number; curStock: number }>()
+    let stockUpdated = 0
+    let stockSkipped = 0
     for (let idx = 0; idx < rows.length; idx++) {
       const row = rows[idx]
       const lineNo = idx + 2
@@ -596,8 +600,21 @@ async function onImportFile(e: Event) {
         errLines.push(`第${lineNo}行：商品ID为空`)
         continue
       }
+      // 无销量行：仅当带库存列、库存>0 且商品已存在时，记入海外库存快照（跳过销售统计）
       if (qty === 0) {
-        errLines.push(`第${lineNo}行：实际销量不能为 0`)
+        const p0 = linkMap[linkId]
+        if (p0 && col.overseas_stock !== undefined) {
+          const s0 = cellNum(row, col.overseas_stock)
+          if (s0 > 0) {
+            const d0 = col.sale_date !== undefined ? cellStr(row, col.sale_date).slice(0, 10) : ''
+            const cur0 = stockOnlyMap.get(p0.id)
+            if (!cur0 || d0 >= cur0.sale_date) {
+              stockOnlyMap.set(p0.id, { sale_date: d0, stock: s0, curStock: Number(p0.overseas_stock ?? 0) })
+            }
+            continue
+          }
+        }
+        errLines.push(`第${lineNo}行：无销量且无可更新库存，已忽略`)
         continue
       }
       // 允许负销量：代表退款/退货，导入时扣减
@@ -635,9 +652,21 @@ async function onImportFile(e: Event) {
       }
     }
     // 海外库存批量更新（一次请求替代逐条 PATCH，导入明显提速）
+    // 有销量商品：沿用原逻辑，取表格最新库存直接覆盖；
+    // 无销量但有库存的商品：与现有海外库存一致则跳过，不一致才以表格最新时间为准更新。
     const stockItems: { id: string; overseas_stock: number }[] = []
     for (const [pid, v] of stockMap) {
       stockItems.push({ id: pid, overseas_stock: v.stock })
+      stockUpdated++
+    }
+    for (const [pid, v] of stockOnlyMap) {
+      if (stockMap.has(pid)) continue // 该商品本次表格中有销量，按有销量逻辑更新
+      if (Number(v.curStock) === Number(v.stock)) {
+        stockSkipped++
+        continue
+      }
+      stockItems.push({ id: pid, overseas_stock: v.stock })
+      stockUpdated++
     }
     if (stockItems.length) {
       for (let i = 0; i < stockItems.length; i += 500) {
@@ -645,21 +674,29 @@ async function onImportFile(e: Event) {
         await api.post('/products/batch-stock', { items: chunk })
       }
     }
-    if (!payloadRows.length) {
+    if (!payloadRows.length && !stockItems.length) {
       ElMessage.warning('没有可导入的数据')
       return
     }
-    try {
-      const { data } = await api.post('/daily-sales', { rows: payloadRows })
-      const ok = data.data?.imported ?? payloadRows.length
-      if (errLines.length) {
-        ElMessage.warning(`成功导入 ${ok} 条，失败 ${errLines.length} 条：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 条` : ''))
-      } else {
-        ElMessage.success(`成功导入 ${ok} 条`)
+    const summaryParts: string[] = []
+    if (payloadRows.length) {
+      try {
+        const { data } = await api.post('/daily-sales', { rows: payloadRows })
+        const ok = data.data?.imported ?? payloadRows.length
+        summaryParts.push(`成功导入销售 ${ok} 条`)
+      } catch (err: any) {
+        const msg = err?.response?.data?.error?.message || '导入失败'
+        errLines.push(msg)
+        summaryParts.push('销售导入失败')
+        ElMessage.error('销售导入失败：' + msg)
       }
-    } catch (err: any) {
-      errLines.push(err?.response?.data?.error?.message || '导入失败')
-      ElMessage.error('导入失败：' + errLines.slice(-1)[0])
+    }
+    if (stockUpdated > 0) summaryParts.push(`更新海外库存 ${stockUpdated} 个商品`)
+    if (stockSkipped > 0) summaryParts.push(`海外库存一致跳过 ${stockSkipped} 个商品`)
+    if (errLines.length) {
+      ElMessage.warning(summaryParts.join('，') + `，忽略 ${errLines.length} 行：` + errLines.slice(0, 5).join('；') + (errLines.length > 5 ? ` 等 ${errLines.length} 行` : ''))
+    } else {
+      ElMessage.success(summaryParts.join('，'))
     }
     dateRange.value = todayRange()
     quickDays.value = 0
