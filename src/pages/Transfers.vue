@@ -838,7 +838,7 @@ async function fetchWarehouseStock(whId: string | null | undefined) {
   stockLoading.value = true
   try {
     let page = 1
-    const pageSize = 1000
+    const pageSize = 200 // 后端分页上限为 200，超过会 400 导致库存校验失败
     for (;;) {
       const { data } = await api.get('/inventory', {
         params: { warehouse_id: whId, page, pageSize, wh_type: 'domestic' },
