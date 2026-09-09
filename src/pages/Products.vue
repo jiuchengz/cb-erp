@@ -888,7 +888,8 @@ function renderLineChart() {
     const r = (hot as SVGRectElement).getBoundingClientRect()
     const ratio = r.width / pw
     const rel = ev.clientX - r.left
-    const idx = Math.min(n - 1, Math.max(0, Math.round((rel / ratio - ml) / (pw / Math.max(1, n - 1)))))
+    // 热区 rect 左边缘即曲线绘图区左边缘（viewBox x=ml），rel/ratio 已是从 ml 起的 viewBox 偏移，无需再减 ml
+    const idx = Math.min(n - 1, Math.max(0, Math.round((rel / ratio) / (pw / Math.max(1, n - 1)))))
     svg.querySelectorAll('.h-dot').forEach((d) => d.remove())
     svg.querySelectorAll('.h-line').forEach((d) => d.remove())
     if (prev[idx] > 0 || cur[idx] > 0) {
