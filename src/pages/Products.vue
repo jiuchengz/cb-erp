@@ -171,7 +171,7 @@
     </div>
 
     <div class="pagination-bar">
-      <span class="pagination-total">当前页共 {{ rows.length }} 条</span>
+      <span class="pagination-total">当前页共 {{ pagedRows.length }} 条</span>
       <el-pagination
         v-if="query.pageSize > 0"
         background
