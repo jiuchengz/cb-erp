@@ -174,7 +174,6 @@
                 :remote-method="onProductRemoteInput"
                 :loading="searchingProducts"
                 @keyup.enter="onProductSearchEnter"
-                @visible-change="onProductDropdownVisible"
                 placeholder="输入编码 / 名称，回车搜索"
                 style="flex: 1"
               >
@@ -394,7 +393,6 @@
                 :remote-method="onProductRemoteInput"
                 :loading="searchingProducts"
                 @keyup.enter="onProductSearchEnter"
-                @visible-change="onProductDropdownVisible"
                 placeholder="输入编码 / 名称，回车搜索"
                 style="flex: 1"
               >
@@ -688,24 +686,32 @@ function onProductRemoteInput(kw: string) {
 }
 
 async function onProductSearchEnter() {
+  // 纯搜索模式：无关键词不展示候选，需先输入编码/名称
+  if (!productSearchKeyword.value) {
+    productOptions.value = []
+    return
+  }
   await searchProducts(productSearchKeyword.value)
-}
-
-function onProductDropdownVisible(visible: boolean) {
-  // 打开下拉且无搜索关键词时，展示全量商品候选（保持可浏览选择）
-  if (visible && !productSearchKeyword.value) productOptions.value = [...products.value]
 }
 
 async function searchProducts(kw: string) {
   searchingProducts.value = true
   try {
     if (!kw) {
-      productOptions.value = [...products.value]
+      productOptions.value = []
       return
     }
-    const { data } = await api.get('/products', { params: { search: kw, page: 1, pageSize: 100 } })
+    const { data } = await api.get('/products', { params: { search: kw, page: 1, pageSize: 500 } })
     const list = data.data ?? []
-    productOptions.value = list
+    // 精确优先：编码/SKU/条码/link_id/名称任一与关键词完全一致（忽略大小写与首尾空格）→ 只展示精确命中项
+    const kwLower = kw.trim().toLowerCase()
+    const exact = list.filter((p: any) =>
+      [p?.code, p?.sku, p?.barcode, p?.link_id, p?.name].some(
+        (v) => typeof v === 'string' && v.trim().toLowerCase() === kwLower,
+      ),
+    )
+    // 无精确命中时再展示相近结果，仅取前 20 条，避免一次铺开大量候选
+    productOptions.value = exact.length ? exact : list.slice(0, 20)
     // 合并进商品池，保证名称/图片等关联显示可用
     const pool = new Map(products.value.map((p) => [p.id, p]))
     list.forEach((p: any) => pool.set(p.id, p))
@@ -885,7 +891,7 @@ function removeItem(idx: number) {
 
 function openCreate() {
   productSearchKeyword.value = ''
-  // 不预载全量商品候选，避免渲染数千 option 卡顿；下拉展开或输入回车时按需加载
+  // 不预载全量商品候选，避免渲染数千 option 卡顿；商品为纯搜索模式，输入编码/名称后回车才加载候选
   productOptions.value = []
   form.tracking_no = ''
   form.cargo_code = ''
@@ -1092,7 +1098,7 @@ async function openEdit(id: string) {
   try {
     const d = await fetchDetail(id)
     productSearchKeyword.value = ''
-    // 仅加载已选商品保证回显，避免全量商品候选渲染卡顿；下拉展开或输入回车时按需加载
+    // 仅加载已选商品保证回显，避免全量商品候选渲染卡顿；新选商品走纯搜索，输入后回车加载候选
     const selIds = (d.shipment_items || []).map((it: any) => it.product_id).filter(Boolean)
     productOptions.value = selIds
       .map((pid: string) => products.value.find((p) => p.id === pid))
