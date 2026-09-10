@@ -1225,7 +1225,7 @@ async function printWorkOrder(id: string) {
     const unitOfItem = (it: any) => (prod(it.product_id)?.unit || '').trim()
     // 按单位分组：个 → 套 → 对，其余单位放最后；无该单位的组直接跳过
     const UNIT_ORDER = ['个', '套', '对']
-    const indexed = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: unitOfItem(it) }))
+    const indexed: { it: any; idx: number; unit: string }[] = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: unitOfItem(it) }))
     const groups: { unit: string; rows: typeof indexed }[] = []
     for (const u of UNIT_ORDER) {
       const rows = indexed.filter((x) => x.unit === u)
@@ -1513,7 +1513,7 @@ async function exportRows(withImages = false) {
     // 与参考文件一致：表头之后（明细区/组间空行/合计行）行高统一 40，表头与分隔空行保持默认
     const rangeStart = r
     const items = ship.shipment_items || []
-    const indexed = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: (prod(it.product_id)?.unit || '').trim() }))
+    const indexed: { it: any; idx: number; unit: string }[] = items.map((it: any, i: number) => ({ it, idx: i + 1, unit: (prod(it.product_id)?.unit || '').trim() }))
     const groups: { rows: typeof indexed }[] = []
     for (const u of UNIT_ORDER) {
       const rows = indexed.filter((x) => x.unit === u)

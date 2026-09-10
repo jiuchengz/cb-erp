@@ -340,8 +340,8 @@ const statusMap: Record<string, { label: string; type: string }> = {
 function statusLabel(s: string) {
   return statusMap[s]?.label || s
 }
-function statusType(s: string) {
-  return statusMap[s]?.type || 'info'
+function statusType(s: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
+  return (statusMap[s]?.type || 'info') as 'primary' | 'success' | 'info' | 'warning' | 'danger'
 }
 function nextStatuses(s?: string) {
   return (s && AFTER_SALES_FLOW[s]) || []

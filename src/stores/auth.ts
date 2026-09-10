@@ -99,7 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions.value = data.permissions ?? []
     warehouseIds.value = data.warehouseIds !== undefined ? data.warehouseIds : null
     profile.value = data.profile ?? null
-    user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } }
+    user.value = { ...(user.value ?? {}), email: data.user?.email, user_metadata: { ...(user.value?.user_metadata ?? {}), name: data.user?.name, avatar: data.user?.avatar } } as any
   }
 
   async function signOut() {

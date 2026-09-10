@@ -785,7 +785,7 @@ const barTipEl = ref<HTMLDivElement | null>(null)
 const CHART_NS = 'http://www.w3.org/2000/svg'
 const CHART_COLORS = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#9254de', '#36cfc9', '#909399']
 
-function svgEl(svg: SVGSVGElement, tag: string, attrs: Record<string, string | number>) {
+function svgEl(svg: SVGElement, tag: string, attrs: Record<string, string | number>) {
   const node = document.createElementNS(CHART_NS, tag)
   Object.keys(attrs).forEach((k) => node.setAttribute(k, String(attrs[k])))
   svg.appendChild(node)

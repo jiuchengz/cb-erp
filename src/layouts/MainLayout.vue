@@ -114,6 +114,9 @@
         <el-button type="primary" size="default" :loading="pwdSaving" @click="onChangePassword">确认修改</el-button>
       </template>
     </el-dialog>
+
+    <!-- 全站数据查询聊天助手（本地规则引擎，只读接口，权限随账号） -->
+    <ChatAssistant />
   </div>
 </template>
 
@@ -129,6 +132,7 @@ import { api } from '@/services/api'
 import { supabaseStorageKey } from '@/services/supabase'
 import { addLog, getLogs, type OpLogEntry } from '@/utils/log'
 import { createIdleWatcher, IDLE_TIMEOUT_MS } from '@/utils/idle-logout'
+import ChatAssistant from '@/components/ChatAssistant.vue'
 
 const auth = useAuthStore()
 const site = useSiteStore()
@@ -211,7 +215,8 @@ function permsPass(perms: string[]): boolean {
 const visibleSoloMenus = computed(() => soloMenus.filter((m) => permsPass(m.perms)))
 const visibleMenuGroups = computed(() =>
   menuGroups.filter((g) => {
-    if (g.groupPerms && !permsPass(g.groupPerms)) return false
+    const groupPerms = (g as { groupPerms?: string[] }).groupPerms
+    if (groupPerms && !permsPass(groupPerms)) return false
     return g.children.some((c) => permsPass(c.perms))
   })
 )

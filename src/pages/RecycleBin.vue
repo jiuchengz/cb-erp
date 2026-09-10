@@ -39,8 +39,8 @@
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" :loading="row._restoring" @click="restore(row)">恢复</el-button>
-            <el-button link type="danger" :loading="row._purging" @click="purge(row)">彻底删除</el-button>
+            <el-button link type="primary" :loading="row._restoring" @click="restore(row as any)">恢复</el-button>
+            <el-button link type="danger" :loading="row._purging" @click="purge(row as any)">彻底删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -91,7 +91,7 @@ const typeOptions = [
   { label: '补货单', value: 'replenishment_order' }
 ]
 
-const typeMap: Record<string, { label: string; tag: string }> = {
+const typeMap: Record<string, { label: string; tag: 'primary' | 'success' | 'info' | 'warning' | 'danger' }> = {
   product: { label: '商品', tag: 'primary' },
   sales_order: { label: '销售单', tag: 'success' },
   purchase_order: { label: '采购单', tag: 'warning' },
@@ -110,8 +110,8 @@ const statusTags: Record<string, string> = {
   refunded: 'danger'
 }
 
-function statusTag(s?: string) {
-  return statusTags[s || ''] || 'info'
+function statusTag(s?: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
+  return (statusTags[s || ''] || 'info') as 'primary' | 'success' | 'info' | 'warning' | 'danger'
 }
 
 const rows = ref<RecycleItem[]>([])

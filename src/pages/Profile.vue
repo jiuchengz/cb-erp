@@ -15,7 +15,7 @@
 
           <div v-if="avatarDirty" class="avatar-edit-wrap">
             <div class="logo-edit" @pointerdown="onEditPointerDown" @pointermove="onEditPointerMove" @pointerup="onEditPointerUp" @pointercancel="onEditPointerUp">
-              <img :src="avatarPreview" :style="editStyle" class="logo-edit-img" draggable="false" />
+              <img :src="avatarPreview ?? undefined" :style="editStyle" class="logo-edit-img" draggable="false" />
             </div>
             <div class="logo-edit-tools">
               <span class="logo-edit-label">大小</span>
