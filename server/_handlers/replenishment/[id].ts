@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../_lib/auth';
-import { requirePermission, hasUnrestrictedWarehouse, assertWarehouseVisible } from '../_lib/rbac';
+import { requirePermission, hasUnrestrictedWarehouse, assertWarehouseVisible, loadProductBindings } from '../_lib/rbac';
 import { parse, uuidSchema } from '../_lib/validation';
 import { getAdminClient } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
@@ -105,18 +105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 明细替换：整单明细重建
       if (body.items !== undefined) {
-        // 仓库级隔离：明细商品须属于当前账号可见仓库
+        // 仓库级隔离：明细商品须可见（一货多仓 054：经 product_warehouses 绑定表推导，
+        // "至少绑定任一可见仓"），与 POST 创建路径口径保持一致；报错文案不变
         if (!hasUnrestrictedWarehouse(ctx)) {
-          const itemIds = body.items.map((it: any) => it.product_id);
-          const { data: itemProds, error: ipErr } = await supabase
-            .from('products')
-            .select('id, warehouse_id')
-            .in('id', itemIds)
-            .is('deleted_at', null);
-          if (ipErr) throw ipErr;
+          const itemIds = [...new Set(body.items.map((it: any) => it.product_id))];
+          const bindMap = await loadProductBindings(supabase, itemIds);
           const visible = new Set(ctx.warehouseIds || []);
-          const denied = (itemProds || []).filter((p: any) => !visible.has(p.warehouse_id));
-          if (denied.length) throw Errors.forbidden('补货明细包含无权访问的仓库商品');
+          for (const pid of itemIds) {
+            const binds = bindMap.get(pid) || [];
+            const ok = binds.some((b) => visible.has(b.warehouse_id));
+            if (!ok) throw Errors.forbidden('补货明细包含无权访问的仓库商品');
+          }
         }
         const { error: delErr } = await supabase
           .from('replenishment_order_items')

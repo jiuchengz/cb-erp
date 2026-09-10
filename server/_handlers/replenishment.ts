@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from './_lib/auth';
 import { requirePermission, applyWarehouseFilter, assertWarehouseVisible, hasUnrestrictedWarehouse, loadProductBindings } from './_lib/rbac';
+import { getSystemTimezone } from './_lib/datetime';
+import { isArrivalMatched, loadPurchaseRecordsByProduct, matchBaseDate } from './_lib/replenishment-match';
 import { parse, paginationSchema } from './_lib/validation';
 import { getAdminClient } from './_lib/db';
 import { writeAudit } from './_lib/audit';
@@ -46,38 +48,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data, error, count } = await query;
       if (error) throw error;
 
-      // 采购拿货联动：拿货时间晚于补货时间、且拿货数量能对应上补货数量 -> 自动置为已完成
+      // 采购拿货联动：拿货时间晚于"匹配基准日"（补货时间；补货时间为空时回落该单创建日期）、
+      // 且拿货数量能对应上补货数量 -> 自动置为已完成
       const rows = data || [];
       const productIds = Array.from(
         new Set(
           rows.flatMap((r: any) => (r.replenishment_order_items || []).map((it: any) => it.product_id))
         )
       ) as string[];
-      const purchaseByProduct: Record<string, { receive_date: string; quantity: number }[]> = {};
-      if (productIds.length) {
-        const { data: purchaseRows, error: purchaseErr } = await supabase
-          .from('purchase_orders')
-          .select('receive_date, source_type, purchase_order_items(product_id, quantity)')
-          .in('status', ['ARRIVED', 'RECEIVED'])
-          .is('deleted_at', null)
-          .not('receive_date', 'is', null);
-        if (purchaseErr) throw purchaseErr;
-        for (const po of purchaseRows || []) {
-          // 仅采购来货（source_type='purchase'，历史 NULL 兼容视为采购来货）参与补货联动；
-          // 调拨拿货 / 补货来货 / 自定义来货不触发补货单自动完成
-          const poSourceType = po.source_type ?? 'purchase';
-          if (poSourceType !== 'purchase') continue;
-          for (const it of po.purchase_order_items || []) {
-            if (productIds.includes(it.product_id)) {
-              (purchaseByProduct[it.product_id] = purchaseByProduct[it.product_id] || []).push({
-                receive_date: po.receive_date,
-                quantity: Number(it.quantity),
-              });
-            }
-          }
-        }
-      }
+      // 仅采购来货（source_type='purchase'，历史 NULL 兼容视为采购来货）参与补货联动；
+      // 调拨拿货 / 补货来货 / 自定义来货不触发补货单自动完成
+      const purchaseByProduct = await loadPurchaseRecordsByProduct(supabase, productIds);
 
+      // 匹配基准日按系统默认时区折算（补货时间为空时回落创建日期）
+      const tz = await getSystemTimezone(supabase);
       const completedIds: string[] = [];
       for (const row of rows) {
         const items = row.replenishment_order_items || [];
@@ -90,16 +74,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } else {
             row.arrival_date = null;
           }
+        } else {
+          row.arrival_date = null;
         }
-        const replenishTime = row.replenishment_time;
-        if (!items.length || !replenishTime) continue;
-        const allMatched = items.every((it: any) => {
-          const records = purchaseByProduct[it.product_id] || [];
-          return records.some(
-            (rec) => rec.receive_date > replenishTime && rec.quantity >= Number(it.quantity)
-          );
-        });
-        if (allMatched && row.status !== 'COMPLETED') {
+        const matchBase = matchBaseDate(row, tz);
+        const allMatched = isArrivalMatched(items, purchaseByProduct, matchBase);
+        // 精确到货标记：供前端与统计助手判定"未到货"（未完成/未取消 且 arrival_matched=false 即未到货）
+        row.arrival_matched = allMatched;
+        // 自动完成：补货时间为空时不再整段跳过（判定基准回落到 created_at 的日期部分）；
+        // 已取消（CANCELLED）/ 已完成（COMPLETED）不改写（COMPLETED 不可逆，避免已取消单被改写）
+        if (allMatched && row.status !== 'COMPLETED' && row.status !== 'CANCELLED') {
           completedIds.push(row.id);
           row.status = 'COMPLETED';
         }

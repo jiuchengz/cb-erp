@@ -52,6 +52,8 @@ import inventoryTransactions from './_handlers/inventory/transactions';
 import productsId from './_handlers/products/[id]';
 import purchaseOrdersId from './_handlers/purchase-orders/[id]';
 import replenishmentId from './_handlers/replenishment/[id]';
+import replenishmentStats from './_handlers/replenishment/stats';
+import replenishmentSnapshots from './_handlers/replenishment/snapshots';
 import salesId from './_handlers/sales/[id]';
 import shipmentsId from './_handlers/shipments/[id]';
 import shipmentsImport from './_handlers/shipments/import';
@@ -113,6 +115,8 @@ const routes: Route[] = [
   { pattern: /^\/purchase-orders\/batch$/, handler: purchaseOrdersBatch },
   { pattern: /^\/purchase-orders\/([^/]+)$/, handler: purchaseOrdersId, params: ['id'] },
   { pattern: /^\/purchase-orders$/, handler: purchaseOrders },
+  { pattern: /^\/replenishment\/stats$/, handler: replenishmentStats },
+  { pattern: /^\/replenishment\/snapshots$/, handler: replenishmentSnapshots },
   { pattern: /^\/replenishment\/([^/]+)$/, handler: replenishmentId, params: ['id'] },
   { pattern: /^\/replenishment$/, handler: replenishment },
   { pattern: /^\/roles\/([^/]+)$/, handler: rolesId, params: ['id'] },

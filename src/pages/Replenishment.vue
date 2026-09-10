@@ -131,23 +131,39 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editVisible" title="编辑补货单" width="620px" destroy-on-close>
+    <el-dialog v-model="editVisible" title="编辑补货单" width="760px" destroy-on-close>
       <el-form :model="editForm" label-width="100px">
-        <el-form-item label="产品" required>
-          <el-select v-model="editForm.product_id" filterable placeholder="选择产品" style="width: 100%">
-            <el-option v-for="p in products" :key="p.id" :label="`${p.code || p.sku} - ${p.name}`" :value="p.id" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="仓库" required>
           <el-select v-model="editForm.warehouse_id" placeholder="选择仓库" style="width: 100%">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="补货数量" required>
-          <el-input-number v-model="editForm.quantity" :min="1" :precision="0" style="width: 100%" />
-        </el-form-item>
         <el-form-item label="补货时间">
           <el-date-picker v-model="editForm.replenishment_time" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="补货明细" required>
+          <div style="width: 100%">
+            <el-table :data="editForm.items" border size="small" style="width: 100%">
+              <el-table-column label="产品" min-width="260">
+                <template #default="{ row }">
+                  <el-select v-model="row.product_id" filterable placeholder="选择产品" style="width: 100%">
+                    <el-option v-for="p in products" :key="p.id" :label="`${p.code || p.sku} - ${p.name}`" :value="p.id" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="补货数量" width="160">
+                <template #default="{ row }">
+                  <el-input-number v-model="row.quantity" :min="1" :precision="0" style="width: 100%" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" align="center">
+                <template #default="{ $index }">
+                  <el-button link type="danger" :disabled="editForm.items.length <= 1" @click="removeEditItem($index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button link type="primary" style="margin-top: 8px" @click="addEditItem">+ 添加明细</el-button>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -189,8 +205,8 @@ const statusMap: Record<string, { label: string; type: string }> = {
 function statusLabel(s: string) {
   return statusMap[s]?.label || s
 }
-function statusType(s: string) {
-  return statusMap[s]?.type || 'info'
+function statusType(s: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
+  return (statusMap[s]?.type || 'info') as 'primary' | 'success' | 'info' | 'warning' | 'danger'
 }
 function formatDate(v: string) {
   return sysFormatDateTime(v)
@@ -317,35 +333,56 @@ async function save() {
 const editVisible = ref(false)
 const editForm = reactive({
   id: '',
-  product_id: '',
   warehouse_id: '',
-  quantity: 1,
   replenishment_time: '',
+  items: [] as { product_id: string; quantity: number }[],
 })
 
 function openEdit(row: any) {
   const items = orderItems(row)
-  const first = items[0]
   editForm.id = row.id
-  editForm.product_id = first?.product_id ?? ''
   editForm.warehouse_id = row.warehouse_id ?? ''
-  editForm.quantity = Number(first?.quantity ?? row.replenish_qty ?? 1)
   editForm.replenishment_time = row.replenishment_time || ''
+  // 回填该单全部明细（后端 PATCH 为整单明细删除重建，只提交首条会导致其余明细丢失）
+  editForm.items = items.length
+    ? items.map((it: any) => ({
+        product_id: it.product_id,
+        quantity: Number(it.quantity) || 1,
+      }))
+    : [{ product_id: '', quantity: Number(row.replenish_qty) || 1 }]
   editVisible.value = true
 }
 
+function addEditItem() {
+  editForm.items.push({ product_id: '', quantity: 1 })
+}
+
+function removeEditItem(index: number) {
+  if (editForm.items.length <= 1) return
+  editForm.items.splice(index, 1)
+}
+
 async function saveEdit() {
-  if (!editForm.id || !editForm.product_id || !editForm.warehouse_id) {
-    ElMessage.warning('请选择产品和仓库')
+  if (!editForm.id || !editForm.warehouse_id) {
+    ElMessage.warning('请选择仓库')
     return
   }
+  if (!editForm.items.length || editForm.items.some((it) => !it.product_id)) {
+    ElMessage.warning('请为每条明细选择产品')
+    return
+  }
+  const items = editForm.items.map((it) => ({
+    product_id: it.product_id,
+    quantity: Number(it.quantity),
+  }))
+  const totalQty = items.reduce((sum, it) => sum + it.quantity, 0)
   saving.value = true
   try {
     await api.patch(`/replenishment/${editForm.id}`, {
       warehouse_id: editForm.warehouse_id,
-      replenish_qty: editForm.quantity,
+      replenish_qty: totalQty,
       replenishment_time: editForm.replenishment_time || null,
-      items: [{ product_id: editForm.product_id, quantity: editForm.quantity }],
+      items,
     })
     ElMessage.success('已保存')
     editVisible.value = false
