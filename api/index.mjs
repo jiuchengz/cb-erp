@@ -107375,8 +107375,10 @@ var runSchema = external_exports.object({
 });
 function isCronRequest(req) {
   const secret = process.env.CRON_SECRET || "";
-  const got = req.headers["x-cron-secret"] || "";
-  return !!secret && got === secret;
+  if (!secret) return false;
+  if ((req.headers["x-cron-secret"] || "") === secret) return true;
+  const auth = req.headers["authorization"] || "";
+  return auth === `Bearer ${secret}`;
 }
 async function runSnapshot(req, res) {
   const cron = isCronRequest(req);
@@ -107432,6 +107434,7 @@ async function handler56(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method === "POST") return await runSnapshot(req, res);
+    if (req.method === "GET" && isCronRequest(req)) return await runSnapshot(req, res);
     if (req.method !== "GET") {
       return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "\u4EC5\u652F\u6301 GET / POST" } });
     }

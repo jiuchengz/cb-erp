@@ -33,8 +33,12 @@ const runSchema = z.object({
 
 function isCronRequest(req: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET || '';
-  const got = (req.headers['x-cron-secret'] as string) || '';
-  return !!secret && got === secret;
+  if (!secret) return false;
+  // 自定义头（库内调度 / 手工触发）
+  if (((req.headers['x-cron-secret'] as string) || '') === secret) return true;
+  // Vercel Cron 注入：Authorization: Bearer <CRON_SECRET>
+  const auth = (req.headers['authorization'] as string) || '';
+  return auth === `Bearer ${secret}`;
 }
 
 async function runSnapshot(req: VercelRequest, res: VercelResponse) {
@@ -106,6 +110,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
 
     if (req.method === 'POST') return await runSnapshot(req, res);
+
+    // Vercel Cron 以 GET 调用：带 CRON_SECRET 认证的 GET 视为触发生成快照
+    if (req.method === 'GET' && isCronRequest(req)) return await runSnapshot(req, res);
 
     if (req.method !== 'GET') {
       return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: '仅支持 GET / POST' } });

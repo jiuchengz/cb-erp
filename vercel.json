@@ -1,6 +1,12 @@
 {
   "buildCommand": "npm run build && npm run build:api",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/replenishment/snapshots",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
