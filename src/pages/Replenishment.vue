@@ -14,17 +14,22 @@
       </div>
     </div>
 
-    <el-card v-if="canRead" shadow="never" class="unarrived-card">
+    <el-card v-if="canRead" shadow="never" class="unarrived-card" :class="{ 'is-collapsed': !statsExpanded }">
       <template #header>
-        <div class="unarrived-header">
+        <div class="unarrived-header" @click="statsExpanded = !statsExpanded">
           <span class="unarrived-title">未到货统计</span>
           <div class="unarrived-header-right">
+            <span class="unarrived-total">未到货总数 <b>{{ fmtNum(unarrived.today.total_qty) }}</b> 件</span>
             <span class="unarrived-hint">{{ unarrivedScopeText }}</span>
-            <el-button link type="primary" :loading="statsLoading" @click="loadStats">刷新</el-button>
+            <el-button link type="primary" :loading="statsLoading" @click.stop="loadStats">刷新</el-button>
+            <el-button link type="primary" @click.stop="statsExpanded = !statsExpanded">
+              {{ statsExpanded ? '收起' : '展开' }}
+            </el-button>
           </div>
         </div>
       </template>
 
+      <template v-if="statsExpanded">
       <!-- 卡片汇总 -->
       <div class="unarrived-kpis" v-loading="statsLoading">
         <div class="unarrived-kpi">
@@ -122,6 +127,7 @@
           <template v-if="unarrived.generated_at"> · 生成于 {{ formatDate(unarrived.generated_at) }}</template>
         </div>
       </div>
+      </template>
     </el-card>
 
     <div class="filters">
@@ -733,6 +739,8 @@ const TREND_H = 150
 const TREND_DAYS = 30
 
 const statsLoading = ref(false)
+// 区块展开状态：默认收起，仅显示标题与未到货总数，点击后展开汇总/明细/趋势
+const statsExpanded = ref(false)
 const unarrived = reactive({
   timezone: '',
   generated_at: '',
@@ -904,6 +912,8 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  user-select: none;
 }
 .unarrived-title {
   font-weight: 600;
@@ -912,6 +922,22 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.unarrived-total {
+  font-size: 13px;
+  color: var(--el-text-color-regular, #606266);
+}
+.unarrived-total b {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-color-danger, #f56c6c);
+}
+/* 收起态：仅保留标题行，隐藏卡片内容区与头部下边框 */
+.unarrived-card.is-collapsed :deep(.el-card__body) {
+  display: none;
+}
+.unarrived-card.is-collapsed :deep(.el-card__header) {
+  border-bottom: none;
 }
 .unarrived-hint {
   font-size: 12px;
