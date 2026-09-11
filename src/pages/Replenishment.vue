@@ -14,6 +14,116 @@
       </div>
     </div>
 
+    <el-card v-if="canRead" shadow="never" class="unarrived-card">
+      <template #header>
+        <div class="unarrived-header">
+          <span class="unarrived-title">未到货统计</span>
+          <div class="unarrived-header-right">
+            <span class="unarrived-hint">{{ unarrivedScopeText }}</span>
+            <el-button link type="primary" :loading="statsLoading" @click="loadStats">刷新</el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 卡片汇总 -->
+      <div class="unarrived-kpis" v-loading="statsLoading">
+        <div class="unarrived-kpi">
+          <div class="kpi-label">未到货总数量</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.today.total_qty) }} <small>件</small></div>
+          <div class="kpi-sub">{{ unarrived.today.date || '-' }}</div>
+        </div>
+        <div class="unarrived-kpi">
+          <div class="kpi-label">涉及商品 SKU</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.today.sku_count) }} <small>个</small></div>
+          <div class="kpi-sub">同日按商品去重</div>
+        </div>
+        <div class="unarrived-kpi">
+          <div class="kpi-label">涉及补货单</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.today.order_count) }} <small>单</small></div>
+          <div class="kpi-sub">未匹配到货的采购中单据</div>
+        </div>
+        <div class="unarrived-kpi">
+          <div class="kpi-label">未到货单（全部日期）</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.unarrived_orders) }} <small>单</small></div>
+          <div class="kpi-sub">共扫描 {{ fmtNum(unarrived.scanned_orders) }} 单</div>
+        </div>
+      </div>
+
+      <!-- 明细表格 -->
+      <div class="unarrived-section">
+        <div class="unarrived-section-header">
+          <span class="unarrived-section-title">未到货明细</span>
+          <el-select v-model="unarrived.date" size="small" style="width: 200px" placeholder="选择统计日期">
+            <el-option
+              v-for="d in unarrivedDates"
+              :key="d.date"
+              :label="`${d.date}（${d.sku_count} SKU / ${d.total_qty} 件）`"
+              :value="d.date"
+            />
+          </el-select>
+        </div>
+        <el-table
+          :resizable="false"
+          v-loading="statsLoading"
+          :data="unarrivedItems"
+          border
+          stripe
+          size="small"
+          max-height="320"
+          empty-text="该日期暂无未到货商品"
+        >
+          <el-table-column label="产品条码" min-width="140">
+            <template #default="{ row }">{{ row.code || row.sku || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="名称" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.name || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="未到货数量" width="120" align="right">
+            <template #default="{ row }">{{ fmtNum(row.quantity) }}</template>
+          </el-table-column>
+          <el-table-column label="明细条数" width="100" align="right">
+            <template #default="{ row }">{{ row.item_count }}</template>
+          </el-table-column>
+          <el-table-column label="涉及仓库" min-width="180">
+            <template #default="{ row }">{{ (row.warehouse_ids || []).map(warehouseName).join('、') || '-' }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <!-- 趋势图 -->
+      <div class="unarrived-section">
+        <div class="unarrived-section-header">
+          <span class="unarrived-section-title">未到货趋势</span>
+          <span class="unarrived-hint">最近 {{ unarrivedTrend.length }} 个统计日 · 折线各自按自身峰值缩放</span>
+        </div>
+        <div class="unarrived-trend" v-loading="statsLoading">
+          <svg v-if="unarrivedTrend.length" :viewBox="`0 0 ${TREND_W} ${TREND_H}`" preserveAspectRatio="none">
+            <line
+              v-for="(yv, xi) in unarrivedYLines"
+              :key="'uy' + xi"
+              :x1="0"
+              :y1="yv"
+              :x2="TREND_W"
+              :y2="yv"
+              stroke="#ebeef5"
+              stroke-width="1"
+            />
+            <polyline :points="qtyPoints" fill="none" stroke="#f56c6c" stroke-width="2" />
+            <polyline :points="skuPoints" fill="none" stroke="#409eff" stroke-width="2" />
+          </svg>
+          <el-empty v-else description="暂无未到货数据" :image-size="60" />
+        </div>
+        <div class="unarrived-legend" v-if="unarrivedTrend.length">
+          <span><i style="background:#f56c6c"></i>未到货数量</span>
+          <span><i style="background:#409eff"></i>涉及 SKU 数</span>
+        </div>
+        <div class="unarrived-footnote">
+          数据口径：{{ unarrived.criteriaText || '-' }}
+          <template v-if="unarrived.generated_at"> · 生成于 {{ formatDate(unarrived.generated_at) }}</template>
+        </div>
+      </div>
+    </el-card>
+
     <div class="filters">
       <el-select v-model="query.status" placeholder="状态" clearable style="width: 160px" @change="load">
         <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
@@ -185,6 +295,8 @@ import { downloadTemplate, readExcelFile, buildColMap, cellStr, cellNum, cellDat
 
 const auth = useAuthStore()
 const canWrite = computed(() => auth.hasPermission('replenishment.write'))
+// 未到货统计区块可见性：跟随登录账号权限（replenishment.read）
+const canRead = computed(() => auth.hasPermission('replenishment.read'))
 
 const statusOptions = [
   { label: '采购中', value: 'PROCESSING' },
@@ -237,8 +349,10 @@ function onSizeChange() {
 
 const products = ref<any[]>([])
 const warehouses = ref<any[]>([])
+// 全部仓库 id -> name 映射（未到货统计明细的仓库展示用，不受 domestic 下拉过滤影响）
+const warehouseMap = ref<Record<string, string>>({})
 function warehouseName(id: string) {
-  return warehouses.value.find((w) => w.id === id)?.name || id
+  return warehouseMap.value[id] || warehouses.value.find((w) => w.id === id)?.name || id
 }
 
 function orderItems(row: any): any[] {
@@ -612,9 +726,118 @@ async function batchRemove() {
   load()
 }
 
+// ===== 未到货统计区块（数据源：GET /api/replenishment/stats，字段以服务端 stats.ts 为准）=====
+const TREND_W = 720
+const TREND_H = 150
+// 趋势图最多展示的统计日数量（超出取最近 N 天）
+const TREND_DAYS = 30
+
+const statsLoading = ref(false)
+const unarrived = reactive({
+  timezone: '',
+  generated_at: '',
+  // 服务端口径说明（criteria.grouping）
+  criteriaText: '',
+  today_date: '',
+  today: { date: '', order_count: 0, total_qty: 0, sku_count: 0 },
+  scanned_orders: 0,
+  unarrived_orders: 0,
+  orders_without_items: 0,
+  // 当前明细选中的统计日期
+  date: '',
+  // 服务端返回的分日分组（UnarrivedDateGroup[]）
+  dates: [] as any[],
+})
+
+// 仓库可见范围提示：非全量账号由服务端按 warehouseIds 行级隔离
+const unarrivedScopeText = computed(() =>
+  auth.hasFullWarehouseAccess() ? '全部仓库' : '仅统计当前账号可见仓库'
+)
+
+const unarrivedDates = computed(() =>
+  (unarrived.dates || []).map((d: any) => ({ date: d.date, total_qty: d.total_qty, sku_count: d.sku_count }))
+)
+
+const unarrivedItems = computed(() => {
+  const g = unarrived.dates.find((d: any) => d.date === unarrived.date)
+  return g?.items || []
+})
+
+// 趋势图数据：按日期升序取最近 TREND_DAYS 天
+const unarrivedTrend = computed(() =>
+  [...(unarrived.dates || [])]
+    .sort((a: any, b: any) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .slice(-TREND_DAYS)
+)
+
+const unarrivedYLines = computed(() => {
+  const arr: number[] = []
+  for (let i = 0; i <= 4; i++) arr.push((TREND_H / 5) * i + 8)
+  return arr
+})
+
+function trendPoints(key: string, max: number): string {
+  const t = unarrivedTrend.value
+  if (!t.length) return ''
+  const step = t.length > 1 ? TREND_W / (t.length - 1) : TREND_W
+  return t
+    .map((x: any, i: number) => {
+      const px = t.length > 1 ? i * step : TREND_W / 2
+      const py = TREND_H - 6 - ((Number(x[key]) || 0) / max) * (TREND_H - 24)
+      return `${px.toFixed(1)},${py.toFixed(1)}`
+    })
+    .join(' ')
+}
+
+const qtyPoints = computed(() =>
+  trendPoints('total_qty', Math.max(1, ...unarrivedTrend.value.map((x: any) => Number(x.total_qty) || 0)))
+)
+const skuPoints = computed(() =>
+  trendPoints('sku_count', Math.max(1, ...unarrivedTrend.value.map((x: any) => Number(x.sku_count) || 0)))
+)
+
+function fmtNum(v: any): string {
+  const n = Number(v ?? 0)
+  return Number.isFinite(n) ? n.toLocaleString('zh-CN') : '0'
+}
+
+async function loadStats() {
+  if (!canRead.value) return
+  statsLoading.value = true
+  try {
+    const { data } = await api.get('/replenishment/stats')
+    const d = data?.data ?? {}
+    unarrived.timezone = d.timezone || ''
+    unarrived.generated_at = d.generated_at || ''
+    unarrived.criteriaText = d.criteria?.grouping || ''
+    unarrived.today_date = d.today_date || ''
+    unarrived.today = {
+      date: d.today?.date || d.today_date || '',
+      order_count: Number(d.today?.order_count) || 0,
+      total_qty: Number(d.today?.total_qty) || 0,
+      sku_count: Number(d.today?.sku_count) || 0,
+    }
+    unarrived.scanned_orders = Number(d.scanned_orders) || 0
+    unarrived.unarrived_orders = Number(d.unarrived_orders) || 0
+    unarrived.orders_without_items = Number(d.orders_without_items) || 0
+    unarrived.dates = Array.isArray(d.dates) ? d.dates : []
+    // 保留已选日期；若该日期已不在返回列表中，回落到 today_date，其次最新一天
+    const exists = unarrived.dates.some((x: any) => x.date === unarrived.date)
+    if (!exists) {
+      const hasToday = unarrived.dates.some((x: any) => x.date === unarrived.today_date)
+      unarrived.date = hasToday ? unarrived.today_date : unarrived.dates[0]?.date || ''
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '未到货统计加载失败')
+  } finally {
+    statsLoading.value = false
+  }
+}
+
 onMounted(() => {
   load()
   loadOptions()
+  loadStats()
 })
 </script>
 
@@ -670,5 +893,103 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===== 未到货统计区块 ===== */
+.unarrived-card {
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.unarrived-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.unarrived-title {
+  font-weight: 600;
+}
+.unarrived-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.unarrived-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+}
+.unarrived-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.unarrived-kpi {
+  background: var(--el-fill-color-light, #f5f7fa);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.kpi-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary, #909399);
+}
+.kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--el-text-color-primary, #303133);
+}
+.kpi-value small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-text-color-secondary, #909399);
+}
+.kpi-sub {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+}
+.unarrived-section {
+  margin-top: 16px;
+}
+.unarrived-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.unarrived-section-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.unarrived-trend {
+  height: 160px;
+}
+.unarrived-trend svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.unarrived-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+  margin-top: 8px;
+}
+.unarrived-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+.unarrived-footnote {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+}
+@media (max-width: 900px) {
+  .unarrived-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>
