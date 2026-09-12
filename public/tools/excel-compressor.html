@@ -331,6 +331,27 @@
     </table>
     <div class="sub" style="margin-top:10px" id="detailText"></div>
   </div>
+
+  <!-- 装箱单解析与计算结果（口径与「空海运 & 装箱单计算」工具一致） -->
+  <div class="card" id="packingCard" style="display:none">
+    <h2 style="font-size:16px;margin:0 0 4px">装箱单计算结果<span class="badge">口径同「空海运 &amp; 装箱单计算」</span></h2>
+    <div class="sub" id="pkSource" style="margin-bottom:6px"></div>
+    <div class="row" id="pkRates">
+      <div class="field">
+        <label>空运单价（¥/kg）</label>
+        <input type="number" id="pkAirRate" step="any" value="95">
+      </div>
+      <div class="field">
+        <label>体积重除数</label>
+        <input type="number" id="pkVolDiv" step="any" min="1" value="6000">
+      </div>
+      <div class="field">
+        <label>海运单价（¥/m³）</label>
+        <input type="number" id="pkSeaRate" step="any" value="3400">
+      </div>
+    </div>
+    <div id="pkBody"></div>
+  </div>
 </div>
 
 <!-- 依赖库：JSZip(通用 zip) / pako(UPNG 依赖) / CFB(OLE 复合文档，处理 .xls) / UPNG(PNG 量化压缩)。首次使用需联网加载，成功后浏览器会缓存，之后可离线重复使用 -->
@@ -1185,6 +1206,815 @@ UPNG.encode.alphaMul = function(img, roundA) {
 </script>
 
 <script>
+/* ==========================================================================
+   装箱单（货箱尺寸 / 重量）解析与计算模块      PACKING-MODULE-BEGIN
+   口径基准：public/tools/airsea-packing.html（「空海运 & 装箱单计算」工具）
+   —— 公式、取数规则、单位（kg / cm）、小数截断方式（向下截断，不四舍五入）
+      与结果文案均照搬 airsea-packing.html，未新增任何公式。
+   纯本地处理，不上传服务器、不引入外部依赖：
+   - .xlsx/.xlsm/.xltx/.xltm：复用页面内嵌 JSZip + DOMParser 读取工作表
+   - .xls（Excel 97-2003 / WPS BIFF8）：复用页面内嵌 CFB 读取 BIFF 记录
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  var PL_EXT = ['xls', 'xlsx', 'xlsm', 'xltx', 'xltm'];
+  var DEFAULT_RATES = { airRate: 95, volDiv: 6000, seaRate: 3400 };  /* 与 airsea 默认值一致 */
+
+  /* ============ 0. 与 airsea-packing.html 完全一致的截断函数 ============ */
+  /* 按指定小数位向下截断（不四舍五入） */
+  function truncate(num, decimals) {
+    if (typeof num !== 'number' || !isFinite(num)) return num;
+    var factor = Math.pow(10, decimals === undefined ? 2 : decimals);
+    return Math.floor(num * factor) / factor;
+  }
+
+  /* ============ 1. 工作簿 -> AOA（二维数组） ============ */
+  function byLocal(root, name) {
+    var out = [], all = root.getElementsByTagName('*');
+    for (var i = 0; i < all.length; i++) {
+      var ln = all[i].localName || all[i].nodeName || '';
+      if (ln === name) out.push(all[i]);
+    }
+    return out;
+  }
+  function xmlDoc(str) { return new DOMParser().parseFromString(str, 'application/xml'); }
+  function elemText(el) {
+    var ts = byLocal(el, 't'), out = '';
+    for (var i = 0; i < ts.length; i++) out += (ts[i].textContent || '');
+    return out;
+  }
+  function colIdxOfRef(ref) {
+    var m = /^\$?([A-Za-z]+)/.exec(String(ref || ''));
+    if (!m) return -1;
+    var s = m[1].toUpperCase(), n = 0;
+    for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  /* 1.1 OOXML 单表 -> AOA */
+  function ooxmlSheetAoa(xml, sst) {
+    var doc = xmlDoc(xml), rowEls = byLocal(doc, 'row'), aoa = [];
+    for (var i = 0; i < rowEls.length; i++) {
+      var rowEl = rowEls[i];
+      var rIdx = parseInt(rowEl.getAttribute('r'), 10);
+      if (!isFinite(rIdx) || rIdx < 1) rIdx = aoa.length + 1;
+      var arr = [], kids = rowEl.childNodes;
+      for (var k = 0; k < kids.length; k++) {
+        var cel = kids[k];
+        var ln = cel.localName || cel.nodeName;
+        if (ln !== 'c') continue;
+        var ci = colIdxOfRef(cel.getAttribute('r'));
+        if (ci < 0) ci = arr.length;
+        var t = cel.getAttribute('t') || '', val = '';
+        if (t === 'inlineStr') {
+          var isEl = null, cc = cel.childNodes;
+          for (var x = 0; x < cc.length; x++) {
+            var ln2 = cc[x].localName || cc[x].nodeName;
+            if (ln2 === 'is') isEl = cc[x];
+          }
+          val = isEl ? elemText(isEl) : '';
+        } else {
+          var vEl = null, cc2 = cel.childNodes;
+          for (var y = 0; y < cc2.length; y++) {
+            var ln3 = cc2[y].localName || cc2[y].nodeName;
+            if (ln3 === 'v') vEl = cc2[y];
+          }
+          var raw = vEl ? (vEl.textContent || '') : '';
+          if (t === 's') {
+            var si = parseInt(raw, 10);
+            val = (sst && sst[si] !== undefined) ? sst[si] : '';
+          } else if (t === 'b') {
+            val = (raw === '1') ? 'TRUE' : 'FALSE';
+          } else if (t === 'e') {
+            val = '';
+          } else {
+            val = raw;
+          }
+        }
+        while (arr.length < ci) arr.push('');
+        arr[ci] = val;
+      }
+      while (aoa.length < rIdx - 1) aoa.push([]);
+      aoa[rIdx - 1] = arr;
+    }
+    return aoa;
+  }
+
+  function ooxmlSharedStrings(xml) {
+    var doc = xmlDoc(xml), sis = byLocal(doc, 'si'), out = [];
+    for (var i = 0; i < sis.length; i++) out.push(elemText(sis[i]));
+    return out;
+  }
+
+  /* 1.2 OOXML 工作表清单（名称 + 路径） */
+  function ooxmlSheets(zip) {
+    var wbFile = zip.file('xl/workbook.xml');
+    var relFile = zip.file('xl/_rels/workbook.xml.rels');
+    var pWb = wbFile ? wbFile.async('string') : Promise.resolve('');
+    var pRel = relFile ? relFile.async('string') : Promise.resolve('');
+    return Promise.all([pWb, pRel]).then(function (res) {
+      var rels = {}, list = [];
+      if (res[1]) {
+        var rEls = byLocal(xmlDoc(res[1]), 'Relationship');
+        for (var i = 0; i < rEls.length; i++) {
+          var id = rEls[i].getAttribute('Id'), tg = rEls[i].getAttribute('Target') || '';
+          if (id) rels[id] = tg;
+        }
+      }
+      var shs = res[0] ? byLocal(xmlDoc(res[0]), 'sheet') : [];
+      for (var j = 0; j < shs.length; j++) {
+        var nm = shs[j].getAttribute('name') || ('Sheet' + (j + 1));
+        var rid = shs[j].getAttribute('r:id') || shs[j].getAttribute('id') || '';
+        var tg2 = String(rels[rid] || ('worksheets/sheet' + (j + 1) + '.xml'))
+          .replace(/^\/+/, '').replace(/^xl\//i, '');
+        list.push({ name: nm, path: 'xl/' + tg2 });
+      }
+      if (!list.length) {
+        var names = [];
+        zip.forEach(function (rel, ze) { if (!ze.dir && /^xl\/worksheets\/[^\/]+\.xml$/i.test(rel)) names.push(rel); });
+        names.sort(function (a, b) {
+          var ma = /(\d+)/.exec(a), mb = /(\d+)/.exec(b);
+          return (ma ? +ma[1] : 0) - (mb ? +mb[1] : 0);
+        });
+        for (var w = 0; w < names.length; w++) list.push({ name: 'Sheet' + (w + 1), path: names[w] });
+      }
+      return list;
+    });
+  }
+
+  function unpackOoxml(u8) {
+    return JSZip.loadAsync(u8).then(function (zip) {
+      var ssFile = zip.file('xl/sharedStrings.xml');
+      var pSs = ssFile ? ssFile.async('string') : Promise.resolve('');
+      return Promise.all([ooxmlSheets(zip), pSs]).then(function (res) {
+        var list = res[0], sst = res[1] ? ooxmlSharedStrings(res[1]) : [];
+        var out = [], seq = Promise.resolve();
+        list.forEach(function (item) {
+          seq = seq.then(function () {
+            var f = zip.file(item.path);
+            if (!f) return null;
+            return f.async('string').then(function (xml) {
+              out.push({ name: item.name, aoa: ooxmlSheetAoa(xml, sst) });
+            });
+          });
+        });
+        return seq.then(function () { return out; });
+      });
+    });
+  }
+
+  /* 1.3 BIFF8（.xls）—— 记录级解析，取单元格文本/数值 */
+  function biffRk(rk) {
+    var f100 = (rk & 0x01) !== 0, fInt = (rk & 0x02) !== 0, num;
+    if (fInt) {
+      num = (rk | 0) >> 2;
+    } else {
+      var ab = new ArrayBuffer(8), dv = new DataView(ab);
+      dv.setUint32(0, 0, true);
+      dv.setUint32(4, (rk & 0xFFFFFFFC) >>> 0, true);
+      num = dv.getFloat64(0, true);
+    }
+    return f100 ? num / 100 : num;
+  }
+
+  function biffParseSst(chunks) {
+    function R(c) { this.c = c; this.i = 0; this.p = 0; }
+    R.prototype.u8 = function () {
+      if (this.i >= this.c.length) return -1;
+      if (this.p >= this.c[this.i].length) return -1;
+      return this.c[this.i][this.p++];
+    };
+    R.prototype.u16 = function () { var a = this.u8(), b = this.u8(); return (a < 0 || b < 0) ? -1 : (a | (b << 8)); };
+    R.prototype.u32 = function () { var a = this.u16(), b = this.u16(); return (a < 0 || b < 0) ? -1 : ((a | (b << 16)) >>> 0); };
+    R.prototype.skip = function (n) {
+      while (n > 0 && this.i < this.c.length) {
+        var avail = this.c[this.i].length - this.p;
+        if (n <= avail) { this.p += n; return true; }
+        n -= avail; this.i++; this.p = 0;
+      }
+      return n === 0;
+    };
+    var rd = new R(chunks);
+    var total = rd.u32(), unique = rd.u32();
+    var out = [];
+    if (unique < 0) return out;
+    for (var s = 0; s < unique; s++) {
+      var cch = rd.u16();
+      if (cch < 0) break;
+      var gb = rd.u8();
+      if (gb < 0) break;
+      var high = (gb & 0x01) !== 0;
+      var rich = (gb & 0x08) !== 0, ext = (gb & 0x04) !== 0;
+      var cRun = 0, cbExt = 0;
+      if (rich) cRun = rd.u16();
+      if (ext) cbExt = rd.u32();
+      var str = '', k = 0;
+      while (k < cch) {
+        if (rd.i >= rd.c.length) break;
+        if (rd.p >= rd.c[rd.i].length) {
+          /* 字符数据被 CONTINUE 截断：下一段首字节是新的选项字节 */
+          rd.i++; rd.p = 0;
+          if (rd.i >= rd.c.length) break;
+          high = (rd.c[rd.i][0] & 0x01) !== 0;
+          rd.p = 1;
+          continue;
+        }
+        var seg = rd.c[rd.i], avail = seg.length - rd.p;
+        if (high) {
+          var can = Math.min(cch - k, Math.floor(avail / 2));
+          if (can <= 0) { rd.p = seg.length; continue; }
+          for (var t1 = 0; t1 < can; t1++) {
+            str += String.fromCharCode(seg[rd.p] | (seg[rd.p + 1] << 8));
+            rd.p += 2;
+          }
+          k += can;
+        } else {
+          var can2 = Math.min(cch - k, avail);
+          if (can2 <= 0) { rd.p = seg.length; continue; }
+          for (var t2 = 0; t2 < can2; t2++) str += String.fromCharCode(seg[rd.p++]);
+          k += can2;
+        }
+      }
+      if (cRun > 0) rd.skip(cRun * 4);
+      if (cbExt > 0) rd.skip(cbExt);
+      out.push(str);
+    }
+    return out;
+  }
+
+  function biffSheets(u8) {
+    var buf = u8, p = 0, recs = [];
+    while (p + 4 <= buf.length) {
+      var id = buf[p] | (buf[p + 1] << 8);
+      var len = buf[p + 2] | (buf[p + 3] << 8);
+      recs.push({ id: id, off: p + 4, len: len });
+      p += 4 + len;
+    }
+    var names = [], sheets = [], cur = -1, sst = [], chunks = null, pending = null;
+
+    function put(sheet, row, col, val) {
+      var r = sheet.cells[row] || (sheet.cells[row] = {});
+      r[col] = val;
+    }
+
+    for (var i = 0; i < recs.length; i++) {
+      var r = recs[i], o = r.off, n = r.len;
+      /* SST 及其 CONTINUE */
+      if (r.id === 0x00FC) { chunks = [buf.subarray(o, o + n)]; continue; }
+      if (r.id === 0x003C) { if (chunks) chunks.push(buf.subarray(o, o + n)); continue; }
+      if (chunks) { sst = biffParseSst(chunks); chunks = null; }
+
+      if (r.id === 0x0085) {            /* BOUNDSHEET：工作表名（按顺序） */
+        var cch = buf[o + 6], flags = buf[o + 7], nm = '';
+        if (flags & 0x01) {
+          for (var a = 0; a < cch; a++) nm += String.fromCharCode(buf[o + 8 + a * 2] | (buf[o + 9 + a * 2] << 8));
+        } else {
+          for (var b2 = 0; b2 < cch; b2++) nm += String.fromCharCode(buf[o + 8 + b2]);
+        }
+        names.push(nm);
+        continue;
+      }
+      if (r.id === 0x0809) {            /* BOF：进入工作表子流 / 全局区 */
+        var dt = buf[o + 2] | (buf[o + 3] << 8);
+        if (dt === 0x0010) {
+          cur = sheets.length;
+          sheets.push({ name: names[cur] || ('Sheet' + (cur + 1)), cells: {} });
+        } else {
+          cur = -1;
+        }
+        continue;
+      }
+      var sheet = cur >= 0 ? sheets[cur] : null;
+      if (!sheet) continue;
+
+      var row = 0, col = 0;
+      if (r.id === 0x00FD) {            /* LABELSST */
+        row = buf[o] | (buf[o + 1] << 8); col = buf[o + 2] | (buf[o + 3] << 8);
+        var isst = (buf[o + 6] | (buf[o + 7] << 8) | (buf[o + 8] << 16) | (buf[o + 9] << 24)) >>> 0;
+        put(sheet, row, col, sst[isst] === undefined ? '' : sst[isst]);
+      } else if (r.id === 0x0204) {     /* LABEL（直接字符串） */
+        row = buf[o] | (buf[o + 1] << 8); col = buf[o + 2] | (buf[o + 3] << 8);
+        var cch2 = buf[o + 6] | (buf[o + 7] << 8), fl = buf[o + 8], sv = '';
+        if (fl & 0x01) {
+          for (var q = 0; q < cch2; q++) sv += String.fromCharCode(buf[o + 9 + q * 2] | (buf[o + 10 + q * 2] << 8));
+        } else {
+          for (var q2 = 0; q2 < cch2; q2++) sv += String.fromCharCode(buf[o + 9 + q2]);
+        }
+        put(sheet, row, col, sv);
+      } else if (r.id === 0x0203) {     /* NUMBER */
+        row = buf[o] | (buf[o + 1] << 8); col = buf[o + 2] | (buf[o + 3] << 8);
+        put(sheet, row, col, new DataView(buf.buffer, buf.byteOffset + o + 6, 8).getFloat64(0, true));
+      } else if (r.id === 0x027E) {     /* RK */
+        row = buf[o] | (buf[o + 1] << 8); col = buf[o + 2] | (buf[o + 3] << 8);
+        var rk = (buf[o + 6] | (buf[o + 7] << 8) | (buf[o + 8] << 16) | (buf[o + 9] << 24)) >>> 0;
+        put(sheet, row, col, biffRk(rk));
+      } else if (r.id === 0x00BD) {     /* MULRK */
+        row = buf[o] | (buf[o + 1] << 8);
+        var cf = buf[o + 2] | (buf[o + 3] << 8);
+        var cnt = Math.floor((n - 6) / 6);
+        for (var m = 0; m < cnt; m++) {
+          var base = o + 4 + m * 6;
+          var rk2 = (buf[base + 2] | (buf[base + 3] << 8) | (buf[base + 4] << 16) | (buf[base + 5] << 24)) >>> 0;
+          put(sheet, row, cf + m, biffRk(rk2));
+        }
+      } else if (r.id === 0x0006) {     /* FORMULA（取缓存结果） */
+        row = buf[o] | (buf[o + 1] << 8); col = buf[o + 2] | (buf[o + 3] << 8);
+        if (buf[o + 12] === 0xFF && buf[o + 13] === 0xFF) {
+          if (buf[o + 6] === 0x00) pending = { sheet: sheet, row: row, col: col };
+          else if (buf[o + 6] === 0x01) put(sheet, row, col, buf[o + 7] ? 'TRUE' : 'FALSE');
+        } else {
+          put(sheet, row, col, new DataView(buf.buffer, buf.byteOffset + o + 6, 8).getFloat64(0, true));
+        }
+      } else if (r.id === 0x0207) {     /* STRING（上一条公式的字符串结果） */
+        if (pending) {
+          var cch3 = buf[o] | (buf[o + 1] << 8), fl3 = buf[o + 2], sv3 = '';
+          if (fl3 & 0x01) {
+            for (var z = 0; z < cch3; z++) sv3 += String.fromCharCode(buf[o + 3 + z * 2] | (buf[o + 4 + z * 2] << 8));
+          } else {
+            for (var z2 = 0; z2 < cch3; z2++) sv3 += String.fromCharCode(buf[o + 3 + z2]);
+          }
+          put(pending.sheet, pending.row, pending.col, sv3);
+          pending = null;
+        }
+      }
+    }
+    if (chunks) sst = biffParseSst(chunks);
+
+    /* cells -> AOA */
+    return sheets.map(function (sh) {
+      var rows = [], keys = Object.keys(sh.cells);
+      for (var i2 = 0; i2 < keys.length; i2++) {
+        var ri = parseInt(keys[i2], 10), cells = sh.cells[keys[i2]];
+        var aoa = rows[ri] || (rows[ri] = []);
+        for (var k2 in cells) {
+          if (!Object.prototype.hasOwnProperty.call(cells, k2)) continue;
+          var ci2 = parseInt(k2, 10);
+          while (aoa.length < ci2) aoa.push('');
+          aoa[ci2] = cells[k2];
+        }
+      }
+      var out = [];
+      for (var r2 = 0; r2 < rows.length; r2++) out.push(rows[r2] || []);
+      return { name: sh.name, aoa: out };
+    });
+  }
+
+  /* .xls 为 OLE 复合文档，真正的 BIFF 记录流位于 Workbook（BIFF8）/ Book（BIFF5）流中；
+     先用页面内嵌的 CFB 库取出该流，取出失败时退回按裸记录流解析（兼容非 OLE 封装的文件） */
+  function oleWorkbookStream(u8) {
+    try {
+      var lib = (typeof CFB !== 'undefined' && CFB && CFB.read) ? CFB : (typeof window !== 'undefined' && window.CFB) ? window.CFB : null;
+      if (!lib || !lib.read) return null;
+      var cfb = lib.read(u8, { type: 'uint8array' });
+      var e = lib.find(cfb, 'Workbook') || lib.find(cfb, 'Book') || lib.find(cfb, 'Book/Workbook');
+      if (!e || !e.content) return null;
+      var c = e.content;
+      if (c instanceof Uint8Array) return c;
+      if (typeof ArrayBuffer !== 'undefined' && c instanceof ArrayBuffer) return new Uint8Array(c);
+      if (c && typeof c.byteLength === 'number') return new Uint8Array(c);
+      if (c && typeof c.length === 'number') return new Uint8Array(c);   /* 部分 cfb 版本 content 为普通字节数组 */
+      return null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function unpackWorkbook(u8, ext) {
+    if (ext === 'xls') {
+      var stream = oleWorkbookStream(u8);
+      return Promise.resolve(biffSheets(stream || u8));
+    }
+    if (ext === 'xlsx' || ext === 'xlsm' || ext === 'xltx' || ext === 'xltm') return unpackOoxml(u8);
+    return Promise.resolve([]);
+  }
+
+  /* ============ 2. 装箱单表头 / 列识别 ============ */
+  var RE_NO = /货箱编号|外箱编号|箱号|carton\s*no|ctn\s*no|box\s*no/i;
+  var RE_WEIGHT = /毛重|净重|实重|重量|weight|\bn\.?w\b|\bg\.?w\b/i;
+  var RE_EXCL_WEIGHT = /体积重|材积重|volumetric|dim\s*weight/i;
+  var RE_AMBIG_DIM = /长宽高|尺寸|dimension/i;
+  var RE_UNIT_MM = /mm|毫米/i, RE_UNIT_CM = /cm|厘米|公分/i;
+  var RE_UNIT_IN = /inch|英寸|寸/i, RE_UNIT_M = /\(m\)|米|meter/i;
+  var RE_UNIT_LB = /lb|磅|pound/i, RE_UNIT_KG = /kg|公斤|千克|kilogram/i;
+  var RE_UNIT_G = /\(g\)|克\b|gram/i;
+  var RE_SUM_ROW = /^(合计|小计|总计|共计|total|总\s*计)/i;
+
+  function normHeader(s) {
+    return String(s == null ? '' : s)
+      .replace(/[\s\u3000]/g, '')
+      .replace(/\uFF08/g, '(').replace(/\uFF09/g, ')')
+      .replace(/[*＊]/g, '');
+  }
+  function roleOf(txt) {
+    if (!txt) return null;
+    if (RE_NO.test(txt)) return 'no';
+    if (RE_WEIGHT.test(txt) && !RE_EXCL_WEIGHT.test(txt)) return 'weight';
+    if (RE_AMBIG_DIM.test(txt)) return null;
+    var dims = 0;
+    if (/长/.test(txt)) dims++;
+    if (/宽/.test(txt)) dims++;
+    if (/高/.test(txt)) dims++;
+    if (dims !== 1) return null;
+    if (/长/.test(txt)) return 'length';
+    if (/宽/.test(txt)) return 'width';
+    return 'height';
+  }
+  function unitFactor(txt, kind) {
+    if (kind === 'weight') {
+      if (RE_UNIT_LB.test(txt)) return 0.45359237;
+      if (RE_UNIT_KG.test(txt)) return 1;
+      if (RE_UNIT_G.test(txt)) return 0.001;
+      return 1;
+    }
+    if (RE_UNIT_MM.test(txt)) return 0.1;
+    if (RE_UNIT_CM.test(txt)) return 1;
+    if (RE_UNIT_IN.test(txt)) return 2.54;
+    if (RE_UNIT_M.test(txt)) return 100;
+    return 1;
+  }
+  function unitLabel(txt, kind) {
+    var f = unitFactor(txt, kind);
+    if (kind === 'weight') return f === 1 ? 'kg' : (f === 0.001 ? 'g→kg' : 'lb→kg');
+    return f === 1 ? 'cm' : (f === 0.1 ? 'mm→cm' : (f === 2.54 ? 'inch→cm' : 'm→cm'));
+  }
+
+  function sheetPriority(name) {
+    return /出货|装箱单|装箱|packing|carton/i.test(String(name || '')) ? 0 : 1;
+  }
+
+  function findPackingTable(sheets) {
+    var order = sheets.map(function (s, i) { return i; }).sort(function (a, b) {
+      var pa = sheetPriority(sheets[a].name), pb = sheetPriority(sheets[b].name);
+      return pa === pb ? a - b : pa - pb;
+    });
+    var best = null;
+    for (var oi = 0; oi < order.length; oi++) {
+      var si = order[oi], aoa = sheets[si].aoa || [];
+      var limit = Math.min(aoa.length, 80);
+      for (var r = 0; r < limit; r++) {
+        var row = aoa[r] || [], cols = {}, score = 0;
+        for (var c = 0; c < row.length; c++) {
+          var raw = row[c];
+          if (raw === undefined || raw === null || raw === '') continue;
+          var txt = normHeader(raw);
+          if (!txt || txt.length > 24) continue;
+          var role = roleOf(txt);
+          if (!role || cols[role] !== undefined) continue;
+          cols[role] = c;
+          score++;
+        }
+        var ok = (score >= 5) || (score === 4 && cols.no === undefined);
+        if (!ok) continue;
+        var cand = { sheetIndex: si, sheetName: sheets[si].name, rowIndex: r, cols: cols, score: score };
+        if (!best || cand.score > best.score) best = cand;
+      }
+    }
+    return best;
+  }
+
+  /* ============ 3. 货箱编号展开 + 取数 ============ */
+  function toNum(v) {
+    if (typeof v === 'number') return isFinite(v) ? v : NaN;
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return NaN;
+    s = s.replace(/,/g, '');
+    var m = /-?\d+(\.\d+)?/.exec(s);
+    return m ? parseFloat(m[0]) : NaN;
+  }
+
+  /* 货箱编号 -> 箱序号数组：
+     ① 75838846U0001 / U0001 -> [1]（U 后数字即箱序号，U0001 为第一箱）
+     ② "7" -> [7]
+     ③ "3-4" -> [3,4]（区间行只填一组重/长/宽/高，代表区间内各箱相同）
+     ③' "U0003-U0004" 等带前缀区间同样展开（兼容写法）
+     ④ 多个编号用 , ， 、 ; / 分隔亦可 */
+  function expandBoxNo(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return null;
+    s = s.replace(/[\uFF10-\uFF19]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+      .replace(/[\u2010-\u2015\uFF0D\u301C\uFF5E~]/g, '-')
+      .replace(/\s+/g, '');
+    var parts = s.split(/[,，、;；\/]+/).filter(function (x) { return !!x; });
+    if (!parts.length) return null;
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i], m;
+      if ((m = /^(?:[A-Za-z]{0,8})?(\d{1,7})-(?:[A-Za-z]{0,8})?(\d{1,7})$/.exec(p))) {
+        var a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        if (!(a > 0) || b < a || (b - a) > 5000) return null;
+        for (var k = a; k <= b; k++) out.push(k);
+      } else if (/^\d{1,7}$/.test(p)) {
+        var n1 = parseInt(p, 10);
+        if (!(n1 > 0)) return null;
+        out.push(n1);
+      } else if ((m = /[A-Za-z](\d{1,7})$/.exec(p))) {
+        var n2 = parseInt(m[1], 10);
+        if (!(n2 > 0)) return null;
+        out.push(n2);
+      } else {
+        return null;
+      }
+    }
+    return out.length ? out : null;
+  }
+
+  function buildBoxes(sheets, table) {
+    var aoa = sheets[table.sheetIndex].aoa || [];
+    var cols = table.cols;
+    var headRow = aoa[table.rowIndex] || [];
+    var fw = cols.weight !== undefined ? unitFactor(normHeader(headRow[cols.weight]), 'weight') : 1;
+    var fd = cols.length !== undefined ? unitFactor(normHeader(headRow[cols.length]), 'dim') : 1;
+    var wLabel = cols.weight !== undefined ? unitLabel(normHeader(headRow[cols.weight]), 'weight') : 'kg';
+    var dLabel = cols.length !== undefined ? unitLabel(normHeader(headRow[cols.length]), 'dim') : 'cm';
+
+    var boxes = [], seen = {}, dupRows = 0, badRows = 0, rangeRows = 0, sumRows = 0, seqNo = 0;
+    var missing = [];
+    ['weight', 'length', 'width', 'height'].forEach(function (k) { if (cols[k] === undefined) missing.push(k); });
+
+    for (var r = table.rowIndex + 1; r < aoa.length; r++) {
+      var row = aoa[r] || [];
+      var noRaw = cols.no !== undefined ? row[cols.no] : undefined;
+      var wRaw = cols.weight !== undefined ? row[cols.weight] : undefined;
+      var lRaw = cols.length !== undefined ? row[cols.length] : undefined;
+      var wdRaw = cols.width !== undefined ? row[cols.width] : undefined;
+      var hRaw = cols.height !== undefined ? row[cols.height] : undefined;
+      var blanks = 0;
+      [noRaw, wRaw, lRaw, wdRaw, hRaw].forEach(function (x) {
+        if (x === undefined || x === null || String(x).trim() === '') blanks++;
+      });
+      if (blanks === 5) continue;
+      if (noRaw !== undefined && RE_SUM_ROW.test(String(noRaw).trim())) { sumRows++; continue; }
+
+      var ords;
+      if (cols.no !== undefined) {
+        ords = expandBoxNo(noRaw);
+        if (!ords) { badRows++; continue; }
+      } else {
+        seqNo++;
+        ords = [seqNo];
+      }
+      if (ords.length > 1) rangeRows++;
+
+      var w = toNum(wRaw) * fw, L = toNum(lRaw) * fd, W = toNum(wdRaw) * fd, H = toNum(hRaw) * fd;
+      if (!(w > 0) || !(L > 0) || !(W > 0) || !(H > 0)) { badRows++; continue; }
+
+      for (var q = 0; q < ords.length; q++) {
+        var ord = ords[q];
+        if (seen[ord]) { dupRows++; continue; }
+        seen[ord] = 1;
+        boxes.push({ ord: ord, weight: w, length: L, width: W, height: H, row: r + 1, raw: noRaw });
+      }
+    }
+    boxes.sort(function (a, b) { return a.ord - b.ord; });
+
+    var gaps = [];
+    for (var i = 0; i < boxes.length; i++) {
+      if (i > 0 && boxes[i].ord !== boxes[i - 1].ord + 1) gaps.push(boxes[i - 1].ord + '→' + boxes[i].ord);
+    }
+    return {
+      boxes: boxes, missing: missing, dupRows: dupRows, badRows: badRows,
+      rangeRows: rangeRows, sumRows: sumRows, gaps: gaps,
+      weightUnit: wLabel, dimUnit: dLabel, noColumn: cols.no !== undefined
+    };
+  }
+
+  /* ============ 4. 计算（公式照搬 airsea-packing.html） ============ */
+  function computeResult(boxes, rates) {
+    var volDiv = rates.volDiv || DEFAULT_RATES.volDiv;
+    var airRate = rates.airRate || 0, seaRate = rates.seaRate || 0;
+
+    /* —— 空运：体积重 = (长+2)*(宽+2)*(高+2)/除数，计费重 = max(体积重, 实重) —— */
+    var totalCost = 0, totalChargeWeight = 0;
+    boxes.forEach(function (b) {
+      var volWeight = ((b.length + 2) * (b.width + 2) * (b.height + 2)) / volDiv;
+      var chargeWeight = volWeight > b.weight ? volWeight : b.weight;
+      totalCost += chargeWeight * airRate;
+      totalChargeWeight += chargeWeight;
+    });
+
+    /* —— 海运：原始体积 / +1cm / +1.5cm 三档 —— */
+    var totalVol = 0, totalWeight = 0, totalVol1cm = 0, totalVol15cm = 0;
+    var details = boxes.map(function (b) {
+      var originalVol = (b.length * b.width * b.height) / 1e6;
+      var vol1cm = ((b.length + 1) * (b.width + 1) * (b.height + 1)) / 1e6;
+      var vol15cm = ((b.length + 1.5) * (b.width + 1.5) * (b.height + 1.5)) / 1e6;
+      totalVol += originalVol;
+      totalWeight += b.weight;
+      totalVol1cm += vol1cm;
+      totalVol15cm += vol15cm;
+      return { originalVol: originalVol, vol1cm: vol1cm, vol15cm: vol15cm, weight: b.weight };
+    });
+
+    return {
+      boxes: boxes,
+      details: details,
+      totalWeight: totalWeight,
+      totalVol: totalVol,
+      totalVol1cm: totalVol1cm,
+      totalVol15cm: totalVol15cm,
+      diff1cm: totalVol1cm - totalVol,
+      diff15cm: totalVol15cm - totalVol,
+      costOriginal: totalVol * seaRate,
+      cost1cm: totalVol1cm * seaRate,
+      cost15cm: totalVol15cm * seaRate,
+      totalChargeWeight: totalChargeWeight,
+      totalCost: totalCost,
+      airRate: airRate,
+      seaRate: seaRate,
+      volDiv: volDiv
+    };
+  }
+
+  /* —— 结果文案：与 airsea-packing.html 的输出文本格式一致 —— */
+  function buildAirText(boxes, r) {
+    var out = '空运计算结果（共 ' + boxes.length + ' 箱）\n\n';
+    boxes.forEach(function (b, i) {
+      var volWeight = ((b.length + 2) * (b.width + 2) * (b.height + 2)) / r.volDiv;
+      var chargeWeight = volWeight > b.weight ? volWeight : b.weight;
+      var isThrown = volWeight > b.weight;
+      var cost = chargeWeight * r.airRate;
+      var actualVolume = (b.length * b.width * b.height) / 1000000;
+      out += '【箱 ' + (i + 1) + '】\n';
+      out += '  实重: ' + b.weight + ' kg\n';
+      out += '  体积重(单边+2): ' + truncate(volWeight, 2) + ' kg\n';
+      out += '  实际体积: ' + truncate(actualVolume, 4) + ' m³\n';
+      out += '  类型: ' + (isThrown ? '抛货 ▲' : '重货 ▼') + '\n';
+      out += '  计费重: ' + truncate(chargeWeight, 2) + ' kg\n';
+      out += '  运费: ¥' + truncate(cost, 2) + '\n\n';
+    });
+    out += '汇总\n';
+    out += '总箱数: ' + boxes.length + ' 箱\n';
+    out += '总计空运计费重量: ' + truncate(r.totalChargeWeight, 2) + ' kg\n';
+    out += '总成本: ¥' + truncate(r.totalCost, 2) + ' 元';
+    return out;
+  }
+
+  function buildSeaText(boxes, r) {
+    var boxInfoText = '每箱体积详情（共 ' + boxes.length + ' 箱）:\n';
+    r.details.forEach(function (box, idx) {
+      boxInfoText +=
+        '箱 ' + (idx + 1) + ': ' + truncate(box.originalVol, 3) + 'm³ (原) | ' +
+        truncate(box.vol1cm, 3) + 'm³ (+1cm) | ' +
+        truncate(box.vol15cm, 3) + 'm³ (+1.5cm)\n';
+    });
+    return '海运计算结果\n\n' +
+      boxInfoText + '\n' +
+      '汇总数据:\n' +
+      '总箱数:       ' + boxes.length + ' 箱\n' +
+      '总重量:       ' + truncate(r.totalWeight, 4) + ' kg\n\n' +
+      '原始体积:     ' + truncate(r.totalVol, 4) + ' m³ | 运费: ¥' + truncate(r.costOriginal, 4) + '\n' +
+      '+1cm体积:     ' + truncate(r.totalVol1cm, 4) + ' m³ | 运费: ¥' + truncate(r.cost1cm, 4) + '\n' +
+      '1cm 体积差:   +' + truncate(r.diff1cm, 4) + ' m³\n' +
+      '+1.5cm体积:   ' + truncate(r.totalVol15cm, 4) + ' m³ | 运费: ¥' + truncate(r.cost15cm, 4) + '\n' +
+      '1.5cm 体积差: +' + truncate(r.diff15cm, 4) + ' m³';
+  }
+
+  /* ============ 5. 渲染与对外接口 ============ */
+  var state = null, ratesBound = false;
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function num(v, d) {
+    return (typeof v === 'number' && isFinite(v)) ? String(truncate(v, d === undefined ? 4 : d)) : '-';
+  }
+
+  function readRates() {
+    var a = parseFloat($('pkAirRate') && $('pkAirRate').value);
+    var s = parseFloat($('pkSeaRate') && $('pkSeaRate').value);
+    var d = parseFloat($('pkVolDiv') && $('pkVolDiv').value);
+    return {
+      airRate: isFinite(a) ? a : DEFAULT_RATES.airRate,
+      seaRate: isFinite(s) ? s : DEFAULT_RATES.seaRate,
+      volDiv: isFinite(d) && d > 0 ? d : DEFAULT_RATES.volDiv
+    };
+  }
+
+  /* 三项费率控件（空运单价 / 体积重除数 / 海运单价）均可自由填写；
+     输入非法（空值、非数字、除数 ≤ 0）时读数回退默认值，并把控件回填默认值 95 / 6000 / 3400 */
+  var RATE_FIELDS = [
+    { id: 'pkAirRate', dft: DEFAULT_RATES.airRate },
+    { id: 'pkVolDiv', dft: DEFAULT_RATES.volDiv },
+    { id: 'pkSeaRate', dft: DEFAULT_RATES.seaRate }
+  ];
+
+  function normalizeRateField(field) {
+    var el = $(field.id);
+    if (!el) return;
+    var v = parseFloat(el.value);
+    var ok = isFinite(v) && (field.id === 'pkVolDiv' ? v > 0 : true);
+    if (!ok) el.value = String(field.dft);
+  }
+
+  function bindRates() {
+    if (ratesBound) return;
+    ratesBound = true;
+    RATE_FIELDS.forEach(function (field) {
+      var el = $(field.id);
+      if (!el) return;
+      el.addEventListener('input', function () { recompute(); });   /* 边输入边重算 */
+      el.addEventListener('change', function () {                  /* 回车/失焦后校正非法输入 */
+        normalizeRateField(field);
+        recompute();
+      });
+    });
+  }
+
+  function render(built, r) {
+    var card = $('packingCard'), body = $('pkBody'), src = $('pkSource');
+    if (!card || !body) return;
+    var boxes = built.boxes, n = boxes.length;
+
+    src.innerHTML = '文件：<b>' + esc(state.fileName) + '</b> ｜ 工作表：<b>' + esc(state.table.sheetName) +
+      '</b>（表头第 ' + (state.table.rowIndex + 1) + ' 行）｜ 货箱编号：' +
+      (built.noColumn ? '按编号展开' : '无编号列，按行顺序编号') + ' ｜ 重量单位：' + built.weightUnit +
+      ' ｜ 尺寸单位：' + built.dimUnit + ' ｜ 共 <b>' + n + '</b> 箱';
+
+    var html = '';
+    html += '<table><tr><th>汇总项目</th><th style="text-align:right">数值</th></tr>' +
+      '<tr><td>箱数（区间已展开逐箱计入）</td><td class="num">' + n + ' 箱</td></tr>' +
+      '<tr><td>总重量</td><td class="num">' + num(r.totalWeight, 4) + ' kg</td></tr>' +
+      '<tr><td>原始体积（方数）</td><td class="num">' + num(r.totalVol, 4) + ' m³</td></tr>' +
+      '<tr><td>+1cm 体积</td><td class="num">' + num(r.totalVol1cm, 4) + ' m³（体积差 +' + num(r.diff1cm, 4) + ' m³）</td></tr>' +
+      '<tr><td>+1.5cm 体积</td><td class="num">' + num(r.totalVol15cm, 4) + ' m³（体积差 +' + num(r.diff15cm, 4) + ' m³）</td></tr>' +
+      '<tr><td>海运运费（¥' + r.seaRate + '/m³）</td><td class="num">原始 ¥' + num(r.costOriginal, 4) +
+      ' ｜ +1cm ¥' + num(r.cost1cm, 4) + ' ｜ +1.5cm ¥' + num(r.cost15cm, 4) + '</td></tr>' +
+      '<tr><td>空运计费重量（体积重÷' + r.volDiv + '，取 max(体积重,实重)）</td><td class="num">' +
+      num(r.totalChargeWeight, 2) + ' kg</td></tr>' +
+      '<tr><td>空运成本（¥' + r.airRate + '/kg）</td><td class="num">¥' + num(r.totalCost, 2) + '</td></tr>' +
+      '</table>';
+
+    /* 结果卡只保留「汇总表」；不输出逐箱明细表、纯文本明细与解析提示 */
+    body.innerHTML = html;
+
+    card.style.display = 'block';
+  }
+
+  function recompute() {
+    if (!state) return;
+    try {
+      var rates = readRates();
+      var built = buildBoxes(state.sheets, state.table);
+      if (!built.boxes.length) { clear(); return; }
+      var r = computeResult(built.boxes, rates);
+      render(built, r);
+    } catch (err) {
+      if (window.console && console.warn) console.warn('[装箱单计算] 失败：', err);
+      clear();
+    }
+  }
+
+  function clear() {
+    state = null;
+    var card = $('packingCard');
+    if (card) card.style.display = 'none';
+  }
+
+  function init(file, ext) {
+    clear();
+    if (!file || PL_EXT.indexOf(ext) < 0) return Promise.resolve(false);
+    if (ext === 'xls' && typeof CFB === 'undefined') return Promise.resolve(false);
+    if (ext !== 'xls' && typeof JSZip === 'undefined') return Promise.resolve(false);
+    return file.arrayBuffer().then(function (ab) {
+      return unpackWorkbook(new Uint8Array(ab), ext);
+    }).then(function (sheets) {
+      if (!sheets || !sheets.length) return false;
+      var table = findPackingTable(sheets);
+      if (!table) return false;
+      state = { sheets: sheets, table: table, fileName: file.name || '' };
+      bindRates();
+      recompute();
+      return true;
+    })['catch'](function (err) {
+      if (window.console && console.warn) console.warn('[装箱单解析] 已跳过：', err);
+      return false;
+    });
+  }
+
+  window.CBPacking = {
+    init: init,
+    clear: clear,
+    recompute: recompute,
+    _truncate: truncate,
+    _oleStream: oleWorkbookStream,
+    _unpack: unpackWorkbook,
+    _find: findPackingTable,
+    _expand: expandBoxNo,
+    _build: buildBoxes,
+    _compute: computeResult,
+    _airText: buildAirText,
+    _seaText: buildSeaText
+  };
+})();
+/* ==========================================================================
+   装箱单（货箱尺寸 / 重量）解析与计算模块      PACKING-MODULE-END
+   ========================================================================== */
+</script>
+
+<script>
 (function () {
   'use strict';
 
@@ -1240,6 +2070,7 @@ UPNG.encode.alphaMul = function(img, roundA) {
     els.fileInput.value = '';
     els.dropzone.style.display = 'block';
     els.resultCard.style.display = 'none';
+    if (window.CBPacking) window.CBPacking.clear();
     clearMsg(); setStatus('');
     setStartDisabled(true); els.downloadBtn.disabled = true;
   });
@@ -1254,6 +2085,7 @@ UPNG.encode.alphaMul = function(img, roundA) {
   // ---------- 文件选择 ----------
   function handleFile(file) {
     clearMsg(); setStatus('');
+    if (window.CBPacking) window.CBPacking.clear();
     els.resultCard.style.display = 'none';
     compressedBlob = null; results = []; finalOutName = '';
     els.downloadBtn.disabled = true;
@@ -1280,6 +2112,8 @@ UPNG.encode.alphaMul = function(img, roundA) {
 
     selectedFile = file;
     setStartDisabled(false);
+    // 装箱单解析：同一文件若为装箱单，则同步给出与「空海运 & 装箱单计算」一致的计算结果
+    if (window.CBPacking) { try { window.CBPacking.init(file, ext); } catch (e) { } }
     var kind = docKindOf(ext);
     var cap = (file.size / 1024).toFixed(1) + ' KB';
     setStatus('已选择：' + file.name + '（' + cap + '）\n识别为：' + kind.label + '，共发现 ' + kind.label + '。点击「开始压缩」继续。');
