@@ -148,6 +148,51 @@ export interface UnarrivedDateGroup {
   warehouses: Array<{ warehouse_id: string; total_qty: number; sku_count: number }>;
 }
 
+// 全量（跨全部统计日）未到货汇总
+export interface UnarrivedAllSummary {
+  // 全部统计日的未到货数量合计
+  total_qty: number;
+  // 跨统计日去重后的涉及商品数
+  sku_count: number;
+  // 跨统计日去重后的涉及补货单数
+  order_count: number;
+  // 明细条数合计（未去重）
+  item_count: number;
+  // 涉及统计日数量
+  date_count: number;
+}
+
+// 跨全部统计日汇总未到货（SKU 与补货单按跨日去重）
+export function summarizeAll(
+  cells: UnarrivedCell[],
+  ordersByDate: Record<string, string[]>,
+): UnarrivedAllSummary {
+  const productIds = new Set<string>();
+  const orderIds = new Set<string>();
+  let totalQty = 0;
+  let itemCount = 0;
+
+  for (const c of cells) {
+    totalQty += c.quantity;
+    itemCount += c.item_count;
+    productIds.add(c.product_id);
+  }
+
+  const dateSet = new Set<string>(cells.map((c) => c.group_date));
+  for (const [date, ids] of Object.entries(ordersByDate)) {
+    dateSet.add(date);
+    for (const id of ids) orderIds.add(id);
+  }
+
+  return {
+    total_qty: totalQty,
+    sku_count: productIds.size,
+    order_count: orderIds.size,
+    item_count: itemCount,
+    date_count: dateSet.size,
+  };
+}
+
 // 把 cell 列表按基准日分组、并按商品去重汇总（供统计接口与快照接口复用）
 export function groupByDate(cells: UnarrivedCell[], ordersByDate: Record<string, string[]>): UnarrivedDateGroup[] {
   const dates = new Set<string>([...cells.map((c) => c.group_date), ...Object.keys(ordersByDate)]);

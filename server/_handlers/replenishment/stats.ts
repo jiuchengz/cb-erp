@@ -7,7 +7,7 @@ import { getAdminClient } from '../_lib/db';
 import { handleError } from '../_lib/error';
 import { rateLimit } from '../_lib/rate-limit';
 import { datePartInTz } from '../_lib/datetime';
-import { collectUnarrived, groupByDate } from '../_lib/replenishment-unarrived';
+import { collectUnarrived, groupByDate, summarizeAll } from '../_lib/replenishment-unarrived';
 
 // GET /api/replenishment/stats
 // 「每天统计全部未到货商品的总数量及对应 SKU」（精确口径，只读）
@@ -41,6 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const focusDate = q.date || todayDate;
     const dates = q.date ? allDates.filter((d) => d.date === q.date) : allDates;
     const today = allDates.find((d) => d.date === focusDate) || null;
+    // 全量口径：跨全部统计日汇总（SKU 与补货单按跨日去重），不受 date 查询参数影响
+    const all = summarizeAll(result.cells, result.orders_by_date);
 
     return res.status(200).json({
       data: {
@@ -56,6 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         today: today
           ? { date: today.date, order_count: today.order_count, total_qty: today.total_qty, sku_count: today.sku_count }
           : { date: todayDate, order_count: 0, total_qty: 0, sku_count: 0 },
+        // 全部统计日的汇总口径（跨日去重）
+        all,
         scanned_orders: result.scanned_orders,
         unarrived_orders: result.unarrived_orders,
         orders_without_items: result.orders_without_items,

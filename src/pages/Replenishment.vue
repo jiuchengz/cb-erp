@@ -19,7 +19,7 @@
         <div class="unarrived-header" @click="statsExpanded = !statsExpanded">
           <span class="unarrived-title">未到货统计</span>
           <div class="unarrived-header-right">
-            <span class="unarrived-total">未到货总数 <b>{{ fmtNum(unarrived.today.total_qty) }}</b> 件</span>
+            <span class="unarrived-total">未到货总数 <b>{{ fmtNum(unarrived.all.total_qty) }}</b> 件</span>
             <span class="unarrived-hint">{{ unarrivedScopeText }}</span>
             <el-button link type="primary" :loading="statsLoading" @click.stop="loadStats">刷新</el-button>
             <el-button link type="primary" @click.stop="statsExpanded = !statsExpanded">
@@ -30,22 +30,22 @@
       </template>
 
       <template v-if="statsExpanded">
-      <!-- 卡片汇总 -->
+      <!-- 卡片汇总（全部统计日口径） -->
       <div class="unarrived-kpis" v-loading="statsLoading">
         <div class="unarrived-kpi">
           <div class="kpi-label">未到货总数量</div>
-          <div class="kpi-value">{{ fmtNum(unarrived.today.total_qty) }} <small>件</small></div>
-          <div class="kpi-sub">{{ unarrived.today.date || '-' }}</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.all.total_qty) }} <small>件</small></div>
+          <div class="kpi-sub">全部 {{ fmtNum(unarrived.all.date_count) }} 个统计日合计</div>
         </div>
         <div class="unarrived-kpi">
           <div class="kpi-label">涉及商品 SKU</div>
-          <div class="kpi-value">{{ fmtNum(unarrived.today.sku_count) }} <small>个</small></div>
-          <div class="kpi-sub">同日按商品去重</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.all.sku_count) }} <small>个</small></div>
+          <div class="kpi-sub">跨统计日按商品去重</div>
         </div>
         <div class="unarrived-kpi">
           <div class="kpi-label">涉及补货单</div>
-          <div class="kpi-value">{{ fmtNum(unarrived.today.order_count) }} <small>单</small></div>
-          <div class="kpi-sub">未匹配到货的采购中单据</div>
+          <div class="kpi-value">{{ fmtNum(unarrived.all.order_count) }} <small>单</small></div>
+          <div class="kpi-sub">跨统计日去重的未匹配单据</div>
         </div>
         <div class="unarrived-kpi">
           <div class="kpi-label">未到货单（全部日期）</div>
@@ -58,14 +58,7 @@
       <div class="unarrived-section">
         <div class="unarrived-section-header">
           <span class="unarrived-section-title">未到货明细</span>
-          <el-select v-model="unarrived.date" size="small" style="width: 200px" placeholder="选择统计日期">
-            <el-option
-              v-for="d in unarrivedDates"
-              :key="d.date"
-              :label="`${d.date}（${d.sku_count} SKU / ${d.total_qty} 件）`"
-              :value="d.date"
-            />
-          </el-select>
+          <span class="unarrived-hint">全部统计日 · 共 {{ fmtNum(unarrivedItems.length) }} 条</span>
         </div>
         <el-table
           :resizable="false"
@@ -75,8 +68,11 @@
           stripe
           size="small"
           max-height="320"
-          empty-text="该日期暂无未到货商品"
+          empty-text="暂无未到货商品"
         >
+          <el-table-column label="统计日期" width="120">
+            <template #default="{ row }">{{ row.date || '-' }}</template>
+          </el-table-column>
           <el-table-column label="产品条码" min-width="140">
             <template #default="{ row }">{{ row.code || row.sku || '-' }}</template>
           </el-table-column>
@@ -748,11 +744,11 @@ const unarrived = reactive({
   criteriaText: '',
   today_date: '',
   today: { date: '', order_count: 0, total_qty: 0, sku_count: 0 },
+  // 全部统计日汇总（跨日去重）：data.all
+  all: { total_qty: 0, sku_count: 0, order_count: 0, item_count: 0, date_count: 0 },
   scanned_orders: 0,
   unarrived_orders: 0,
   orders_without_items: 0,
-  // 当前明细选中的统计日期
-  date: '',
   // 服务端返回的分日分组（UnarrivedDateGroup[]）
   dates: [] as any[],
 })
@@ -762,13 +758,13 @@ const unarrivedScopeText = computed(() =>
   auth.hasFullWarehouseAccess() ? '全部仓库' : '仅统计当前账号可见仓库'
 )
 
-const unarrivedDates = computed(() =>
-  (unarrived.dates || []).map((d: any) => ({ date: d.date, total_qty: d.total_qty, sku_count: d.sku_count }))
-)
-
+// 明细数据：汇总全部统计日的商品明细（保留各统计日），并带上统计日期
 const unarrivedItems = computed(() => {
-  const g = unarrived.dates.find((d: any) => d.date === unarrived.date)
-  return g?.items || []
+  const rows: any[] = []
+  for (const g of unarrived.dates || []) {
+    for (const it of g.items || []) rows.push({ ...it, date: g.date })
+  }
+  return rows
 })
 
 // 趋势图数据：按日期升序取最近 TREND_DAYS 天
@@ -829,11 +825,35 @@ async function loadStats() {
     unarrived.unarrived_orders = Number(d.unarrived_orders) || 0
     unarrived.orders_without_items = Number(d.orders_without_items) || 0
     unarrived.dates = Array.isArray(d.dates) ? d.dates : []
-    // 保留已选日期；若该日期已不在返回列表中，回落到 today_date，其次最新一天
-    const exists = unarrived.dates.some((x: any) => x.date === unarrived.date)
-    if (!exists) {
-      const hasToday = unarrived.dates.some((x: any) => x.date === unarrived.today_date)
-      unarrived.date = hasToday ? unarrived.today_date : unarrived.dates[0]?.date || ''
+    // 全部统计日口径：优先取服务端 all；服务端未返回时按 dates 本地兜底（SKU 按商品去重）
+    if (d.all) {
+      unarrived.all = {
+        total_qty: Number(d.all.total_qty) || 0,
+        sku_count: Number(d.all.sku_count) || 0,
+        order_count: Number(d.all.order_count) || 0,
+        item_count: Number(d.all.item_count) || 0,
+        date_count: Number(d.all.date_count) || unarrived.dates.length,
+      }
+    } else {
+      const skus = new Set<string>()
+      let totalQty = 0
+      let orderCount = 0
+      let itemCount = 0
+      for (const g of unarrived.dates) {
+        totalQty += Number(g.total_qty) || 0
+        orderCount += Number(g.order_count) || 0
+        for (const it of g.items || []) {
+          skus.add(String(it.product_id ?? it.sku ?? it.code ?? ''))
+          itemCount += Number(it.item_count) || 0
+        }
+      }
+      unarrived.all = {
+        total_qty: totalQty,
+        sku_count: skus.size,
+        order_count: orderCount,
+        item_count: itemCount,
+        date_count: unarrived.dates.length,
+      }
     }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error?.message || '未到货统计加载失败')
