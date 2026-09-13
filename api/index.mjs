@@ -105065,11 +105065,7 @@ async function handler34(req, res) {
     if (insRes?.error) throw insRes.error;
     return res.status(200).json({ ok: true });
   } catch (e) {
-    const detail = e?.message || String(e);
-    console.warn("[visit] record failed:", detail);
-    if (String(req.headers["x-visit-debug"] || "") === "mdj7k3qz") {
-      return res.status(200).json({ ok: false, debug: detail, code: e?.code || null, hint: e?.hint || null });
-    }
+    console.warn("[visit] record failed:", e?.message || e);
     return res.status(200).json({ ok: false });
   }
 }

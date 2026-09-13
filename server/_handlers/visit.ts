@@ -149,12 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ ok: true });
   } catch (e) {
     // 采集失败绝不影响主流程：只记录、不抛出
-    const detail = (e as any)?.message || String(e);
-    console.warn('[visit] record failed:', detail);
-    // 临时诊断（仅携带约定调试头时生效）：把失败原因回传给诊断方，便于定位线上写入失败
-    if (String(req.headers['x-visit-debug'] || '') === 'mdj7k3qz') {
-      return res.status(200).json({ ok: false, debug: detail, code: (e as any)?.code || null, hint: (e as any)?.hint || null });
-    }
+    console.warn('[visit] record failed:', (e as Error)?.message || e);
     return res.status(200).json({ ok: false });
   }
 }
