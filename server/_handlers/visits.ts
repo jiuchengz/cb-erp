@@ -25,7 +25,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const dateFrom = str(req.query.date_from);
       const dateTo = str(req.query.date_to);
 
-      const supabase = getAdminClient();
+      // 强制新建干净 client：登录 / 改密 handler 的 signInWithPassword 会向共享 client 注入用户
+    // session，复用会让本次查询以 authenticated 身份被 RLS 过滤，列表恒为空。
+    const supabase = getAdminClient(true);
       let query: any = supabase.from('visit_logs').select('*', { count: 'exact' });
       if (ip) query = query.ilike('ip', `%${ip}%`);
       if (path) query = query.ilike('path', `%${path}%`);

@@ -110,18 +110,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 去重：同一访客 ID 对同一路径 60s 内已有记录则直接跳过（无 visitor_id 时回退按 IP 去重）
     const sinceIso = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString();
-    let dedupQuery: any = supabase.from('visit_logs').select('id');
-    dedupQuery = visitorId ? dedupQuery.eq('visitor_id', visitorId) : dedupQuery.eq('ip', ip);
-    const { data: recent, error: dedupErr } = await dedupQuery
-      .eq('path', path)
-      .gte('created_at', sinceIso)
-      .limit(1);
-    if (dedupErr) throw dedupErr;
-    if (recent && recent.length > 0) return res.status(200).json({ ok: true, deduped: true });
+    const dedupBy = async (column: 'visitor_id' | 'ip', value: string) =>
+      supabase.from('visit_logs').select('id').eq(column, value).eq('path', path).gte('created_at', sinceIso).limit(1);
+    let dedupRes: any = visitorId ? await dedupBy('visitor_id', visitorId) : await dedupBy('ip', ip);
+    // 兼容尚未执行 064 迁移（visit_logs 缺 visitor_id 列）的环境：回退按 IP 去重，避免直接抛错
+    if (dedupRes?.error && visitorId && /visitor_id/i.test(String(dedupRes.error.message || ''))) {
+      dedupRes = await dedupBy('ip', ip);
+    }
+    if (dedupRes?.error) throw dedupRes.error;
+    if (dedupRes?.data && dedupRes.data.length > 0) return res.status(200).json({ ok: true, deduped: true });
 
     const [account, location] = await Promise.all([resolveAccount(req, supabase), resolveIpLocation(ip)]);
 
-    const { error: insErr } = await supabase.from('visit_logs').insert({
+    const record: Record<string, unknown> = {
       ip,
       visitor_id: visitorId || null,
       country: location?.country || null,
@@ -135,8 +136,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user_agent: ua.slice(0, 500),
       device: parseDevice(ua),
       referer: String(parsed.data.referer || '').slice(0, 500) || null,
-    });
-    if (insErr) throw insErr;
+    };
+    let insRes: any = await supabase.from('visit_logs').insert(record);
+    // 兼容尚未执行 064 迁移（visit_logs 缺 visitor_id 列）的环境：剔除该列重试，保证访问记录仍能落库
+    if (insRes?.error && /visitor_id/i.test(String(insRes.error.message || ''))) {
+      const fallback: Record<string, unknown> = { ...record };
+      delete fallback.visitor_id;
+      insRes = await supabase.from('visit_logs').insert(fallback);
+    }
+    if (insRes?.error) throw insRes.error;
 
     return res.status(200).json({ ok: true });
   } catch (e) {

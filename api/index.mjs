@@ -15835,8 +15835,8 @@ var require_column = __commonJS({
       set header(value) {
         if (value !== void 0) {
           this._header = value;
-          this.headers.forEach((text, index) => {
-            this._worksheet.getCell(index + 1, this.number).value = text;
+          this.headers.forEach((text2, index) => {
+            this._worksheet.getCell(index + 1, this.number).value = text2;
           });
         } else {
           this._header = void 0;
@@ -29949,15 +29949,15 @@ var require_utils2 = __commonJS({
         const path = utils.parsePath(filepath);
         return `${path.path}/_rels/${path.name}.rels`;
       },
-      xmlEncode(text) {
-        const regexResult = xmlDecodeRegex.exec(text);
-        if (!regexResult) return text;
+      xmlEncode(text2) {
+        const regexResult = xmlDecodeRegex.exec(text2);
+        if (!regexResult) return text2;
         let result = "";
         let escape = "";
         let lastIndex = 0;
         let i = regexResult.index;
-        for (; i < text.length; i++) {
-          const charCode = text.charCodeAt(i);
+        for (; i < text2.length; i++) {
+          const charCode = text2.charCodeAt(i);
           switch (charCode) {
             case 34:
               escape = "&quot;";
@@ -29985,15 +29985,15 @@ var require_utils2 = __commonJS({
               continue;
             }
           }
-          if (lastIndex !== i) result += text.substring(lastIndex, i);
+          if (lastIndex !== i) result += text2.substring(lastIndex, i);
           lastIndex = i + 1;
           if (escape) result += escape;
         }
-        if (lastIndex !== i) return result + text.substring(lastIndex, i);
+        if (lastIndex !== i) return result + text2.substring(lastIndex, i);
         return result;
       },
-      xmlDecode(text) {
-        return text.replace(/&([a-z]*);/g, (c) => {
+      xmlDecode(text2) {
+        return text2.replace(/&([a-z]*);/g, (c) => {
           switch (c) {
             case "&lt;":
               return "<";
@@ -30083,12 +30083,12 @@ var require_string_buf = __commonJS({
         this._buf.copy(buf, 0);
         this._buf = buf;
       }
-      addText(text) {
+      addText(text2) {
         this._buffer = void 0;
-        let inPos = this._inPos + this._buf.write(text, this._inPos, this._encoding);
+        let inPos = this._inPos + this._buf.write(text2, this._inPos, this._encoding);
         while (inPos >= this._buf.length - 4) {
-          this._grow(this._inPos + text.length);
-          inPos = this._inPos + this._buf.write(text, this._inPos, this._encoding);
+          this._grow(this._inPos + text2.length);
+          inPos = this._inPos + this._buf.write(text2, this._inPos, this._encoding);
         }
         this._inPos = inPos;
       }
@@ -30550,14 +30550,14 @@ var require_xml_stream = __commonJS({
         }
         pushAttributes(this._xml, attrs);
       }
-      writeText(text) {
+      writeText(text2) {
         const xml = this._xml;
         if (this.open) {
           xml.push(CLOSE_ANGLE);
           this.open = false;
         }
         this.leaf = false;
-        xml.push(utils.xmlEncode(text.toString()));
+        xml.push(utils.xmlEncode(text2.toString()));
       }
       writeXml(xml) {
         if (this.open) {
@@ -30580,10 +30580,10 @@ var require_xml_stream = __commonJS({
         this.open = false;
         this.leaf = false;
       }
-      leafNode(name, attributes, text) {
+      leafNode(name, attributes, text2) {
         this.openNode(name, attributes);
-        if (text !== void 0) {
-          this.writeText(text);
+        if (text2 !== void 0) {
+          this.writeText(text2);
         }
         this.closeNode();
       }
@@ -31099,8 +31099,8 @@ var require_saxes = __commonJS({
        *
        * @param handler The handler to set.
        */
-      on(name, handler65) {
-        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler65;
+      on(name, handler67) {
+        this[EVENT_NAME_TO_HANDLER_NAME[name]] = handler67;
       }
       /**
        * Unset an event handler.
@@ -31145,11 +31145,11 @@ var require_saxes = __commonJS({
        */
       fail(message) {
         const err = this.makeError(message);
-        const handler65 = this.errorHandler;
-        if (handler65 === void 0) {
+        const handler67 = this.errorHandler;
+        if (handler67 === void 0) {
           throw err;
         } else {
-          handler65(err);
+          handler67(err);
         }
         return this;
       }
@@ -32165,20 +32165,20 @@ var require_saxes = __commonJS({
       // END OF STATE ENGINE METHODS
       handleTextInRoot() {
         let { i: start, forbiddenState } = this;
-        const { chunk, textHandler: handler65 } = this;
+        const { chunk, textHandler: handler67 } = this;
         scanLoop:
           while (true) {
             switch (this.getCode()) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler65 !== void 0) {
-                  const { text } = this;
+                if (handler67 !== void 0) {
+                  const { text: text2 } = this;
                   const slice = chunk.slice(start, this.prevI);
-                  if (text.length !== 0) {
-                    handler65(text + slice);
+                  if (text2.length !== 0) {
+                    handler67(text2 + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler65(slice);
+                    handler67(slice);
                   }
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32187,7 +32187,7 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 forbiddenState = FORBIDDEN_START;
@@ -32213,7 +32213,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case NL_LIKE:
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
@@ -32221,7 +32221,7 @@ var require_saxes = __commonJS({
                 forbiddenState = FORBIDDEN_START;
                 break;
               case EOC:
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break scanLoop;
@@ -32233,7 +32233,7 @@ var require_saxes = __commonJS({
       }
       handleTextOutsideRoot() {
         let { i: start } = this;
-        const { chunk, textHandler: handler65 } = this;
+        const { chunk, textHandler: handler67 } = this;
         let nonSpace = false;
         outRootLoop:
           while (true) {
@@ -32241,14 +32241,14 @@ var require_saxes = __commonJS({
             switch (code) {
               case LESS: {
                 this.state = S_OPEN_WAKA;
-                if (handler65 !== void 0) {
-                  const { text } = this;
+                if (handler67 !== void 0) {
+                  const { text: text2 } = this;
                   const slice = chunk.slice(start, this.prevI);
-                  if (text.length !== 0) {
-                    handler65(text + slice);
+                  if (text2.length !== 0) {
+                    handler67(text2 + slice);
                     this.text = "";
                   } else if (slice.length !== 0) {
-                    handler65(slice);
+                    handler67(slice);
                   }
                 }
                 break outRootLoop;
@@ -32256,20 +32256,20 @@ var require_saxes = __commonJS({
               case AMP:
                 this.state = S_ENTITY;
                 this.entityReturnState = S_TEXT;
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += chunk.slice(start, this.prevI);
                 }
                 nonSpace = true;
                 break outRootLoop;
               case NL_LIKE:
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += `${chunk.slice(start, this.prevI)}
 `;
                 }
                 start = this.i;
                 break;
               case EOC:
-                if (handler65 !== void 0) {
+                if (handler67 !== void 0) {
                   this.text += chunk.slice(start);
                 }
                 break outRootLoop;
@@ -32335,9 +32335,9 @@ var require_saxes = __commonJS({
         if (this.state !== S_BEGIN && this.state !== S_TEXT) {
           this.fail("unexpected end.");
         }
-        const { text } = this;
-        if (text.length !== 0) {
-          (_a = this.textHandler) === null || _a === void 0 ? void 0 : _a.call(this, text);
+        const { text: text2 } = this;
+        if (text2.length !== 0) {
+          (_a = this.textHandler) === null || _a === void 0 ? void 0 : _a.call(this, text2);
           this.text = "";
         }
         this._closed = true;
@@ -32499,12 +32499,12 @@ var require_saxes = __commonJS({
           this.text += "</>";
           return;
         }
-        const handler65 = this.closeTagHandler;
+        const handler67 = this.closeTagHandler;
         let l2 = tags.length;
         while (l2-- > 0) {
           const tag = this.tag = tags.pop();
           this.topNS = tag.ns;
-          handler65 === null || handler65 === void 0 ? void 0 : handler65(tag);
+          handler67 === null || handler67 === void 0 ? void 0 : handler67(tag);
           if (tag.name === name) {
             break;
           }
@@ -32594,7 +32594,7 @@ var require_base_xform = __commonJS({
       }
       parseOpen(node) {
       }
-      parseText(text) {
+      parseText(text2) {
       }
       parseClose(name) {
       }
@@ -32796,9 +32796,9 @@ var require_list_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -32955,9 +32955,9 @@ var require_integer_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (!this.attr) {
-          this.text.push(text);
+          this.text.push(text2);
         }
       }
       parseClose() {
@@ -33005,9 +33005,9 @@ var require_string_xform = __commonJS({
           }
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (!this.attr) {
-          this.text.push(text);
+          this.text.push(text2);
         }
       }
       parseClose() {
@@ -33129,9 +33129,9 @@ var require_font_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -33258,9 +33258,9 @@ var require_fill_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -33361,9 +33361,9 @@ var require_fill_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -33423,9 +33423,9 @@ var require_fill_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -33529,9 +33529,9 @@ var require_border_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -33631,9 +33631,9 @@ var require_border_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -34173,9 +34173,9 @@ var require_style_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -34263,9 +34263,9 @@ var require_dxf_xform = __commonJS({
             return true;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -34436,9 +34436,9 @@ var require_styles_xform = __commonJS({
             return true;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -34767,9 +34767,9 @@ var require_date_xform = __commonJS({
           }
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (!this.attr) {
-          this.text.push(text);
+          this.text.push(text2);
         }
       }
       parseClose() {
@@ -34860,9 +34860,9 @@ var require_core_xform = __commonJS({
             throw new Error(`Unexpected xml node in parseOpen: ${JSON.stringify(node)}`);
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -34941,8 +34941,8 @@ var require_text_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
-        this._text.push(text);
+      parseText(text2) {
+        this._text.push(text2);
       }
       parseClose() {
         return false;
@@ -35002,9 +35002,9 @@ var require_rich_text_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35059,8 +35059,8 @@ var require_phonetic_text_xform = __commonJS({
         });
         if (model && model.hasOwnProperty("richText") && model.richText) {
           const { r } = this.map;
-          model.richText.forEach((text) => {
-            r.render(xmlStream, text);
+          model.richText.forEach((text2) => {
+            r.render(xmlStream, text2);
           });
         } else if (model) {
           this.map.t.render(xmlStream, model.text);
@@ -35087,9 +35087,9 @@ var require_phonetic_text_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35150,8 +35150,8 @@ var require_shared_string_xform = __commonJS({
         xmlStream.openNode(this.tag);
         if (model && model.hasOwnProperty("richText") && model.richText) {
           if (model.richText.length) {
-            model.richText.forEach((text) => {
-              this.map.r.render(xmlStream, text);
+            model.richText.forEach((text2) => {
+              this.map.r.render(xmlStream, text2);
             });
           } else {
             this.map.t.render(xmlStream, "");
@@ -35178,9 +35178,9 @@ var require_shared_string_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35305,9 +35305,9 @@ var require_shared_strings_xform = __commonJS({
             throw new Error(`Unexpected xml node in parseOpen: ${JSON.stringify(node)}`);
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35398,9 +35398,9 @@ var require_relationships_xform = __commonJS({
             throw new Error(`Unexpected xml node in parseOpen: ${JSON.stringify(node)}`);
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35638,9 +35638,9 @@ var require_app_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -35700,8 +35700,8 @@ var require_defined_name_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
-        this._parsedText.push(text);
+      parseText(text2) {
+        this._parsedText.push(text2);
       }
       parseClose() {
         this.model = {
@@ -36012,9 +36012,9 @@ var require_workbook_xform = __commonJS({
             return true;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -36395,8 +36395,8 @@ var require_cell_xform = __commonJS({
             } else if (model.value && model.value.richText) {
               xmlStream.addAttribute("t", "inlineStr");
               xmlStream.openNode("is");
-              model.value.richText.forEach((text) => {
-                this.richTextXForm.render(xmlStream, text);
+              model.value.richText.forEach((text2) => {
+                this.richTextXForm.render(xmlStream, text2);
               });
               xmlStream.closeNode("is");
             } else {
@@ -36461,21 +36461,21 @@ var require_cell_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
           return;
         }
         switch (this.currentNode) {
           case "f":
-            this.model.formula = this.model.formula ? this.model.formula + text : text;
+            this.model.formula = this.model.formula ? this.model.formula + text2 : text2;
             break;
           case "v":
           case "t":
             if (this.model.value && this.model.value.richText) {
-              this.model.value.richText.text = this.model.value.richText.text ? this.model.value.richText.text + text : text;
+              this.model.value.richText.text = this.model.value.richText.text ? this.model.value.richText.text + text2 : text2;
             } else {
-              this.model.value = this.model.value ? this.model.value + text : text;
+              this.model.value = this.model.value ? this.model.value + text2 : text2;
             }
             break;
           default:
@@ -36722,9 +36722,9 @@ var require_row_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -37120,9 +37120,9 @@ var require_data_validations_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this._formula) {
-          this._formula.push(text);
+          this._formula.push(text2);
         }
       }
       parseClose(name) {
@@ -37303,9 +37303,9 @@ var require_sheet_properties_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
           return true;
         }
         return false;
@@ -38166,25 +38166,25 @@ var require_header_footer_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         switch (this.currentNode) {
           case "oddHeader":
-            this.model.oddHeader = text;
+            this.model.oddHeader = text2;
             break;
           case "oddFooter":
-            this.model.oddFooter = text;
+            this.model.oddFooter = text2;
             break;
           case "evenHeader":
-            this.model.evenHeader = text;
+            this.model.evenHeader = text2;
             break;
           case "evenFooter":
-            this.model.evenFooter = text;
+            this.model.evenFooter = text2;
             break;
           case "firstHeader":
-            this.model.firstHeader = text;
+            this.model.firstHeader = text2;
             break;
           case "firstFooter":
-            this.model.firstFooter = text;
+            this.model.firstFooter = text2;
             break;
           default:
             break;
@@ -38229,9 +38229,9 @@ var require_composite_xform = __commonJS({
         }
         return false;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       onParserClose(name, parser) {
@@ -38340,8 +38340,8 @@ var require_ext_lst_ref_xform = __commonJS({
       parseOpen() {
         this.model = "";
       }
-      parseText(text) {
-        this.model += text;
+      parseText(text2) {
+        this.model += text2;
       }
       parseClose(name) {
         return name !== this.tag;
@@ -38412,8 +38412,8 @@ var require_formula_xform = __commonJS({
       parseOpen() {
         this.model = "";
       }
-      parseText(text) {
-        this.model += text;
+      parseText(text2) {
+        this.model += text2;
       }
       parseClose(name) {
         return name !== this.tag;
@@ -38861,9 +38861,9 @@ var require_conditional_formattings_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -39239,8 +39239,8 @@ var require_f_ext_xform = __commonJS({
       parseOpen() {
         this.model = "";
       }
-      parseText(text) {
-        this.model += text;
+      parseText(text2) {
+        this.model += text2;
       }
       parseClose(name) {
         return name !== this.tag;
@@ -39573,8 +39573,8 @@ var require_sqref_ext_xform = __commonJS({
       parseOpen() {
         this.model = "";
       }
-      parseText(text) {
-        this.model += text;
+      parseText(text2) {
+        this.model += text2;
       }
       parseClose(name) {
         return name !== this.tag;
@@ -40073,9 +40073,9 @@ var require_worksheet_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -40244,9 +40244,9 @@ var require_base_cell_anchor_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       reconcilePicture(model, options) {
@@ -40308,9 +40308,9 @@ var require_cell_position_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -40999,9 +40999,9 @@ var require_drawing_xform2 = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -41242,9 +41242,9 @@ var require_auto_filter_xform2 = __commonJS({
             throw new Error(`Unexpected xml node in parseOpen: ${JSON.stringify(node)}`);
         }
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -41426,9 +41426,9 @@ var require_table_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -41500,8 +41500,8 @@ var require_comment_xform = __commonJS({
         });
         xmlStream.openNode("text");
         if (model && model.note && model.note.texts) {
-          model.note.texts.forEach((text) => {
-            this.richTextXform.render(xmlStream, text);
+          model.note.texts.forEach((text2) => {
+            this.richTextXform.render(xmlStream, text2);
           });
         }
         xmlStream.closeNode();
@@ -41530,9 +41530,9 @@ var require_comment_xform = __commonJS({
             return false;
         }
       },
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       },
       parseClose(name) {
@@ -41608,9 +41608,9 @@ var require_comments_xform = __commonJS({
               return false;
           }
         },
-        parseText(text) {
+        parseText(text2) {
           if (this.parser) {
-            this.parser.parseText(text);
+            this.parser.parseText(text2);
           }
         },
         parseClose(name) {
@@ -41737,8 +41737,8 @@ var require_vml_anchor_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
-        this.text = text;
+      parseText(text2) {
+        this.text = text2;
       }
       parseClose() {
         return false;
@@ -41772,8 +41772,8 @@ var require_vml_protection_xform = __commonJS({
             return false;
         }
       }
-      parseText(text) {
-        this.text = text;
+      parseText(text2) {
+        this.text = text2;
       }
       parseClose() {
         return false;
@@ -41876,9 +41876,9 @@ var require_vml_client_data_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -41965,9 +41965,9 @@ var require_vml_shape_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -42058,9 +42058,9 @@ var require_vml_notes_xform = __commonJS({
         }
         return true;
       }
-      parseText(text) {
+      parseText(text2) {
         if (this.parser) {
-          this.parser.parseText(text);
+          this.parser.parseText(text2);
         }
       }
       parseClose(name) {
@@ -42896,8 +42896,8 @@ var require_lodash2 = __commonJS({
         return func(value);
       };
     }
-    function cacheHas(cache, key) {
-      return cache.has(key);
+    function cacheHas(cache2, key) {
+      return cache2.has(key);
     }
     function getValue(object, key) {
       return object == null ? void 0 : object[key];
@@ -44185,8 +44185,8 @@ var require_lodash7 = __commonJS({
     function baseIsNaN(value) {
       return value !== value;
     }
-    function cacheHas(cache, key) {
-      return cache.has(key);
+    function cacheHas(cache2, key) {
+      return cache2.has(key);
     }
     function getValue(object, key) {
       return object == null ? void 0 : object[key];
@@ -44770,16 +44770,16 @@ var require_lodash8 = __commonJS({
       return this.__data__.has(key);
     }
     function stackSet(key, value) {
-      var cache = this.__data__;
-      if (cache instanceof ListCache) {
-        var pairs = cache.__data__;
+      var cache2 = this.__data__;
+      if (cache2 instanceof ListCache) {
+        var pairs = cache2.__data__;
         if (!Map2 || pairs.length < LARGE_ARRAY_SIZE - 1) {
           pairs.push([key, value]);
           return this;
         }
-        cache = this.__data__ = new MapCache(pairs);
+        cache2 = this.__data__ = new MapCache(pairs);
       }
-      cache.set(key, value);
+      cache2.set(key, value);
       return this;
     }
     Stack.prototype.clear = stackClear;
@@ -45267,12 +45267,12 @@ var require_lodash8 = __commonJS({
         throw new TypeError(FUNC_ERROR_TEXT);
       }
       var memoized = function() {
-        var args = arguments, key = resolver ? resolver.apply(this, args) : args[0], cache = memoized.cache;
-        if (cache.has(key)) {
-          return cache.get(key);
+        var args = arguments, key = resolver ? resolver.apply(this, args) : args[0], cache2 = memoized.cache;
+        if (cache2.has(key)) {
+          return cache2.get(key);
         }
         var result = func.apply(this, args);
-        memoized.cache = cache.set(key, result);
+        memoized.cache = cache2.set(key, result);
         return result;
       };
       memoized.cache = new (memoize.Cache || MapCache)();
@@ -48942,23 +48942,23 @@ var require_async = __commonJS({
           unsaturated: [],
           empty: []
         };
-        function on(event, handler65) {
-          events[event].push(handler65);
+        function on(event, handler67) {
+          events[event].push(handler67);
         }
-        function once2(event, handler65) {
+        function once2(event, handler67) {
           const handleAndRemove = (...args) => {
             off(event, handleAndRemove);
-            handler65(...args);
+            handler67(...args);
           };
           events[event].push(handleAndRemove);
         }
-        function off(event, handler65) {
+        function off(event, handler67) {
           if (!event) return Object.keys(events).forEach((ev) => events[ev] = []);
-          if (!handler65) return events[event] = [];
-          events[event] = events[event].filter((ev) => ev !== handler65);
+          if (!handler67) return events[event] = [];
+          events[event] = events[event].filter((ev) => ev !== handler67);
         }
         function trigger(event, ...args) {
-          events[event].forEach((handler65) => handler65(...args));
+          events[event].forEach((handler67) => handler67(...args));
         }
         var processingScheduled = false;
         function _insert(data, insertAtFront, rejectOnError, callback) {
@@ -49027,8 +49027,8 @@ var require_async = __commonJS({
           }
           return false;
         }
-        const eventMethod = (name) => (handler65) => {
-          if (!handler65) {
+        const eventMethod = (name) => (handler67) => {
+          if (!handler67) {
             return new Promise((resolve, reject2) => {
               once2(name, (err, data) => {
                 if (err) return reject2(err);
@@ -49037,7 +49037,7 @@ var require_async = __commonJS({
             });
           }
           off(name);
-          on(name, handler65);
+          on(name, handler67);
         };
         var isProcessing = false;
         var q = {
@@ -51347,8 +51347,8 @@ var require_lodash11 = __commonJS({
         return func(value);
       };
     }
-    function cacheHas(cache, key) {
-      return cache.has(key);
+    function cacheHas(cache2, key) {
+      return cache2.has(key);
     }
     function getValue(object, key) {
       return object == null ? void 0 : object[key];
@@ -51735,8 +51735,8 @@ var require_lodash12 = __commonJS({
     function baseIsNaN(value) {
       return value !== value;
     }
-    function cacheHas(cache, key) {
-      return cache.has(key);
+    function cacheHas(cache2, key) {
+      return cache2.has(key);
     }
     function getValue(object, key) {
       return object == null ? void 0 : object[key];
@@ -52166,10 +52166,10 @@ var require_old = __commonJS({
       splitRootRe = /^[\/]*/;
     }
     var splitRootRe;
-    exports2.realpathSync = function realpathSync(p, cache) {
+    exports2.realpathSync = function realpathSync(p, cache2) {
       p = pathModule.resolve(p);
-      if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-        return cache[p];
+      if (cache2 && Object.prototype.hasOwnProperty.call(cache2, p)) {
+        return cache2[p];
       }
       var original = p, seenLinks = {}, knownHard = {};
       var pos;
@@ -52195,17 +52195,17 @@ var require_old = __commonJS({
         current += result[0];
         base = previous + result[1];
         pos = nextPartRe.lastIndex;
-        if (knownHard[base] || cache && cache[base] === base) {
+        if (knownHard[base] || cache2 && cache2[base] === base) {
           continue;
         }
         var resolvedLink;
-        if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-          resolvedLink = cache[base];
+        if (cache2 && Object.prototype.hasOwnProperty.call(cache2, base)) {
+          resolvedLink = cache2[base];
         } else {
           var stat = fs.lstatSync(base);
           if (!stat.isSymbolicLink()) {
             knownHard[base] = true;
-            if (cache) cache[base] = base;
+            if (cache2) cache2[base] = base;
             continue;
           }
           var linkTarget = null;
@@ -52220,23 +52220,23 @@ var require_old = __commonJS({
             linkTarget = fs.readlinkSync(base);
           }
           resolvedLink = pathModule.resolve(previous, linkTarget);
-          if (cache) cache[base] = resolvedLink;
+          if (cache2) cache2[base] = resolvedLink;
           if (!isWindows) seenLinks[id] = linkTarget;
         }
         p = pathModule.resolve(resolvedLink, p.slice(pos));
         start();
       }
-      if (cache) cache[original] = p;
+      if (cache2) cache2[original] = p;
       return p;
     };
-    exports2.realpath = function realpath(p, cache, cb) {
+    exports2.realpath = function realpath(p, cache2, cb) {
       if (typeof cb !== "function") {
-        cb = maybeCallback(cache);
-        cache = null;
+        cb = maybeCallback(cache2);
+        cache2 = null;
       }
       p = pathModule.resolve(p);
-      if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-        return process.nextTick(cb.bind(null, null, cache[p]));
+      if (cache2 && Object.prototype.hasOwnProperty.call(cache2, p)) {
+        return process.nextTick(cb.bind(null, null, cache2[p]));
       }
       var original = p, seenLinks = {}, knownHard = {};
       var pos;
@@ -52262,7 +52262,7 @@ var require_old = __commonJS({
       }
       function LOOP() {
         if (pos >= p.length) {
-          if (cache) cache[original] = p;
+          if (cache2) cache2[original] = p;
           return cb(null, p);
         }
         nextPartRe.lastIndex = pos;
@@ -52271,11 +52271,11 @@ var require_old = __commonJS({
         current += result[0];
         base = previous + result[1];
         pos = nextPartRe.lastIndex;
-        if (knownHard[base] || cache && cache[base] === base) {
+        if (knownHard[base] || cache2 && cache2[base] === base) {
           return process.nextTick(LOOP);
         }
-        if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-          return gotResolvedLink(cache[base]);
+        if (cache2 && Object.prototype.hasOwnProperty.call(cache2, base)) {
+          return gotResolvedLink(cache2[base]);
         }
         return fs.lstat(base, gotStat);
       }
@@ -52283,7 +52283,7 @@ var require_old = __commonJS({
         if (err) return cb(err);
         if (!stat.isSymbolicLink()) {
           knownHard[base] = true;
-          if (cache) cache[base] = base;
+          if (cache2) cache2[base] = base;
           return process.nextTick(LOOP);
         }
         if (!isWindows) {
@@ -52303,7 +52303,7 @@ var require_old = __commonJS({
       function gotTarget(err, target, base2) {
         if (err) return cb(err);
         var resolvedLink = pathModule.resolve(previous, target);
-        if (cache) cache[base2] = resolvedLink;
+        if (cache2) cache2[base2] = resolvedLink;
         gotResolvedLink(resolvedLink);
       }
       function gotResolvedLink(resolvedLink) {
@@ -52332,31 +52332,31 @@ var require_fs = __commonJS({
     function newError(er) {
       return er && er.syscall === "realpath" && (er.code === "ELOOP" || er.code === "ENOMEM" || er.code === "ENAMETOOLONG");
     }
-    function realpath(p, cache, cb) {
+    function realpath(p, cache2, cb) {
       if (ok) {
-        return origRealpath(p, cache, cb);
+        return origRealpath(p, cache2, cb);
       }
-      if (typeof cache === "function") {
-        cb = cache;
-        cache = null;
+      if (typeof cache2 === "function") {
+        cb = cache2;
+        cache2 = null;
       }
-      origRealpath(p, cache, function(er, result) {
+      origRealpath(p, cache2, function(er, result) {
         if (newError(er)) {
-          old.realpath(p, cache, cb);
+          old.realpath(p, cache2, cb);
         } else {
           cb(er, result);
         }
       });
     }
-    function realpathSync(p, cache) {
+    function realpathSync(p, cache2) {
       if (ok) {
-        return origRealpathSync(p, cache);
+        return origRealpathSync(p, cache2);
       }
       try {
-        return origRealpathSync(p, cache);
+        return origRealpathSync(p, cache2);
       } catch (er) {
         if (newError(er)) {
-          return old.realpathSync(p, cache);
+          return old.realpathSync(p, cache2);
         } else {
           throw er;
         }
@@ -75368,9 +75368,9 @@ var require_worksheet_writer = __commonJS({
         this.sheetProtection = null;
       }
       // ================================================================================
-      _write(text) {
+      _write(text2) {
         xmlBuffer.reset();
-        xmlBuffer.addText(text);
+        xmlBuffer.addText(text2);
         this.stream.write(xmlBuffer);
       }
       _writeSheetProperties(xmlBuf, properties, pageSetup) {
@@ -78284,7 +78284,7 @@ var require_debuggability = __commonJS({
       };
       Promise2.prototype._onCancel = function() {
       };
-      Promise2.prototype._setOnCancel = function(handler65) {
+      Promise2.prototype._setOnCancel = function(handler67) {
         ;
       };
       Promise2.prototype._attachCancellationCallback = function(onCancel) {
@@ -78839,10 +78839,10 @@ var require_finally = __commonJS({
       var util2 = require_util4();
       var CancellationError = Promise2.CancellationError;
       var errorObj2 = util2.errorObj;
-      function PassThroughHandlerContext(promise, type, handler65) {
+      function PassThroughHandlerContext(promise, type, handler67) {
         this.promise = promise;
         this.type = type;
-        this.handler = handler65;
+        this.handler = handler67;
         this.called = false;
         this.cancelPromise = null;
       }
@@ -78877,10 +78877,10 @@ var require_finally = __commonJS({
       }
       function finallyHandler(reasonOrValue) {
         var promise = this.promise;
-        var handler65 = this.handler;
+        var handler67 = this.handler;
         if (!this.called) {
           this.called = true;
-          var ret2 = this.isFinallyHandler() ? handler65.call(promise._boundValue()) : handler65.call(promise._boundValue(), reasonOrValue);
+          var ret2 = this.isFinallyHandler() ? handler67.call(promise._boundValue()) : handler67.call(promise._boundValue(), reasonOrValue);
           if (ret2 !== void 0) {
             promise._setReturnedNonUndefined();
             var maybePromise = tryConvertToPromise(ret2, promise);
@@ -78916,26 +78916,26 @@ var require_finally = __commonJS({
           return reasonOrValue;
         }
       }
-      Promise2.prototype._passThrough = function(handler65, type, success, fail2) {
-        if (typeof handler65 !== "function") return this.then();
+      Promise2.prototype._passThrough = function(handler67, type, success, fail2) {
+        if (typeof handler67 !== "function") return this.then();
         return this._then(
           success,
           fail2,
           void 0,
-          new PassThroughHandlerContext(this, type, handler65),
+          new PassThroughHandlerContext(this, type, handler67),
           void 0
         );
       };
-      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler65) {
+      Promise2.prototype.lastly = Promise2.prototype["finally"] = function(handler67) {
         return this._passThrough(
-          handler65,
+          handler67,
           0,
           finallyHandler,
           finallyHandler
         );
       };
-      Promise2.prototype.tap = function(handler65) {
-        return this._passThrough(handler65, 1, finallyHandler);
+      Promise2.prototype.tap = function(handler67) {
+        return this._passThrough(handler67, 1, finallyHandler);
       };
       return PassThroughHandlerContext;
     };
@@ -79336,10 +79336,10 @@ var require_direct_resolve = __commonJS({
           );
         } else {
           var _reason = arguments[1];
-          var handler65 = function() {
+          var handler67 = function() {
             throw _reason;
           };
-          return this.caught(reason, handler65);
+          return this.caught(reason, handler67);
         }
       };
       Promise2.prototype.catchReturn = function(value) {
@@ -79355,10 +79355,10 @@ var require_direct_resolve = __commonJS({
         } else {
           var _value = arguments[1];
           if (_value instanceof Promise2) _value.suppressUnhandledRejections();
-          var handler65 = function() {
+          var handler67 = function() {
             return _value;
           };
-          return this.caught(value, handler65);
+          return this.caught(value, handler67);
         }
       };
     };
@@ -79744,19 +79744,19 @@ var require_call_get = __commonJS({
         var makeGetter = function(propertyName) {
           return new Function("obj", "                                             \n        'use strict';                                                        \n        return obj.propertyName;                                             \n        ".replace("propertyName", propertyName));
         };
-        var getCompiled = function(name, compiler, cache) {
-          var ret2 = cache[name];
+        var getCompiled = function(name, compiler, cache2) {
+          var ret2 = cache2[name];
           if (typeof ret2 !== "function") {
             if (!isIdentifier2(name)) {
               return null;
             }
             ret2 = compiler(name);
-            cache[name] = ret2;
-            cache[" size"]++;
-            if (cache[" size"] > 512) {
-              var keys = Object.keys(cache);
-              for (var i = 0; i < 256; ++i) delete cache[keys[i]];
-              cache[" size"] = keys.length - 256;
+            cache2[name] = ret2;
+            cache2[" size"]++;
+            if (cache2[" size"] > 512) {
+              var keys = Object.keys(cache2);
+              for (var i = 0; i < 256; ++i) delete cache2[keys[i]];
+              cache2[" size"] = keys.length - 256;
             }
           }
           return ret2;
@@ -81460,22 +81460,22 @@ var require_promise = __commonJS({
         }
         var domain = getDomain();
         if (!((bitField & 50397184) === 0)) {
-          var handler65, value, settler = target._settlePromiseCtx;
+          var handler67, value, settler = target._settlePromiseCtx;
           if ((bitField & 33554432) !== 0) {
             value = target._rejectionHandler0;
-            handler65 = didFulfill;
+            handler67 = didFulfill;
           } else if ((bitField & 16777216) !== 0) {
             value = target._fulfillmentHandler0;
-            handler65 = didReject;
+            handler67 = didReject;
             target._unsetRejectionIsUnhandled();
           } else {
             settler = target._settlePromiseLateCancellationObserver;
             value = new CancellationError("late cancellation observer");
             target._attachExtraTrace(value);
-            handler65 = didReject;
+            handler67 = didReject;
           }
           async.invoke(settler, target, {
-            handler: domain === null ? handler65 : typeof handler65 === "function" && util2.domainBind(domain, handler65),
+            handler: domain === null ? handler67 : typeof handler67 === "function" && util2.domainBind(domain, handler67),
             promise,
             receiver,
             value
@@ -81656,7 +81656,7 @@ var require_promise = __commonJS({
           promise._rejectCallback(r, true);
         }
       };
-      Promise2.prototype._settlePromiseFromHandler = function(handler65, receiver, value, promise) {
+      Promise2.prototype._settlePromiseFromHandler = function(handler67, receiver, value, promise) {
         var bitField = promise._bitField;
         if ((bitField & 65536) !== 0) return;
         promise._pushContext();
@@ -81666,10 +81666,10 @@ var require_promise = __commonJS({
             x = errorObj2;
             x.e = new TypeError2("cannot .spread() a non-array: " + util2.classString(value));
           } else {
-            x = tryCatch2(handler65).apply(this._boundValue(), value);
+            x = tryCatch2(handler67).apply(this._boundValue(), value);
           }
         } else {
-          x = tryCatch2(handler65).call(receiver, value);
+          x = tryCatch2(handler67).call(receiver, value);
         }
         var promiseCreated = promise._popContext();
         bitField = promise._bitField;
@@ -81694,7 +81694,7 @@ var require_promise = __commonJS({
       Promise2.prototype._setFollowee = function(promise) {
         this._rejectionHandler0 = promise;
       };
-      Promise2.prototype._settlePromise = function(promise, handler65, receiver, value) {
+      Promise2.prototype._settlePromise = function(promise, handler67, receiver, value) {
         var isPromise = promise instanceof Promise2;
         var bitField = this._bitField;
         var asyncGuaranteed = (bitField & 134217728) !== 0;
@@ -81702,10 +81702,10 @@ var require_promise = __commonJS({
           if (isPromise) promise._invokeInternalOnCancel();
           if (receiver instanceof PassThroughHandlerContext && receiver.isFinallyHandler()) {
             receiver.cancelPromise = promise;
-            if (tryCatch2(handler65).call(receiver, value) === errorObj2) {
+            if (tryCatch2(handler67).call(receiver, value) === errorObj2) {
               promise._reject(errorObj2.e);
             }
-          } else if (handler65 === reflectHandler) {
+          } else if (handler67 === reflectHandler) {
             promise._fulfill(reflectHandler.call(receiver));
           } else if (receiver instanceof Proxyable) {
             receiver._promiseCancelled(promise);
@@ -81714,12 +81714,12 @@ var require_promise = __commonJS({
           } else {
             receiver.cancel();
           }
-        } else if (typeof handler65 === "function") {
+        } else if (typeof handler67 === "function") {
           if (!isPromise) {
-            handler65.call(receiver, value, promise);
+            handler67.call(receiver, value, promise);
           } else {
             if (asyncGuaranteed) promise._setAsyncGuaranteed();
-            this._settlePromiseFromHandler(handler65, receiver, value, promise);
+            this._settlePromiseFromHandler(handler67, receiver, value, promise);
           }
         } else if (receiver instanceof Proxyable) {
           if (!receiver._isResolved()) {
@@ -81739,15 +81739,15 @@ var require_promise = __commonJS({
         }
       };
       Promise2.prototype._settlePromiseLateCancellationObserver = function(ctx) {
-        var handler65 = ctx.handler;
+        var handler67 = ctx.handler;
         var promise = ctx.promise;
         var receiver = ctx.receiver;
         var value = ctx.value;
-        if (typeof handler65 === "function") {
+        if (typeof handler67 === "function") {
           if (!(promise instanceof Promise2)) {
-            handler65.call(receiver, value, promise);
+            handler67.call(receiver, value, promise);
           } else {
-            this._settlePromiseFromHandler(handler65, receiver, value, promise);
+            this._settlePromiseFromHandler(handler67, receiver, value, promise);
           }
         } else if (promise instanceof Promise2) {
           promise._reject(value);
@@ -81756,12 +81756,12 @@ var require_promise = __commonJS({
       Promise2.prototype._settlePromiseCtx = function(ctx) {
         this._settlePromise(ctx.promise, ctx.handler, ctx.receiver, ctx.value);
       };
-      Promise2.prototype._settlePromise0 = function(handler65, value, bitField) {
+      Promise2.prototype._settlePromise0 = function(handler67, value, bitField) {
         var promise = this._promise0;
         var receiver = this._receiverAt(0);
         this._promise0 = void 0;
         this._receiver0 = void 0;
-        this._settlePromise(promise, handler65, receiver, value);
+        this._settlePromise(promise, handler67, receiver, value);
       };
       Promise2.prototype._clearCallbackDataAtIndex = function(index) {
         var base = index * 4 - 4;
@@ -81801,20 +81801,20 @@ var require_promise = __commonJS({
       };
       Promise2.prototype._fulfillPromises = function(len, value) {
         for (var i = 1; i < len; i++) {
-          var handler65 = this._fulfillmentHandlerAt(i);
+          var handler67 = this._fulfillmentHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler65, receiver, value);
+          this._settlePromise(promise, handler67, receiver, value);
         }
       };
       Promise2.prototype._rejectPromises = function(len, reason) {
         for (var i = 1; i < len; i++) {
-          var handler65 = this._rejectionHandlerAt(i);
+          var handler67 = this._rejectionHandlerAt(i);
           var promise = this._promiseAt(i);
           var receiver = this._receiverAt(i);
           this._clearCallbackDataAtIndex(i);
-          this._settlePromise(promise, handler65, receiver, reason);
+          this._settlePromise(promise, handler67, receiver, reason);
         }
       };
       Promise2.prototype._settlePromises = function() {
@@ -87375,14 +87375,14 @@ var require_BigInteger = __commonJS({
         }
         return low.add(Integer.fromArray(result, BASE, false));
       }
-      var parseBase = function(text, base, alphabet, caseSensitive) {
+      var parseBase = function(text2, base, alphabet, caseSensitive) {
         alphabet = alphabet || DEFAULT_ALPHABET;
-        text = String(text);
+        text2 = String(text2);
         if (!caseSensitive) {
-          text = text.toLowerCase();
+          text2 = text2.toLowerCase();
           alphabet = alphabet.toLowerCase();
         }
-        var length = text.length;
+        var length = text2.length;
         var i2;
         var absBase = Math.abs(base);
         var alphabetValues = {};
@@ -87390,7 +87390,7 @@ var require_BigInteger = __commonJS({
           alphabetValues[alphabet[i2]] = i2;
         }
         for (i2 = 0; i2 < length; i2++) {
-          var c = text[i2];
+          var c = text2[i2];
           if (c === "-") continue;
           if (c in alphabetValues) {
             if (alphabetValues[c] >= absBase) {
@@ -87401,16 +87401,16 @@ var require_BigInteger = __commonJS({
         }
         base = parseValue(base);
         var digits = [];
-        var isNegative = text[0] === "-";
-        for (i2 = isNegative ? 1 : 0; i2 < text.length; i2++) {
-          var c = text[i2];
+        var isNegative = text2[0] === "-";
+        for (i2 = isNegative ? 1 : 0; i2 < text2.length; i2++) {
+          var c = text2[i2];
           if (c in alphabetValues) digits.push(parseValue(alphabetValues[c]));
           else if (c === "<") {
             var start = i2;
             do {
               i2++;
-            } while (text[i2] !== ">" && i2 < text.length);
-            digits.push(parseValue(text.slice(start + 1, i2)));
+            } while (text2[i2] !== ">" && i2 < text2.length);
+            digits.push(parseValue(text2.slice(start + 1, i2)));
           } else throw new Error(c + " is not a valid character");
         }
         return parseBaseFromArray(digits, base, isNegative);
@@ -87542,15 +87542,15 @@ var require_BigInteger = __commonJS({
           if (exp[0] === "+") exp = exp.slice(1);
           exp = +exp;
           if (exp !== truncate(exp) || !isPrecise(exp)) throw new Error("Invalid integer: " + exp + " is not a valid exponent.");
-          var text = split[0];
-          var decimalPlace = text.indexOf(".");
+          var text2 = split[0];
+          var decimalPlace = text2.indexOf(".");
           if (decimalPlace >= 0) {
-            exp -= text.length - decimalPlace - 1;
-            text = text.slice(0, decimalPlace) + text.slice(decimalPlace + 1);
+            exp -= text2.length - decimalPlace - 1;
+            text2 = text2.slice(0, decimalPlace) + text2.slice(decimalPlace + 1);
           }
           if (exp < 0) throw new Error("Cannot include negative exponent part for integers");
-          text += new Array(exp + 1).join("0");
-          v = text;
+          text2 += new Array(exp + 1).join("0");
+          v = text2;
         }
         var isValid2 = /^([0-9][0-9]*)$/.test(v);
         if (!isValid2) throw new Error("Invalid integer: " + v);
@@ -88420,14 +88420,14 @@ var require_iterate_stream = __commonJS({
     function once(eventEmitter, type) {
       return new Promise((resolve) => {
         let fired = false;
-        const handler65 = () => {
+        const handler67 = () => {
           if (!fired) {
             fired = true;
-            eventEmitter.removeListener(type, handler65);
+            eventEmitter.removeListener(type, handler67);
             resolve();
           }
         };
-        eventEmitter.addListener(type, handler65);
+        eventEmitter.addListener(type, handler67);
       });
     }
   }
@@ -89008,7 +89008,7 @@ var require_workbook_reader = __commonJS({
           default:
             return;
         }
-        let text = null;
+        let text2 = null;
         let richText = [];
         let index = 0;
         let font = null;
@@ -89057,7 +89057,7 @@ var require_workbook_reader = __commonJS({
                 case "si":
                   font = null;
                   richText = [];
-                  text = null;
+                  text2 = null;
                   break;
                 case "sz":
                   font = font || {};
@@ -89066,7 +89066,7 @@ var require_workbook_reader = __commonJS({
                 case "strike":
                   break;
                 case "t":
-                  text = null;
+                  text2 = null;
                   break;
                 case "u":
                   font = font || {};
@@ -89078,27 +89078,27 @@ var require_workbook_reader = __commonJS({
                   break;
               }
             } else if (eventType === "text") {
-              text = text ? text + value : value;
+              text2 = text2 ? text2 + value : value;
             } else if (eventType === "closetag") {
               const node = value;
               switch (node.name) {
                 case "r":
                   richText.push({
                     font,
-                    text
+                    text: text2
                   });
                   font = null;
-                  text = null;
+                  text2 = null;
                   break;
                 case "si":
                   if (this.options.sharedStrings === "cache") {
-                    this.sharedStrings.push(richText.length ? { richText } : text);
+                    this.sharedStrings.push(richText.length ? { richText } : text2);
                   } else if (this.options.sharedStrings === "emit") {
-                    yield { index: index++, text: richText.length ? { richText } : text };
+                    yield { index: index++, text: richText.length ? { richText } : text2 };
                   }
                   richText = [];
                   font = null;
-                  text = null;
+                  text2 = null;
                   break;
               }
             }
@@ -93070,9 +93070,9 @@ function createFetchClient(options) {
         },
         body: body ? JSON.stringify(body) : void 0
       });
-      const text = await res.text();
+      const text2 = await res.text();
       const isJson = (res.headers.get("content-type") || "").includes("application/json");
-      const data = isJson && text ? JSON.parse(text) : text;
+      const data = isJson && text2 ? JSON.parse(text2) : text2;
       if (!res.ok) {
         const errBody = isJson ? data : void 0;
         const errorDetail = errBody?.error;
@@ -101297,23 +101297,52 @@ var paginationSchema = external_exports.object({
 });
 var uuidSchema = external_exports.string().uuid();
 
+// server/_handlers/_lib/ip.ts
+var IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+var IPV6_RE = /^[0-9a-fA-F:]{3,45}$/;
+function isValidIp(v) {
+  const s = (v || "").trim();
+  if (!s) return false;
+  if (s.startsWith("[") && s.endsWith("]")) return isValidIp(s.slice(1, -1));
+  return IPV4_RE.test(s) || IPV6_RE.test(s);
+}
+function clientIp(req) {
+  const vff = req.headers["x-vercel-forwarded-for"];
+  if (typeof vff === "string" && isValidIp(vff)) return vff.trim();
+  const rip = req.headers["x-real-ip"];
+  if (typeof rip === "string" && isValidIp(rip)) return rip.trim();
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd) {
+    const parts = fwd.split(",").map((p) => p.trim()).filter(isValidIp);
+    if (parts.length) return parts[parts.length - 1];
+  }
+  return "unknown";
+}
+
 // server/_handlers/_lib/audit.ts
-async function writeAudit(ctx, req, action, resourceType, resourceId, beforeData, afterData) {
+async function insertAuditRecord(req, actor, payload, opts) {
   try {
-    const supabase = getAdminClient();
+    const supabase = opts?.cleanClient ? getAdminClient(true) : getAdminClient();
     await supabase.from("audit_logs").insert({
-      user_id: ctx.userId,
-      action,
-      resource_type: resourceType,
-      resource_id: resourceId ?? null,
-      before_data: beforeData ?? null,
-      after_data: afterData ?? null,
-      ip: req.headers["x-forwarded-for"] ?? null,
+      user_id: actor.userId || null,
+      user_email: actor.email || null,
+      action: payload.action,
+      resource_type: payload.resourceType,
+      resource_id: payload.resourceId ?? null,
+      before_data: payload.beforeData ?? null,
+      after_data: payload.afterData ?? null,
+      ip: clientIp(req),
       user_agent: req.headers["user-agent"] ?? null
     });
   } catch (e) {
     console.error("[audit] write failed:", e);
   }
+}
+async function writeAudit(ctx, req, action, resourceType, resourceId, beforeData, afterData) {
+  await insertAuditRecord(req, { userId: ctx.userId, email: ctx.email }, { action, resourceType, resourceId, beforeData, afterData });
+}
+async function writeLoginAudit(req, userId, email) {
+  await insertAuditRecord(req, { userId, email }, { action: "login", resourceType: "auth" }, { cleanClient: true });
 }
 
 // server/_handlers/auth/profile.ts
@@ -101407,28 +101436,6 @@ async function handler3(req, res) {
   } catch (e) {
     return handleError2(res, e);
   }
-}
-
-// server/_handlers/_lib/ip.ts
-var IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
-var IPV6_RE = /^[0-9a-fA-F:]{3,45}$/;
-function isValidIp(v) {
-  const s = (v || "").trim();
-  if (!s) return false;
-  if (s.startsWith("[") && s.endsWith("]")) return isValidIp(s.slice(1, -1));
-  return IPV4_RE.test(s) || IPV6_RE.test(s);
-}
-function clientIp(req) {
-  const vff = req.headers["x-vercel-forwarded-for"];
-  if (typeof vff === "string" && isValidIp(vff)) return vff.trim();
-  const rip = req.headers["x-real-ip"];
-  if (typeof rip === "string" && isValidIp(rip)) return rip.trim();
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd) {
-    const parts = fwd.split(",").map((p) => p.trim()).filter(isValidIp);
-    if (parts.length) return parts[parts.length - 1];
-  }
-  return "unknown";
 }
 
 // server/_handlers/_lib/captcha.ts
@@ -101546,6 +101553,7 @@ async function handler4(req, res) {
     const userId = authData.user?.id;
     const { roles, permissions } = await loadUserAccess(adminClient, userId);
     const { data: profile } = await adminClient.from("profiles").select("display_name").eq("id", userId).maybeSingle();
+    await writeLoginAudit(req, userId ?? null, authData.user?.email || emailNorm);
     return res.status(200).json({
       session,
       user: {
@@ -101941,7 +101949,7 @@ async function handler7(req, res) {
     if (req.method === "GET") {
       requireAnyPermission(ctx, ["system.audit", "system.logs"]);
       const q = parse(paginationSchema, req.query);
-      const supabase = getAdminClient();
+      const supabase = getAdminClient(true);
       let query = supabase.from("audit_logs").select("*", { count: "exact" });
       const resourceType = typeof req.query.resource_type === "string" ? req.query.resource_type.trim() : "";
       if (resourceType) query = query.eq("resource_type", resourceType);
@@ -104892,6 +104900,207 @@ async function handler33(req, res) {
   }
 }
 
+// server/_handlers/_lib/geo.ts
+var CACHE_TTL_MS2 = 6 * 60 * 60 * 1e3;
+var REQUEST_TIMEOUT_MS = 2500;
+var cache = /* @__PURE__ */ new Map();
+var PRIVATE_V4_RE = /^(10\.|127\.|192\.168\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[0-2]\d)\.|172\.(1[6-9]|2\d|3[01])\.)/;
+function isPrivateIp(ip) {
+  const s = (ip || "").trim().toLowerCase();
+  if (!s) return true;
+  if (s === "::1" || s.startsWith("fc") || s.startsWith("fd") || s.startsWith("fe80:")) return true;
+  if (s.includes(":")) return false;
+  return PRIVATE_V4_RE.test(s);
+}
+function text(v) {
+  return typeof v === "string" ? v.trim() : "";
+}
+async function resolveIpLocation(ip) {
+  const key = (ip || "").trim();
+  if (!key || key === "unknown") return null;
+  if (isPrivateIp(key)) {
+    return { country: "\u5185\u7F51", region: "", city: "", isp: "" };
+  }
+  const hit = cache.get(key);
+  if (hit && hit.expireAt > Date.now()) return hit.value;
+  let value = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const res = await fetch(
+      `http://ip-api.com/json/${encodeURIComponent(key)}?lang=zh-CN&fields=status,country,regionName,city,isp`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.status === "success") {
+        value = {
+          country: text(data.country),
+          region: text(data.regionName),
+          city: text(data.city),
+          isp: text(data.isp)
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[geo] resolve failed:", key, e?.message || e);
+    value = null;
+  }
+  if (value) cache.set(key, { expireAt: Date.now() + CACHE_TTL_MS2, value });
+  return value;
+}
+
+// server/_handlers/visit.ts
+var visitSchema = external_exports.object({
+  // 只记录路径（前端已剥离查询串），服务端再兜底剥离一次，避免把 token 等敏感参数写进日志
+  path: external_exports.string().min(1).max(300),
+  referer: external_exports.string().max(500).optional().default(""),
+  // 匿名访客标识：前端 localStorage 持久化的随机 UUID（不含任何个人信息，可随时清除）。
+  // 仅用于「同访客 + 同路径」去重与列表展示，缺失/非法时归一为空串，回退按 IP 去重。
+  visitor_id: external_exports.preprocess(
+    (v) => typeof v === "string" && /^[0-9a-zA-Z-]{6,64}$/.test(v.trim()) ? v.trim() : "",
+    external_exports.string().max(64)
+  )
+});
+var DEDUP_WINDOW_MS = 6e4;
+var RATE_LIMIT_PER_MIN = 60;
+function parseDevice(ua) {
+  const s = ua || "";
+  if (!s) return "\u672A\u77E5";
+  let os = "\u672A\u77E5\u7CFB\u7EDF";
+  if (/Windows NT 10\.0/i.test(s)) os = "Windows 10/11";
+  else if (/Windows NT 6\.1/i.test(s)) os = "Windows 7";
+  else if (/Windows/i.test(s)) os = "Windows";
+  else if (/iPhone|iPad|iPod/i.test(s)) os = "iOS";
+  else if (/Android/i.test(s)) os = "Android";
+  else if (/Mac OS X/i.test(s)) os = "macOS";
+  else if (/Linux/i.test(s)) os = "Linux";
+  let browser = "\u672A\u77E5\u6D4F\u89C8\u5668";
+  const m = (re) => re.exec(s);
+  if (/Edg\//i.test(s)) {
+    const v = m(/Edg\/(\d+)/);
+    browser = "Edge" + (v ? " " + v[1] : "");
+  } else if (/OPR\/|Opera/i.test(s)) {
+    browser = "Opera";
+  } else if (/MicroMessenger/i.test(s)) {
+    const v = m(/MicroMessenger\/([\d.]+)/);
+    browser = "\u5FAE\u4FE1" + (v ? " " + v[1] : "");
+  } else if (/Chrome\//i.test(s)) {
+    const v = m(/Chrome\/(\d+)/);
+    browser = "Chrome" + (v ? " " + v[1] : "");
+  } else if (/Firefox\//i.test(s)) {
+    const v = m(/Firefox\/(\d+)/);
+    browser = "Firefox" + (v ? " " + v[1] : "");
+  } else if (/Safari\//i.test(s)) {
+    const v = m(/Version\/(\d+)/);
+    browser = "Safari" + (v ? " " + v[1] : "");
+  } else if (/curl|python|node|bot|spider|crawler/i.test(s)) {
+    browser = "\u975E\u6D4F\u89C8\u5668";
+  }
+  return os + " / " + browser;
+}
+async function resolveAccount(req, supabase) {
+  const h = req.headers.authorization;
+  const token = typeof h === "string" ? /^Bearer\s+(.+)$/i.exec(h)?.[1] || "" : "";
+  if (!token) return { id: null, email: "" };
+  try {
+    const probe = supabase.auth.getUser(token);
+    const timeout = new Promise((r) => setTimeout(() => r(null), 1500));
+    const result = await Promise.race([probe, timeout]);
+    const user = result?.data?.user;
+    if (user?.id) return { id: user.id, email: String(user.email || "") };
+  } catch (e) {
+    console.warn("[visit] resolve account failed:", e?.message || e);
+  }
+  return { id: null, email: "" };
+}
+async function handler34(req, res) {
+  try {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+    }
+    const ip = clientIp(req);
+    try {
+      rateLimit("visit:" + ip, RATE_LIMIT_PER_MIN, 6e4);
+    } catch {
+      return res.status(200).json({ ok: false, reason: "rate_limited" });
+    }
+    const parsed = visitSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(200).json({ ok: false, reason: "bad_request" });
+    const path = parsed.data.path.split("?")[0].split("#")[0].trim() || "/";
+    const ua = String(req.headers["user-agent"] || "");
+    const visitorId = String(parsed.data.visitor_id || "");
+    const supabase = getAdminClient(true);
+    const sinceIso = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString();
+    const dedupBy = async (column, value) => supabase.from("visit_logs").select("id").eq(column, value).eq("path", path).gte("created_at", sinceIso).limit(1);
+    let dedupRes = visitorId ? await dedupBy("visitor_id", visitorId) : await dedupBy("ip", ip);
+    if (dedupRes?.error && visitorId && /visitor_id/i.test(String(dedupRes.error.message || ""))) {
+      dedupRes = await dedupBy("ip", ip);
+    }
+    if (dedupRes?.error) throw dedupRes.error;
+    if (dedupRes?.data && dedupRes.data.length > 0) return res.status(200).json({ ok: true, deduped: true });
+    const [account, location2] = await Promise.all([resolveAccount(req, supabase), resolveIpLocation(ip)]);
+    const record = {
+      ip,
+      visitor_id: visitorId || null,
+      country: location2?.country || null,
+      region: location2?.region || null,
+      city: location2?.city || null,
+      isp: location2?.isp || null,
+      path,
+      user_id: account.id,
+      user_email: account.email || null,
+      is_guest: !account.id,
+      user_agent: ua.slice(0, 500),
+      device: parseDevice(ua),
+      referer: String(parsed.data.referer || "").slice(0, 500) || null
+    };
+    let insRes = await supabase.from("visit_logs").insert(record);
+    if (insRes?.error && /visitor_id/i.test(String(insRes.error.message || ""))) {
+      const fallback = { ...record };
+      delete fallback.visitor_id;
+      insRes = await supabase.from("visit_logs").insert(fallback);
+    }
+    if (insRes?.error) throw insRes.error;
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    console.warn("[visit] record failed:", e?.message || e);
+    return res.status(200).json({ ok: false });
+  }
+}
+
+// server/_handlers/visits.ts
+async function handler35(req, res) {
+  try {
+    rateLimit(clientIp(req) + ":" + (req.url || ""), 120, 6e4);
+    const ctx = await requireAuth(req);
+    if (req.method === "GET") {
+      requirePermission(ctx, "system.visit");
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 100));
+      const str = (v) => typeof v === "string" ? v.trim() : "";
+      const ip = str(req.query.ip);
+      const path = str(req.query.path);
+      const dateFrom = str(req.query.date_from);
+      const dateTo = str(req.query.date_to);
+      const supabase = getAdminClient(true);
+      let query = supabase.from("visit_logs").select("*", { count: "exact" });
+      if (ip) query = query.ilike("ip", `%${ip}%`);
+      if (path) query = query.ilike("path", `%${path}%`);
+      if (dateFrom && !Number.isNaN(Date.parse(dateFrom))) query = query.gte("created_at", new Date(dateFrom).toISOString());
+      if (dateTo && !Number.isNaN(Date.parse(dateTo))) query = query.lte("created_at", new Date(dateTo).toISOString());
+      query = query.order("created_at", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return res.status(200).json({ data: data || [], total: count ?? 0, page, pageSize });
+    }
+    return res.status(405).json({ error: { code: "METHOD_NOT_ALLOWED", message: "Method not allowed" } });
+  } catch (e) {
+    return handleError2(res, e);
+  }
+}
+
 // server/_handlers/warehouses.ts
 var createSchema11 = external_exports.object({
   code: external_exports.string().min(1).max(32),
@@ -104907,7 +105116,7 @@ function deriveWhType(kind) {
 function deriveKind(whType) {
   return whType === "overseas" ? "overseas" : "sub";
 }
-async function handler34(req, res) {
+async function handler36(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -104963,7 +105172,7 @@ function normText(v) {
 var importSchema = external_exports.object({
   rows: external_exports.array(importRowSchema).min(1).max(5e3)
 });
-async function handler35(req, res) {
+async function handler37(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105157,7 +105366,7 @@ async function handler35(req, res) {
 }
 
 // server/_handlers/daily-sales/summary.ts
-async function handler36(req, res) {
+async function handler38(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105323,7 +105532,7 @@ function num(v) {
 function ceilN(v) {
   return Math.ceil(v);
 }
-async function handler37(req, res) {
+async function handler39(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105698,7 +105907,7 @@ async function handler37(req, res) {
 }
 
 // server/_handlers/dashboard.ts
-async function handler38(req, res) {
+async function handler40(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -105891,7 +106100,7 @@ function toItems(rows, type, cfg) {
     deleted_at: r.deleted_at
   }));
 }
-async function handler39(req, res) {
+async function handler41(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106022,7 +106231,7 @@ var CURRENCIES = [
   { code: "ARS", symbol: "AR$", name: "\u963F\u6839\u5EF7\u6BD4\u7D22" },
   { code: "PEN", symbol: "S/", name: "\u79D8\u9C81\u7D22\u5C14" }
 ];
-async function handler40(req, res) {
+async function handler42(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106196,7 +106405,7 @@ async function loadRangeFromDb(from, to) {
   }
   return Array.from(byDate.entries()).map(([date, v]) => ({ date, rates: v.rates, source: v.source })).sort((a, b) => a.date < b.date ? -1 : 1);
 }
-async function handler41(req, res) {
+async function handler43(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     await requireAuth(req);
@@ -106303,7 +106512,7 @@ var createSchema12 = external_exports.object({
   phone: external_exports.string().max(50).nullable().optional(),
   remark: external_exports.string().max(500).nullable().optional()
 });
-async function handler42(req, res) {
+async function handler44(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106350,7 +106559,7 @@ var updateSchema4 = external_exports.object({
   remark: external_exports.string().max(500).nullable().optional(),
   is_active: external_exports.boolean().optional()
 });
-async function handler43(req, res) {
+async function handler45(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106398,7 +106607,7 @@ var createSchema13 = external_exports.object({
   color: external_exports.string().max(7).default("#FFFFFF"),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler44(req, res) {
+async function handler46(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106432,7 +106641,7 @@ var updateSchema5 = external_exports.object({
   color: external_exports.string().max(7).optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler45(req, res) {
+async function handler47(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106481,7 +106690,7 @@ var createSchema14 = external_exports.object({
   need_stock_in: external_exports.boolean().default(false),
   sort_order: external_exports.number().int().default(0)
 });
-async function handler46(req, res) {
+async function handler48(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106515,7 +106724,7 @@ var updateSchema6 = external_exports.object({
   need_stock_in: external_exports.boolean().optional(),
   sort_order: external_exports.number().int().optional()
 });
-async function handler47(req, res) {
+async function handler49(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106603,7 +106812,7 @@ var updateSchema7 = external_exports.object({
   result: external_exports.string().max(512).optional(),
   items: external_exports.array(itemSchema7).min(1).max(200).optional()
 }).refine((v) => Object.keys(v).length > 0, { message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5" });
-async function handler48(req, res) {
+async function handler50(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106691,7 +106900,7 @@ async function handler48(req, res) {
 }
 
 // server/_handlers/inventory/[id].ts
-async function handler49(req, res) {
+async function handler51(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106728,7 +106937,7 @@ var adjustSchema = external_exports.object({
   reference_id: external_exports.string().uuid().nullable().optional(),
   note: external_exports.string().max(500).nullable().optional()
 });
-async function handler50(req, res) {
+async function handler52(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106763,7 +106972,7 @@ async function handler50(req, res) {
 }
 
 // server/_handlers/inventory/transactions.ts
-async function handler51(req, res) {
+async function handler53(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106834,7 +107043,7 @@ async function fetchProductVisible(supabase, ctx, id) {
   row.sale_price = bindings.length ? bindings[0].sale_price : Number(row.unit_price ?? 0);
   return row;
 }
-async function handler52(req, res) {
+async function handler54(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -106972,7 +107181,7 @@ var updateSchema9 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler53(req, res) {
+async function handler55(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -107113,7 +107322,7 @@ var updateSchema10 = external_exports.object({
     message: "\u81F3\u5C11\u63D0\u4F9B\u4E00\u4E2A\u66F4\u65B0\u5B57\u6BB5"
   }
 );
-async function handler54(req, res) {
+async function handler56(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -107271,6 +107480,29 @@ async function collectUnarrived(supabase, opts) {
     orders_without_items: withoutItems
   };
 }
+function summarizeAll(cells, ordersByDate) {
+  const productIds = /* @__PURE__ */ new Set();
+  const orderIds = /* @__PURE__ */ new Set();
+  let totalQty = 0;
+  let itemCount = 0;
+  for (const c of cells) {
+    totalQty += c.quantity;
+    itemCount += c.item_count;
+    productIds.add(c.product_id);
+  }
+  const dateSet = new Set(cells.map((c) => c.group_date));
+  for (const [date, ids] of Object.entries(ordersByDate)) {
+    dateSet.add(date);
+    for (const id of ids) orderIds.add(id);
+  }
+  return {
+    total_qty: totalQty,
+    sku_count: productIds.size,
+    order_count: orderIds.size,
+    item_count: itemCount,
+    date_count: dateSet.size
+  };
+}
 function groupByDate(cells, ordersByDate) {
   const dates = /* @__PURE__ */ new Set([...cells.map((c) => c.group_date), ...Object.keys(ordersByDate)]);
   const out = [];
@@ -107322,7 +107554,7 @@ function groupByDate(cells, ordersByDate) {
 var querySchema = external_exports.object({
   date: external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
 });
-async function handler55(req, res) {
+async function handler57(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "GET") {
@@ -107339,6 +107571,7 @@ async function handler55(req, res) {
     const focusDate = q.date || todayDate;
     const dates = q.date ? allDates.filter((d) => d.date === q.date) : allDates;
     const today = allDates.find((d) => d.date === focusDate) || null;
+    const all = summarizeAll(result.cells, result.orders_by_date);
     return res.status(200).json({
       data: {
         timezone: result.timezone,
@@ -107351,6 +107584,8 @@ async function handler55(req, res) {
         },
         today_date: todayDate,
         today: today ? { date: today.date, order_count: today.order_count, total_qty: today.total_qty, sku_count: today.sku_count } : { date: todayDate, order_count: 0, total_qty: 0, sku_count: 0 },
+        // 全部统计日的汇总口径（跨日去重）
+        all,
         scanned_orders: result.scanned_orders,
         unarrived_orders: result.unarrived_orders,
         orders_without_items: result.orders_without_items,
@@ -107430,7 +107665,7 @@ async function runSnapshot(req, res) {
     }
   });
 }
-async function handler56(req, res) {
+async function handler58(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method === "POST") return await runSnapshot(req, res);
@@ -107484,7 +107719,7 @@ var updateSchema11 = external_exports.object({
   status: external_exports.enum(["DRAFT", "CONFIRMED", "PAID", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
   currency: external_exports.string().max(8).optional()
 });
-async function handler57(req, res) {
+async function handler59(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -107572,7 +107807,7 @@ var updateSchema12 = external_exports.object({
   // 到达海外仓：调拨发货的目的海外仓，仅记录展示，不参与本地库存记账
   to_warehouse_id: external_exports.string().uuid().nullable().optional()
 });
-async function handler58(req, res) {
+async function handler60(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -107889,7 +108124,7 @@ function cleanNum(v) {
   const n = Number(String(v).trim());
   return Number.isFinite(n) ? n : null;
 }
-async function handler59(req, res) {
+async function handler61(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -108229,7 +108464,7 @@ async function handler59(req, res) {
 }
 
 // server/_handlers/shipments/confirm-inbound.ts
-async function handler60(req, res) {
+async function handler62(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -108304,7 +108539,7 @@ var receiveSchema = external_exports.object({
     })
   ).min(1).max(200)
 });
-async function handler61(req, res) {
+async function handler63(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     if (req.method !== "POST") {
@@ -108388,7 +108623,7 @@ var TRANSFER_FLOW = {
 var updateSchema13 = external_exports.object({
   status: external_exports.enum(["DRAFT", "APPROVED", "SHIPPED", "PARTIAL", "RECEIVED", "CANCELLED"])
 });
-async function handler62(req, res) {
+async function handler64(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -108496,7 +108731,7 @@ function deriveWhType2(kind) {
 function deriveKind2(whType) {
   return whType === "overseas" ? "overseas" : "sub";
 }
-async function handler63(req, res) {
+async function handler65(req, res) {
   try {
     rateLimit((req.headers["x-forwarded-for"] || "unknown") + ":" + (req.url || ""));
     const ctx = await requireAuth(req);
@@ -108553,29 +108788,31 @@ var routes = [
   { pattern: /^\/auth\/password$/, handler: handler3 },
   { pattern: /^\/auth\/profile$/, handler: handler2 },
   { pattern: /^\/auth\/me$/, handler },
-  { pattern: /^\/dashboard\/stats$/, handler: handler38 },
-  { pattern: /^\/recycle-bin\/restore$/, handler: handler39 },
-  { pattern: /^\/recycle-bin\/purge$/, handler: handler39 },
-  { pattern: /^\/recycle-bin$/, handler: handler39 },
-  { pattern: /^\/analysis$/, handler: handler37 },
-  { pattern: /^\/daily-sales\/summary$/, handler: handler36 },
-  { pattern: /^\/daily-sales$/, handler: handler35 },
-  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler45, params: ["id"] },
-  { pattern: /^\/cargo-statuses$/, handler: handler44 },
-  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler47, params: ["id"] },
-  { pattern: /^\/after-sale-types$/, handler: handler46 },
-  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler43, params: ["id"] },
-  { pattern: /^\/forwarders$/, handler: handler42 },
-  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler48, params: ["id"] },
+  { pattern: /^\/dashboard\/stats$/, handler: handler40 },
+  { pattern: /^\/recycle-bin\/restore$/, handler: handler41 },
+  { pattern: /^\/recycle-bin\/purge$/, handler: handler41 },
+  { pattern: /^\/recycle-bin$/, handler: handler41 },
+  { pattern: /^\/analysis$/, handler: handler39 },
+  { pattern: /^\/daily-sales\/summary$/, handler: handler38 },
+  { pattern: /^\/daily-sales$/, handler: handler37 },
+  { pattern: /^\/cargo-statuses\/([^/]+)$/, handler: handler47, params: ["id"] },
+  { pattern: /^\/cargo-statuses$/, handler: handler46 },
+  { pattern: /^\/after-sale-types\/([^/]+)$/, handler: handler49, params: ["id"] },
+  { pattern: /^\/after-sale-types$/, handler: handler48 },
+  { pattern: /^\/forwarders\/([^/]+)$/, handler: handler45, params: ["id"] },
+  { pattern: /^\/forwarders$/, handler: handler44 },
+  { pattern: /^\/after-sales\/([^/]+)$/, handler: handler50, params: ["id"] },
   { pattern: /^\/after-sales$/, handler: handler6 },
   { pattern: /^\/audit-logs$/, handler: handler7 },
-  { pattern: /^\/system-settings$/, handler: handler40 },
-  { pattern: /^\/exchange-rates$/, handler: handler41 },
+  { pattern: /^\/visit$/, handler: handler34 },
+  { pattern: /^\/visits$/, handler: handler35 },
+  { pattern: /^\/system-settings$/, handler: handler42 },
+  { pattern: /^\/exchange-rates$/, handler: handler43 },
   { pattern: /^\/db-usage$/, handler: handler8 },
   { pattern: /^\/inventory\/alerts$/, handler: handler19 },
-  { pattern: /^\/inventory\/adjust$/, handler: handler50 },
-  { pattern: /^\/inventory\/transactions$/, handler: handler51 },
-  { pattern: /^\/inventory\/([^/]+)$/, handler: handler49, params: ["id"] },
+  { pattern: /^\/inventory\/adjust$/, handler: handler52 },
+  { pattern: /^\/inventory\/transactions$/, handler: handler53 },
+  { pattern: /^\/inventory\/([^/]+)$/, handler: handler51, params: ["id"] },
   { pattern: /^\/inventory$/, handler: handler9 },
   { pattern: /^\/permissions$/, handler: handler11 },
   { pattern: /^\/products\/batch-edit$/, handler: handler17 },
@@ -108587,39 +108824,39 @@ var routes = [
   { pattern: /^\/cost-profit\/save$/, handler: handler15 },
   { pattern: /^\/cost-profit$/, handler: handler15 },
   { pattern: /^\/product-total$/, handler: handler13 },
-  { pattern: /^\/products\/([^/]+)$/, handler: handler52, params: ["id"] },
+  { pattern: /^\/products\/([^/]+)$/, handler: handler54, params: ["id"] },
   { pattern: /^\/products$/, handler: handler12 },
   { pattern: /^\/purchase-orders\/batch$/, handler: handler25 },
-  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler53, params: ["id"] },
+  { pattern: /^\/purchase-orders\/([^/]+)$/, handler: handler55, params: ["id"] },
   { pattern: /^\/purchase-orders$/, handler: handler24 },
-  { pattern: /^\/replenishment\/stats$/, handler: handler55 },
-  { pattern: /^\/replenishment\/snapshots$/, handler: handler56 },
-  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler54, params: ["id"] },
+  { pattern: /^\/replenishment\/stats$/, handler: handler57 },
+  { pattern: /^\/replenishment\/snapshots$/, handler: handler58 },
+  { pattern: /^\/replenishment\/([^/]+)$/, handler: handler56, params: ["id"] },
   { pattern: /^\/replenishment$/, handler: handler26 },
   { pattern: /^\/roles\/([^/]+)$/, handler: handler28, params: ["id"] },
   { pattern: /^\/roles$/, handler: handler27 },
-  { pattern: /^\/sales\/([^/]+)$/, handler: handler57, params: ["id"] },
+  { pattern: /^\/sales\/([^/]+)$/, handler: handler59, params: ["id"] },
   { pattern: /^\/sales$/, handler: handler29 },
-  { pattern: /^\/shipments\/import$/, handler: handler59 },
-  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler60, params: ["id"] },
-  { pattern: /^\/shipments\/([^/]+)\/receive$/, handler: handler61, params: ["id"] },
-  { pattern: /^\/shipments\/([^/]+)$/, handler: handler58, params: ["id"] },
+  { pattern: /^\/shipments\/import$/, handler: handler61 },
+  { pattern: /^\/shipments\/([^/]+)\/confirm-inbound$/, handler: handler62, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)\/receive$/, handler: handler63, params: ["id"] },
+  { pattern: /^\/shipments\/([^/]+)$/, handler: handler60, params: ["id"] },
   { pattern: /^\/shipments$/, handler: handler30 },
   { pattern: /^\/stocktakes\/summary$/, handler: handler22 },
   { pattern: /^\/stocktakes\/([^/]+)\/audit$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes\/([^/]+)$/, handler: handler10, params: ["id"] },
   { pattern: /^\/stocktakes$/, handler: handler10 },
-  { pattern: /^\/transfers\/([^/]+)$/, handler: handler62, params: ["id"] },
+  { pattern: /^\/transfers\/([^/]+)$/, handler: handler64, params: ["id"] },
   { pattern: /^\/transfers$/, handler: handler31 },
   { pattern: /^\/users\/([^/]+)$/, handler: handler32, params: ["id"] },
   { pattern: /^\/users$/, handler: handler33 },
   { pattern: /^\/export\/xlsx$/, handler: handler5 },
   { pattern: /^\/system\/backup$/, handler: handler20 },
   { pattern: /^\/system\/logo$/, handler: handler21 },
-  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler63, params: ["id"] },
-  { pattern: /^\/warehouses$/, handler: handler34 }
+  { pattern: /^\/warehouses\/([^/]+)$/, handler: handler65, params: ["id"] },
+  { pattern: /^\/warehouses$/, handler: handler36 }
 ];
-async function handler64(req, res) {
+async function handler66(req, res) {
   try {
     const url = new URL(req.url || "/", "http://internal");
     const path = url.pathname.replace(/^\/api/, "") || "/";
@@ -108642,7 +108879,7 @@ async function handler64(req, res) {
   }
 }
 export {
-  handler64 as default
+  handler66 as default
 };
 /*! Bundled license information:
 

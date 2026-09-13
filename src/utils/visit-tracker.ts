@@ -157,9 +157,15 @@ async function report(path: string) {
   }
 }
 
-// 安装路由采集：每次导航完成后上报（含首次进入的登录页）
+// 安装路由采集：每次导航完成后上报。
+// 另外补报一次首屏：用户进入后若不发生路由跳转（例如停留在登录页 / 直达页），
+// 仅靠 afterEach 不会产生任何记录，会出现「访问记录一直为空」。
 export function installVisitTracker(router: Router) {
   router.afterEach((to) => {
     void report(to.path)
+  })
+  void router.isReady().then(() => {
+    const p = router.currentRoute.value?.path
+    if (p && p !== '/') void report(p)
   })
 }

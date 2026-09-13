@@ -367,9 +367,15 @@
           <el-button type="primary" @click="loadAudit">查询</el-button>
         </div>
         <el-table :resizable="false" v-loading="auditLoading" :data="auditRows" border stripe>
-          <el-table-column prop="user_email" label="操作人" min-width="180" />
-          <el-table-column prop="resource_type" label="资源类型" min-width="140" />
-          <el-table-column prop="action" label="动作" min-width="120" />
+          <el-table-column label="操作人" min-width="180">
+            <template #default="{ row }">{{ actorText(row) }}</template>
+          </el-table-column>
+          <el-table-column label="资源类型" min-width="140">
+            <template #default="{ row }">{{ resourceText(row) }}</template>
+          </el-table-column>
+          <el-table-column label="动作" min-width="120">
+            <template #default="{ row }">{{ actionLabel(row.action) }}</template>
+          </el-table-column>
           <el-table-column prop="detail" label="详情" min-width="260" show-overflow-tooltip />
           <el-table-column prop="ip" label="IP" min-width="130" />
           <el-table-column prop="created_at" label="时间" min-width="170">
@@ -563,6 +569,7 @@ import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENC
 import { useAuthStore } from '../stores/auth'
 import { useSiteStore } from '../stores/site'
 import { pageLabel, locationText, visitorShort } from '../utils/visit-tracker'
+import { actionLabel, resourceLabel, resourceText, actorText } from '../utils/audit-labels'
 
 const auth = useAuthStore()
 const site = useSiteStore()

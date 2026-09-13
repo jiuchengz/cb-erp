@@ -14,7 +14,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       requireAnyPermission(ctx, ['system.audit', 'system.logs']);
       const q = parse(paginationSchema, req.query);
-      const supabase = getAdminClient();
+      // 强制新建干净 client，避免被登录 session 污染后按 authenticated 身份被 RLS 过滤（列表恒空）
+      const supabase = getAdminClient(true);
       let query: any = supabase.from('audit_logs').select('*', { count: 'exact' });
       const resourceType = typeof req.query.resource_type === 'string' ? req.query.resource_type.trim() : '';
       if (resourceType) query = query.eq('resource_type', resourceType);
