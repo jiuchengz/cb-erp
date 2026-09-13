@@ -108,7 +108,16 @@
           <el-button type="primary" @click="loadVisits">查询</el-button>
           <el-button @click="resetVisitFilters">重置</el-button>
         </div>
-        <el-table :resizable="false" v-loading="visitLoading" :data="visitRows" border stripe>
+        <div v-if="visitError" class="log-error">{{ visitError }}</div>
+        <el-table
+          v-else
+          :resizable="false"
+          v-loading="visitLoading"
+          :data="visitRows"
+          border
+          stripe
+          empty-text="暂无访问记录"
+        >
           <el-table-column prop="created_at" label="时间" min-width="170">
             <template #default="{ row }">{{ formatServerTime(row.created_at) }}</template>
           </el-table-column>
@@ -242,11 +251,14 @@ function serverActionTag(action: string) {
 const visitRows = ref<any[]>([])
 const visitTotal = ref(0)
 const visitLoading = ref(false)
+// 持久失败态：接口失败时在表格区域展示 HTTP 状态码 + 后端 error.code/message（区别于「暂无数据」）
+const visitError = ref('')
 const visitRange = ref<string[] | null>(null)
 const visitQuery = reactive({ page: 1, pageSize: 100, ip: '', path: '' })
 
 async function loadVisits() {
   visitLoading.value = true
+  visitError.value = ''
   try {
     const params: Record<string, any> = { ...visitQuery }
     const r = visitRange.value
@@ -255,10 +267,26 @@ async function loadVisits() {
       params.date_from = new Date(`${r[0]}T00:00:00`).toISOString()
       params.date_to = new Date(`${r[1]}T23:59:59.999`).toISOString()
     }
-    const { data } = await api.get('/visits', { params })
-    visitRows.value = data.data ?? []
-    visitTotal.value = data.total ?? 0
+    // api.ts 的响应拦截器成功后返回的是完整 AxiosResponse（未做 res.data 解包），
+    // 因此此处 res.data 即后端 JSON 响应体 { data, total, page, pageSize }，不存在二次解包。
+    const res = await api.get('/visits', { params })
+    const body = res?.data ?? {}
+    visitRows.value = body.data ?? []
+    visitTotal.value = body.total ?? 0
   } catch (e: any) {
+    // 失败态：清空旧数据，持久保留失败原因（含 HTTP 状态码与后端 error.code / error.message）
+    visitRows.value = []
+    visitTotal.value = 0
+    const status = e?.response?.status
+    const errCode = e?.response?.data?.error?.code
+    const errMsg = e?.response?.data?.error?.message
+    const parts: string[] = []
+    if (status) parts.push(`HTTP ${status}`)
+    if (errCode) parts.push(`[${errCode}]`)
+    if (errMsg) parts.push(String(errMsg))
+    visitError.value = `访问记录加载失败：${
+      parts.length ? parts.join(' ') : e?.message || '网络异常或请求超时（无响应）'
+    }`
     ElMessage.error(e?.response?.data?.error?.message || '加载访问记录失败')
   } finally {
     visitLoading.value = false
