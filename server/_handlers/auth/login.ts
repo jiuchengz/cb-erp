@@ -4,6 +4,7 @@ import { getAdminClient } from '../_lib/db';
 import { handleError, Errors } from '../_lib/error';
 import { rateLimit, loginRateLimit } from '../_lib/rate-limit';
 import { loadUserAccess } from '../_lib/auth';
+import { writeLoginAudit } from '../_lib/audit';
 import { clientIp } from '../_lib/ip';
 import {
   getLockRemainMs,
@@ -128,6 +129,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('display_name')
       .eq('id', userId)
       .maybeSingle();
+
+    // 登录成功审计（动作 login / 对象 auth，含账号邮箱、IP、User-Agent、时间）；
+    // 内部已吞掉异常，不影响登录主流程。
+    await writeLoginAudit(req, userId ?? null, authData.user?.email || emailNorm);
 
     return res.status(200).json({
       session,

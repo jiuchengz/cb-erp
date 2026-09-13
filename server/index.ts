@@ -31,6 +31,8 @@ import sales from './_handlers/sales';
 import shipments from './_handlers/shipments';
 import transfers from './_handlers/transfers';
 import users from './_handlers/users';
+import visit from './_handlers/visit';
+import visits from './_handlers/visits';
 import warehouses from './_handlers/warehouses';
 import dailySales from './_handlers/daily-sales';
 import dailySalesSummary from './_handlers/daily-sales/summary';
@@ -92,6 +94,8 @@ const routes: Route[] = [
   { pattern: /^\/after-sales\/([^/]+)$/, handler: afterSalesId, params: ['id'] },
   { pattern: /^\/after-sales$/, handler: afterSales },
   { pattern: /^\/audit-logs$/, handler: auditLogs },
+  { pattern: /^\/visit$/, handler: visit },
+  { pattern: /^\/visits$/, handler: visits },
   { pattern: /^\/system-settings$/, handler: systemSettings },
   { pattern: /^\/exchange-rates$/, handler: exchangeRates },
   { pattern: /^\/db-usage$/, handler: dbUsage },

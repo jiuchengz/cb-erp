@@ -43,13 +43,18 @@
           </el-table-column>
           <el-table-column label="动作" width="120">
             <template #default="{ row }">
-              <el-tag :type="serverActionTag(row.action)" size="small">{{ row.action }}</el-tag>
+              <el-tag :type="serverActionTag(row.action)" size="small">{{ actionLabel(row.action) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="对象" min-width="200">
-            <template #default="{ row }">{{ row.resource_type }} #{{ row.resource_id ?? '-' }}</template>
+          <el-table-column label="对象" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">{{ resourceText(row) }}</template>
           </el-table-column>
-          <el-table-column prop="user_email" label="操作人" min-width="200" show-overflow-tooltip />
+          <el-table-column label="IP" width="150" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.ip || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="操作人" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">{{ actorText(row) }}</template>
+          </el-table-column>
         </el-table>
         <div v-if="!serverLogs.length && !serverLoading && !serverError" class="log-empty">暂无服务端审计日志</div>
         <div class="pagination-bar">
@@ -140,6 +145,76 @@ function serverActionTag(action: string) {
   if (action?.toLowerCase().includes('create') || action?.toLowerCase().includes('insert')) return 'success'
   if (action?.toLowerCase().includes('delete') || action?.toLowerCase().includes('remove')) return 'danger'
   return 'info'
+}
+
+/* ---------- 服务端审计日志：动作 / 对象中文化 ---------- */
+// 动作英文 -> 中文（未登记的动作回退展示原文，不丢信息）
+const ACTION_LABELS: Record<string, string> = {
+  create: '新增',
+  update: '更新',
+  delete: '删除',
+  login: '登录',
+  logout: '登出',
+  import: '导入',
+  export: '导出',
+  update_profile: '更新资料',
+  adjust_inventory: '库存调整',
+  batch_delete: '批量删除',
+  batch_edit: '批量编辑',
+  batch_stock: '批量改库存',
+  restore: '恢复',
+  purge: '彻底删除',
+  audit: '审核',
+  snapshot: '生成快照',
+  export_backup: '导出备份',
+  update_site_logo: '更新站点标识',
+}
+
+// 对象英文 -> 中文（未登记的对象回退展示原文）
+const RESOURCE_LABELS: Record<string, string> = {
+  product: '商品',
+  shipment: '发货单',
+  purchase_order: '采购单',
+  sales_order: '销售单',
+  inventory: '库存',
+  stocktake: '盘点单',
+  transfer: '调拨单',
+  after_sale: '售后单',
+  replenishment_order: '补货单',
+  daily_sales: '日销',
+  warehouse: '仓库',
+  user: '用户',
+  role: '角色',
+  forwarder: '货代',
+  system_settings: '系统设置',
+  system_setting: '系统设置',
+  auth: '登录',
+}
+
+function actionLabel(action: string | null | undefined): string {
+  const key = String(action || '').trim()
+  if (!key) return '-'
+  return ACTION_LABELS[key] || ACTION_LABELS[key.toLowerCase()] || key
+}
+
+function resourceLabel(type: string | null | undefined): string {
+  const key = String(type || '').trim()
+  if (!key) return '-'
+  return RESOURCE_LABELS[key] || RESOURCE_LABELS[key.toLowerCase()] || key
+}
+
+function resourceText(row: any): string {
+  const label = resourceLabel(row?.resource_type)
+  const id = row?.resource_id ? String(row.resource_id) : ''
+  return id ? `${label} #${id}` : label
+}
+
+// 操作人：优先账号邮箱；历史记录缺邮箱时回退账号 ID 短值；两者都没有显示 "-"
+function actorText(row: any): string {
+  const email = String(row?.user_email || '').trim()
+  if (email) return email
+  const uid = String(row?.user_id || '').trim()
+  return uid ? uid.slice(0, 8) : '-'
 }
 </script>
 

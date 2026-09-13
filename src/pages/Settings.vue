@@ -393,6 +393,86 @@
           </el-select>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane v-if="tabVisible('visit')" label="访问记录" name="visit">
+        <div class="filters">
+          <el-input
+            v-model="visitQuery.ip"
+            placeholder="IP 地址"
+            clearable
+            style="width: 160px"
+            @keyup.enter="loadVisits"
+            @clear="loadVisits"
+          />
+          <el-input
+            v-model="visitQuery.path"
+            placeholder="访问路径"
+            clearable
+            style="width: 170px"
+            @keyup.enter="loadVisits"
+            @clear="loadVisits"
+          />
+          <el-date-picker
+            v-model="visitRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            style="width: 260px"
+            @change="onVisitRangeChange"
+          />
+          <el-button type="primary" @click="loadVisits">查询</el-button>
+          <el-button @click="resetVisitFilters">重置</el-button>
+        </div>
+        <el-table :resizable="false" v-loading="visitLoading" :data="visitRows" border stripe>
+          <el-table-column prop="created_at" label="时间" min-width="170">
+            <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column prop="ip" label="IP" min-width="140" />
+          <el-table-column label="访客标识" width="130">
+            <template #default="{ row }">
+              <el-tooltip v-if="row.visitor_id" :content="String(row.visitor_id)" placement="top">
+                <span class="visit-visitor">{{ visitorShort(row.visitor_id) }}</span>
+              </el-tooltip>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="IP 归属地" min-width="240">
+            <template #default="{ row }">{{ locationText(row) }}</template>
+          </el-table-column>
+          <el-table-column label="页面" min-width="180">
+            <template #default="{ row }">
+              <div class="visit-page">
+                <span>{{ pageLabel(row.path) }}</span>
+                <span class="visit-path">{{ row.path }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="账号" min-width="200">
+            <template #default="{ row }">
+              <el-tag v-if="!row.user_email" size="small" type="info">访客</el-tag>
+              <span v-else>{{ row.user_email }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="device" label="设备" min-width="200" show-overflow-tooltip />
+        </el-table>
+        <div class="pagination-bar">
+          <span class="pagination-total">当前页共 {{ visitRows.length }} 条</span>
+          <el-pagination
+            background
+            layout="total, prev, pager, next"
+            :total="visitTotal"
+            v-model:current-page="visitQuery.page"
+            :page-size="visitQuery.pageSize"
+            @current-change="loadVisits"
+          />
+          <el-select v-model="visitQuery.pageSize" class="page-size-select" @change="onVisitSizeChange">
+            <el-option label="100条/页" :value="100" />
+            <el-option label="200条/页" :value="200" />
+          </el-select>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="roleVisible" :title="roleEditing ? '编辑角色' : '新增角色'" width="720px" destroy-on-close>
@@ -482,6 +562,7 @@ import { api } from '../services/api'
 import { formatDateTime as sysFormatDateTime, setSystemSettings, DEFAULT_CURRENCIES, fetchExchangeRates } from '../utils/system'
 import { useAuthStore } from '../stores/auth'
 import { useSiteStore } from '../stores/site'
+import { pageLabel, locationText, visitorShort } from '../utils/visit-tracker'
 
 const auth = useAuthStore()
 const site = useSiteStore()
@@ -499,7 +580,7 @@ function formatDate(v: string) {
 }
 
 // 顶部标签权限映射：每个 tab 对应独立 system.* 子码；角色/权限 tab 亦独立
-const TAB_ORDER = ['system', 'backup', 'logo', 'appearance', 'roles', 'permissions', 'warehouses', 'usage', 'audit']
+const TAB_ORDER = ['system', 'backup', 'logo', 'appearance', 'roles', 'permissions', 'warehouses', 'usage', 'audit', 'visit']
 function tabVisible(name: string): boolean {
   switch (name) {
     case 'system':
@@ -514,6 +595,8 @@ function tabVisible(name: string): boolean {
       return auth.hasPermission('system.usage')
     case 'audit':
       return auth.hasPermission('system.audit')
+    case 'visit':
+      return auth.hasPermission('system.visit')
     case 'roles':
       return auth.hasPermission('system.roles')
     case 'permissions':
@@ -696,6 +779,7 @@ function onTabChange(name: string | number) {
   if (name === 'warehouses' && canWh.value) loadWarehouses()
   if (name === 'usage' && auth.hasPermission('system.usage')) loadDbUsage()
   if (name === 'audit' && auth.hasPermission('system.audit')) loadAudit()
+  if (name === 'visit' && auth.hasPermission('system.visit')) loadVisits()
   if (name === 'system' && auth.hasPermission('system.settings')) loadSystemSettings()
 }
 
@@ -1495,6 +1579,51 @@ function onAuditSizeChange() {
   loadAudit()
 }
 
+// 访问记录（来访 IP）：仅 system.visit（super_admin）可见
+const visitRows = ref<any[]>([])
+const visitTotal = ref(0)
+const visitLoading = ref(false)
+const visitRange = ref<string[] | null>(null)
+const visitQuery = reactive({ page: 1, pageSize: 100, ip: '', path: '' })
+
+async function loadVisits() {
+  visitLoading.value = true
+  try {
+    const params: Record<string, any> = { ...visitQuery }
+    const r = visitRange.value
+    if (Array.isArray(r) && r.length === 2 && r[0] && r[1]) {
+      // 按浏览器本地日期取当天 00:00:00 ~ 23:59:59.999 的时间边界
+      params.date_from = new Date(`${r[0]}T00:00:00`).toISOString()
+      params.date_to = new Date(`${r[1]}T23:59:59.999`).toISOString()
+    }
+    const { data } = await api.get('/visits', { params })
+    visitRows.value = data.data ?? []
+    visitTotal.value = data.total ?? 0
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载访问记录失败')
+  } finally {
+    visitLoading.value = false
+  }
+}
+
+function onVisitRangeChange() {
+  visitQuery.page = 1
+  loadVisits()
+}
+
+function onVisitSizeChange() {
+  visitQuery.page = 1
+  loadVisits()
+}
+
+function resetVisitFilters() {
+  visitQuery.ip = ''
+  visitQuery.path = ''
+  visitRange.value = null
+  visitQuery.page = 1
+  loadVisits()
+}
+
 const saving = ref(false)
 
 onMounted(() => {
@@ -1524,6 +1653,20 @@ onMounted(() => {
 }
 .page-size-select {
   width: 120px;
+}
+.visit-page {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.visit-path {
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+}
+.visit-visitor {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  cursor: default;
 }
 .page-header {
   display: flex;

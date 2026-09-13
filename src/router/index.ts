@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { supabase, supabaseStorageKey } from '@/services/supabase'
 import { useAuthStore } from '@/stores/auth'
+import { installVisitTracker } from '@/utils/visit-tracker'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -115,7 +116,7 @@ const routes: RouteRecordRaw[] = [
         name: 'settings',
         component: () => import('@/pages/Settings.vue'),
         // 系统设置：058 拆分后按子码任一进入，页内各 tab 再按功能权限码单独显隐
-        meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] }
+        meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit','system.visit'] }
       },
       {
         path: 'profile',
@@ -200,5 +201,8 @@ router.beforeEach(async (to) => {
   }
   return true
 })
+
+// 访问记录采集：每次导航完成后上报页面访问（含登录页），失败不影响主流程
+installVisitTracker(router)
 
 export default router
