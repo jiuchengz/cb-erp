@@ -69,7 +69,7 @@
           <button class="topbar-btn" :title="isDark ? '切换浅色模式' : '切换暗色模式'" @click="toggleDarkMode">
             <el-icon><component :is="darkIcon" /></el-icon>
           </button>
-          <button v-if="auth.hasPermission('system.logs')" class="topbar-btn" title="日志" @click="goLogs">
+          <button v-if="auth.hasPermission('system.logs') || auth.hasPermission('system.visit')" class="topbar-btn" title="日志" @click="goLogs">
             <el-icon><document /></el-icon>
             <span v-if="localLogs.length" class="log-badge">{{ localLogs.length }}</span>
           </button>
@@ -198,7 +198,7 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/users', label: '成员管理', icon: User, perms: ['system.users'] },
-      { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.logs'] },
+      { path: '/logs', label: '操作日志', icon: Notebook, perms: ['system.logs', 'system.visit'] },
       { path: '/settings', label: '系统设置', icon: Setting, perms: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] },
       { path: '/recycle-bin', label: '回收站', icon: Delete, perms: ['system.recycle'] }
     ]

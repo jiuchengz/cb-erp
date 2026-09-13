@@ -109,14 +109,15 @@ const routes: RouteRecordRaw[] = [
         path: 'logs',
         name: 'logs',
         component: () => import('@/pages/Logs.vue'),
-        meta: { requiresPerm: ['system.logs'] }
+        // 操作日志：本地日志 / 服务端审计（system.logs）与访问记录（system.visit）同页 tab，任一权限可进入
+        meta: { requiresPerm: ['system.logs', 'system.visit'] }
       },
       {
         path: 'settings',
         name: 'settings',
         component: () => import('@/pages/Settings.vue'),
         // 系统设置：058 拆分后按子码任一进入，页内各 tab 再按功能权限码单独显隐
-        meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit','system.visit'] }
+        meta: { requiresPerm: ['system.settings','system.backup','system.logo','system.appearance','system.roles','system.permissions','system.warehouses','system.usage','system.audit'] }
       },
       {
         path: 'profile',
