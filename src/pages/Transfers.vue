@@ -1465,30 +1465,66 @@ async function exportRows(withImages = false) {
     }
   }
   const prod = (pid: string) => products.value.find((x) => x.id === pid)
-  const aoa: any[][] = []
-  const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = []
-  const imageCells: { r: number; c: number; url: string }[] = []
-  const rowHeightRanges: { s: number; e: number; h: number }[] = []
-  const titleRows: number[] = []
-  let r = 0
-  const push = (row: any[]) => {
-    aoa.push(row)
-    r++
+  // 工作表命名：优先取仓号（warehouse_no）；同一仓号出现多个货件时，首个仍用仓号，
+  // 其余改用运输方式（空运/海运）区分；仍重名则追加序号 (2)(3)…
+  const whCount = new Map<string, number>()
+  for (const ship of targets) {
+    const wh = String(ship.warehouse_no || '').trim()
+    if (wh) whCount.set(wh, (whCount.get(wh) || 0) + 1)
   }
-  // 与参考文件一致：信息区每行 3 组「标签+值」，按模板合并 B:C（值1）/ F:G（标签3）/ H:I（值3）
-  const meta = (label1: string, v1: unknown, label2: string, v2: unknown, label3: string, v3: unknown) => {
-    const row = r
-    aoa.push([label1, v1 ?? '-', '', label2, v2 ?? '-', label3, '', v3 ?? '-', ''])
-    merges.push({ s: { r: row, c: 1 }, e: { r: row, c: 2 } })
-    merges.push({ s: { r: row, c: 5 }, e: { r: row, c: 6 } })
-    merges.push({ s: { r: row, c: 7 }, e: { r: row, c: 8 } })
-    r++
+  const whUsed = new Set<string>()
+  const takenNames = new Set<string>()
+  const sheetNameOf = (ship: any) => {
+    const wh = String(ship.warehouse_no || '').trim()
+    const mode = String(ship.shipping_mode || '').trim()
+    let base: string
+    if (!wh) base = mode || '货件'
+    else if ((whCount.get(wh) || 0) > 1 && whUsed.has(wh)) base = mode || wh
+    else base = wh
+    if (wh) whUsed.add(wh)
+    // 去掉 Excel 工作表名非法字符并限长 31
+    base = base.replace(/[\\/?*\[\]:]/g, '_').trim().slice(0, 31) || '货件'
+    let name = base
+    let n = 2
+    while (takenNames.has(name)) {
+      const suffix = `(${n})`
+      name = base.slice(0, 31 - suffix.length) + suffix
+      n += 1
+    }
+    takenNames.add(name)
+    return name
   }
+  // 与参考文件「调拨发货_2026-08-31.xlsx」列宽完全一致（A-I）
+  const COL_WIDTHS = [6.875, 11.875, 8.792, 19.25, 18.625, 10.508, 5.25, 5.875, 17.6]
+  // 一个货件一个工作表：每个勾选货件各自生成一份完整表格（标题行 + 信息区 + 明细 + 合计）
+  const sheets: {
+    name: string
+    aoa: any[][]
+    merges: { s: { r: number; c: number }; e: { r: number; c: number } }[]
+    widths: number[]
+    rowHeightRanges: { s: number; e: number; h: number }[]
+    titleRows: number[]
+    styled: boolean
+    imageCells: { r: number; c: number; url: string }[]
+  }[] = []
   // 与打印工单一致：按单位分组 个→套→对→其他，组间空行，缺组跳过
   const UNIT_ORDER = ['个', '套', '对']
-  targets.forEach((ship, idx) => {
-    if (idx > 0) {
-      push([])
+  targets.forEach((ship) => {
+    // 每个货件独立成表，行号与各类索引均在本表内独立计数
+    const aoa: any[][] = []
+    const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = []
+    const imageCells: { r: number; c: number; url: string }[] = []
+    const rowHeightRanges: { s: number; e: number; h: number }[] = []
+    const titleRows: number[] = []
+    let r = 0
+    // 与参考文件一致：信息区每行 3 组「标签+值」，按模板合并 B:C（值1）/ F:G（标签3）/ H:I（值3）
+    const meta = (label1: string, v1: unknown, label2: string, v2: unknown, label3: string, v3: unknown) => {
+      const row = r
+      aoa.push([label1, v1 ?? '-', '', label2, v2 ?? '-', label3, '', v3 ?? '-', ''])
+      merges.push({ s: { r: row, c: 1 }, e: { r: row, c: 2 } })
+      merges.push({ s: { r: row, c: 5 }, e: { r: row, c: 6 } })
+      merges.push({ s: { r: row, c: 7 }, e: { r: row, c: 8 } })
+      r++
     }
     // 标题行：与参考文件一致「发货工单」，A:I 合并、宋体 24、行高 42（由服务端 styled 处理字体/边框）
     const titleRow = r
@@ -1536,23 +1572,15 @@ async function exportRows(withImages = false) {
     merges.push({ s: { r: sumRow, c: 0 }, e: { r: sumRow, c: 5 } })
     r++
     rowHeightRanges.push({ s: rangeStart, e: sumRow, h: 40 })
+    // 本货件独立为一个工作表（工作表名按仓号/运输方式去重）
+    sheets.push({ name: sheetNameOf(ship), aoa, merges, widths: COL_WIDTHS, rowHeightRanges, titleRows, styled: true, imageCells })
   })
   exporting.value = true
   try {
     await exportViaServer(
       `调拨发货_${todayStr()}.xlsx`,
-      {
-        aoa,
-        merges,
-        // 与参考文件「调拨发货_2026-08-31.xlsx」列宽完全一致（A-I）
-        widths: [6.875, 11.875, 8.792, 19.25, 18.625, 10.508, 5.25, 5.875, 17.6],
-        rowHeightRanges,
-        titleRows,
-        styled: true,
-        imageCells
-      },
-      withImages,
-      '调拨发货'
+      { sheets },
+      withImages
     )
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')

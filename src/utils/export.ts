@@ -54,8 +54,28 @@ export function buildExportPayload<T>(opts: BuildExportOptions<T>) {
   return { aoa, cols, imageCells }
 }
 
-export interface ServerExportPayload {
+/** 多工作表模式下的单个工作表负载 */
+export interface ExportSheetPayload {
+  /** 工作表名称（后端会做非法字符清洗与重名兜底） */
+  name: string
   aoa: unknown[][]
+  merges?: { s: { r: number; c: number }; e: { r: number; c: number } }[]
+  cols?: { wch?: number }[]
+  /** 精确列宽（Excel 宽度值，优先级高于 cols） */
+  widths?: number[]
+  /** 行高区间：从 s 行到 e 行（0-based）统一设为 h */
+  rowHeightRanges?: { s: number; e: number; h: number }[]
+  /** 标题行（0-based），styled 时这些行使用 宋体24 大字号（其余行宋体11） */
+  titleRows?: number[]
+  /** 为 true 时整表应用 宋体11/居中/thin 边框 样式 */
+  styled?: boolean
+  imageCells?: ExportCell[]
+}
+
+export interface ServerExportPayload {
+  aoa?: unknown[][]
+  /** 多 sheet 模式：提供且非空时按多个工作表导出（ignore 顶层 aoa / sheetName） */
+  sheets?: ExportSheetPayload[]
   merges?: { s: { r: number; c: number }; e: { r: number; c: number } }[]
   cols?: { wch?: number }[]
   /** 精确列宽（Excel 宽度值，优先级高于 cols） */
