@@ -1233,9 +1233,8 @@ async function printWorkOrder(id: string) {
     }
     const rest = indexed.filter((x) => !UNIT_ORDER.includes(x.unit))
     if (rest.length) groups.push({ unit: '其他', rows: rest })
-    const gapRow = `<tr class="gap-row"><td colspan="9"></td></tr>`
     const rowsHtml = groups
-      .map((g, gi) => {
+      .map((g) => {
         const body = g.rows
           .map(({ it, idx }) => {
             const p = prod(it.product_id)
@@ -1257,7 +1256,7 @@ async function printWorkOrder(id: string) {
         </tr>`
           })
           .join('')
-        return (gi > 0 ? gapRow : '') + body
+        return body
       })
       .join('')
     const html = `<!DOCTYPE html>
@@ -1288,7 +1287,6 @@ async function printWorkOrder(id: string) {
   .items th, .items td { border: 1px solid #000; padding: 4px 6px; font-size: 11pt; text-align: center; vertical-align: middle; word-break: break-all; }
   .items th { font-weight: 600; }
   .items td.num { text-align: center; white-space: nowrap; }
-  .gap-row td { border: 1px solid #000 !important; padding: 4px 6px !important; }
   .sum-row td { white-space: nowrap; }
   @media print {
     @page { size: A4 portrait; margin: 0.75in 0.2361in 0.75in 0.1965in; }
@@ -1505,9 +1503,6 @@ async function exportRows(withImages = false) {
     meta('货　代', forwarderName(ship.forwarder_id), '运输方式', ship.shipping_mode, '仓号', ship.warehouse_no)
     meta('箱　数', ship.shipping_cartons ?? '-', '发货时间', ship.ship_date, '货物状态', ship.cargo_status)
     rowHeightRanges.push({ s: infoStart, e: infoStart + 2, h: 20 })
-    const gapRowIdx = r
-    push([])
-    rowHeightRanges.push({ s: gapRowIdx, e: gapRowIdx, h: 20 })
     aoa.push(['序号', '产品编码', '图片', '产品中文名称', 'SKU', '条形码', '数量', '单位', '备注'])
     r++
     // 与参考文件一致：表头之后（明细区/组间空行/合计行）行高统一 40，表头与分隔空行保持默认
@@ -1521,10 +1516,7 @@ async function exportRows(withImages = false) {
     }
     const rest = indexed.filter((x) => !UNIT_ORDER.includes(x.unit))
     if (rest.length) groups.push({ rows: rest })
-    groups.forEach((g, gi) => {
-      if (gi > 0) {
-        push([])
-      }
+    groups.forEach((g) => {
       g.rows.forEach(({ it, idx: seq }) => {
         const p = prod(it.product_id)
         const img = p?.image_text || ''
