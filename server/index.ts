@@ -3,6 +3,7 @@ import authMe from './_handlers/auth';
 import authProfile from './_handlers/auth/profile';
 import authPassword from './_handlers/auth/password';
 import authLogin from './_handlers/auth/login';
+import loginCaptcha from './_handlers/login-captcha';
 import exportXlsx from './_handlers/export-xlsx';
 import afterSales from './_handlers/after-sales';
 import auditLogs from './_handlers/audit-logs';
@@ -96,6 +97,7 @@ const routes: Route[] = [
   { pattern: /^\/audit-logs$/, handler: auditLogs },
   { pattern: /^\/visit$/, handler: visit },
   { pattern: /^\/visits$/, handler: visits },
+  { pattern: /^\/login-captcha$/, handler: loginCaptcha },
   { pattern: /^\/system-settings$/, handler: systemSettings },
   { pattern: /^\/exchange-rates$/, handler: exchangeRates },
   { pattern: /^\/db-usage$/, handler: dbUsage },

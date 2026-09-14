@@ -103,6 +103,31 @@
               <el-switch v-model="sysForm.soft_delete_enabled" active-text="开启" inactive-text="关闭" />
             </div>
           </div>
+
+          <!-- 登录机器人验证开关：仅超级管理员可见可操作（服务端同样只放行 super_admin） -->
+          <template v-if="isSuperAdmin">
+            <el-divider />
+
+            <div class="appearance-row">
+              <div class="appearance-info">
+                <div class="appearance-title">登录机器人验证</div>
+                <div class="appearance-desc">
+                  关闭后，自动化工具可在授权窗口内免人机验证完成登录；最长维持 24 小时，到期自动恢复开启，也可随时手动恢复。开关即时生效，无需点击「保存设置」
+                </div>
+                <div v-if="!captchaForm.enabled" class="appearance-desc">{{ captchaExpireText }}</div>
+              </div>
+              <div class="appearance-control">
+                <el-switch
+                  v-model="captchaForm.enabled"
+                  :loading="captchaLoading"
+                  :disabled="captchaSaving"
+                  active-text="开启"
+                  inactive-text="关闭"
+                  @change="onCaptchaToggle"
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </el-tab-pane>
 
@@ -501,6 +526,20 @@ const canLogo = computed(() => auth.hasPermission('system.logo'))
 const canRoleWrite = computed(() => auth.hasPermission('user.manage'))
 const canRoles = computed(() => auth.hasPermission('system.roles'))
 const canPerms = computed(() => auth.hasPermission('system.permissions'))
+
+// ---- 登录机器人验证（Cloudflare Turnstile）开关：仅超级管理员可见可操作 ----
+// 服务端 PUT /login-captcha 会再次校验 roles 含 super_admin，前端仅控制可见性。
+const isSuperAdmin = computed(() => auth.roles.includes('super_admin'))
+const captchaForm = reactive({ enabled: true })
+const captchaLoading = ref(false)
+const captchaSaving = ref(false)
+const captchaDisabledUntil = ref<string | null>(null)
+const captchaExpireText = computed(() => {
+  const until = captchaDisabledUntil.value
+  const d = until ? new Date(until) : null
+  if (!d || Number.isNaN(d.getTime())) return '当前已关闭，到期后自动恢复开启'
+  return `当前已关闭，将于 ${formatDate(until as string)} 自动恢复开启`
+})
 
 function formatDate(v: string) {
   return sysFormatDateTime(v)
@@ -1505,6 +1544,47 @@ function onAuditSizeChange() {
 
 const saving = ref(false)
 
+// ---- 登录机器人验证开关：读取 / 切换（仅 super_admin，服务端二次校验） ----
+function applyCaptchaState(body: any) {
+  const state = body?.data ?? body ?? {}
+  captchaForm.enabled = state.enabled !== false
+  captchaDisabledUntil.value = captchaForm.enabled ? null : state.disabledUntil ?? null
+}
+
+async function loadLoginCaptcha() {
+  if (!isSuperAdmin.value) return
+  captchaLoading.value = true
+  try {
+    const { data } = await api.get('/login-captcha')
+    applyCaptchaState(data)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error?.message || '加载登录人机验证开关失败')
+  } finally {
+    captchaLoading.value = false
+  }
+}
+
+async function onCaptchaToggle(next: string | number | boolean) {
+  if (!isSuperAdmin.value) return
+  const enabled = next === true || next === 'true'
+  captchaSaving.value = true
+  try {
+    const { data } = await api.put('/login-captcha', { enabled })
+    applyCaptchaState(data)
+    ElMessage.success(
+      captchaForm.enabled
+        ? '已恢复登录人机验证'
+        : '已关闭登录人机验证，最长 24 小时后自动恢复开启'
+    )
+  } catch (e: any) {
+    // 失败回滚为切换前的状态，避免界面与服务端不一致
+    captchaForm.enabled = !enabled
+    ElMessage.error(e?.response?.data?.error?.message || '切换登录人机验证开关失败')
+  } finally {
+    captchaSaving.value = false
+  }
+}
+
 onMounted(() => {
   if (canRoles.value || canPerms.value) {
     loadRoles()
@@ -1512,6 +1592,7 @@ onMounted(() => {
   }
   loadAppearance()
   if (auth.hasPermission('system.settings')) loadSystemSettings()
+  loadLoginCaptcha()
 })
 </script>
 

@@ -6,8 +6,8 @@
       <input v-model="email" type="email" placeholder="邮箱" required autocomplete="username" />
       <input v-model="password" type="password" placeholder="密码" required autocomplete="current-password" />
 
-      <!-- Cloudflare Turnstile 人机验证 -->
-      <div ref="turnstileEl" class="turnstile-wrap"></div>
+      <!-- Cloudflare Turnstile 人机验证：开关关闭时不渲染；状态接口失败时兜底渲染并校验 -->
+      <div v-if="captchaEnabled" ref="turnstileEl" class="turnstile-wrap"></div>
 
       <label class="remember">
         <input v-model="rememberMe" type="checkbox" />
@@ -35,6 +35,7 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { useSiteStore } from '@/stores/site'
 import { addLog } from '@/utils/log'
+import { api } from '@/services/api'
 
 const auth = useAuthStore()
 const site = useSiteStore()
@@ -52,6 +53,21 @@ const TURNSTILE_SITE_KEY = '0x4AAAAAAET5sL5IBFTnS8m-'
 const turnstileEl = ref<HTMLElement | null>(null)
 const turnstileToken = ref('')
 let turnstileWidgetId: string | null = null
+
+// 登录机器人验证开关：默认开启（渲染并校验）。
+// 由服务端公开只读接口 /login-captcha 决定；接口请求失败时兜底为「渲染并校验」（默认安全）。
+const captchaEnabled = ref(true)
+
+async function fetchCaptchaEnabled(): Promise<boolean> {
+  try {
+    const res = await api.get('/login-captcha')
+    const payload: any = res?.data ?? {}
+    const state = payload.data ?? payload
+    return state.enabled !== false
+  } catch {
+    return true
+  }
+}
 
 declare global {
   interface Window {
@@ -116,12 +132,16 @@ function saveRememberedEmail(emailVal: string) {
   }
 }
 
-onMounted(() => {
-  loadTurnstileScript()
-    .then(() => renderTurnstile())
-    .catch((e) => {
-      error.value = e?.message || '验证码组件加载失败'
-    })
+onMounted(async () => {
+  // 先取开关状态：关闭（且未到期）时不渲染 Turnstile；接口异常一律按开启处理
+  captchaEnabled.value = await fetchCaptchaEnabled()
+  if (captchaEnabled.value) {
+    loadTurnstileScript()
+      .then(() => renderTurnstile())
+      .catch((e) => {
+        error.value = e?.message || '验证码组件加载失败'
+      })
+  }
   const saved = loadRememberedEmail()
   if (saved) {
     email.value = saved
@@ -145,14 +165,14 @@ async function onSubmit() {
     error.value = '请输入密码'
     return
   }
-  if (!turnstileToken.value) {
+  if (captchaEnabled.value && !turnstileToken.value) {
     error.value = '请完成人机验证'
     return
   }
 
   loading.value = true
   try {
-    await auth.signIn(email.value.trim(), password.value, turnstileToken.value)
+    await auth.signIn(email.value.trim(), password.value, captchaEnabled.value ? turnstileToken.value : '')
     if (rememberMe.value) {
       saveRememberedEmail(email.value)
     } else {

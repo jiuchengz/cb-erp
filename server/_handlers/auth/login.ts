@@ -6,6 +6,7 @@ import { rateLimit, loginRateLimit } from '../_lib/rate-limit';
 import { loadUserAccess } from '../_lib/auth';
 import { writeLoginAudit } from '../_lib/audit';
 import { clientIp } from '../_lib/ip';
+import { isLoginCaptchaEnabled } from '../_lib/login-captcha';
 import {
   getLockRemainMs,
   recordLoginFail,
@@ -16,7 +17,9 @@ import {
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(200),
-  captchaToken: z.string().min(1),
+  // 开关关闭（授权窗口内）时前端不再渲染 Turnstile，此字段允许为空；
+  // 开关开启时服务端仍强制要求非空 token。
+  captchaToken: z.string().max(2048).optional().default(''),
 });
 
 // clientIp 已迁移至 ../_lib/ip.ts：
@@ -81,23 +84,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // 登录机器人验证开关（默认开启）：
+    //   关闭（且未到期）时不校验 Turnstile，供自动化工具在授权窗口内完成登录；
+    //   读取失败一律按开启处理（默认安全）；读取时若已到期会自动恢复开启并回写。
+    const captchaRequired = await isLoginCaptchaEnabled(getAdminClient());
+
     // Cloudflare Turnstile 服务端强制校验（代理层自验，Supabase 对 service_role 请求会跳过其 CAPTCHA）
-    const captchaOk = await verifyTurnstile(captchaToken, ip);
-    if (!captchaOk) {
-      return res.status(400).json({
-        error: { code: 'CAPTCHA_INVALID', message: '人机验证失败，请刷新页面后重试' },
-      });
+    if (captchaRequired) {
+      const captchaOk = await verifyTurnstile(captchaToken, ip);
+      if (!captchaOk) {
+        return res.status(400).json({
+          error: { code: 'CAPTCHA_INVALID', message: '人机验证失败，请刷新页面后重试' },
+        });
+      }
     }
 
     // 代理登录 Supabase Auth（服务端凭据，不再由前端直连绕过）
     const supabase = getAdminClient();
-    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-      email: emailNorm,
-      password,
-      options: {
-        captchaToken,
-      },
-    });
+    // 仅在有 token 时透传：开关关闭期间前端不渲染 Turnstile，无 token 不应影响登录。
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword(
+      captchaToken
+        ? { email: emailNorm, password, options: { captchaToken } }
+        : { email: emailNorm, password },
+    );
 
     if (authErr) {
       const msg = String(authErr.message || '');
