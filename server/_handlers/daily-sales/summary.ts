@@ -17,6 +17,11 @@ import { getAdminClient } from '../_lib/db';
  *   dailyTotals: [{ sale_date, sell_qty, refund_qty, net_qty }]
  * }
  */
+// link_id 归一化：统一去空格、转大写、去掉 MLM 前缀，与导入侧入库口径保持一致
+function normLink(v: any): string {
+  return String(v ?? '').trim().toUpperCase().replace(/^MLM/, '');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     rateLimit(((req.headers['x-forwarded-for'] as string) || 'unknown') + ':' + (req.url || ''));
@@ -36,6 +41,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 仓库级隔离：daily_sales 无 warehouse_id，通过 products.link_id 推导当前账号
     // 可见链接集（super_admin 为 null = 不限制）；受限账号只统计可见仓库的链接。
     const visibleLinks = await loadVisibleLinkIds(supabase, ctx);
+    // 口径归一化：导入侧入库时会去掉 MLM 前缀，而商品档案(products.link_id)可能保留原样，
+    // 直接 has() 比较会让受限账号漏掉这批链接、统计偏少（表现为 145 而非 147）。
+    const visibleSet = visibleLinks ? new Set(Array.from(visibleLinks).map(normLink)) : null;
 
     // 循环翻页取全量（服务端取回，网络仅一次 HTTP 往返）
     const PAGE = 1000;
@@ -56,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order('created_at', { ascending: true })
         .range(page * PAGE, (page + 1) * PAGE - 1);
       if (error) throw error;
-      const rows = (data || []).filter((r: any) => !visibleLinks || visibleLinks.has(String(r.link_id || '')));
+      const rows = (data || []).filter((r: any) => !visibleSet || visibleSet.has(normLink(r.link_id)));
       all.push(...rows);
       if ((data || []).length < PAGE) break;
     }

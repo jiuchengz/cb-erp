@@ -6,6 +6,9 @@
         <el-button v-if="canWrite" @click="downloadTpl">下载模板</el-button>
         <el-button v-if="canWrite" :loading="exporting" @click="exportRows">导出</el-button>
         <el-button v-if="canWrite" type="warning" :loading="importing" @click="triggerImport">批量导入</el-button>
+        <el-button v-if="canWrite" type="danger" :disabled="!selected.length" :loading="deleting" @click="batchRemove">
+          批量删除{{ selected.length ? ' (' + selected.length + ')' : '' }}
+        </el-button>
         <input ref="importFile" type="file" accept=".xlsx,.xls,.csv" style="display: none" @change="onImportFile" />
       </div>
     </div>
@@ -77,7 +80,9 @@
       border
       stripe
       height="100%"
+      @selection-change="onSelectionChange"
     >
+      <el-table-column type="selection" width="46" />
       <el-table-column label="图片" width="70" align="center">
         <template #default="{ row }">
           <el-tooltip v-if="row.image" :show-after="200" :offset="10">
@@ -173,7 +178,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowUp, Sort } from '@element-plus/icons-vue'
 import { api } from '../services/api'
 import { convertMoney, getCurrencyCode, getRate, BASE_CURRENCY, isRatesLoaded, fetchExchangeRates } from '../utils/system'
@@ -517,6 +522,45 @@ function onImgError(e: Event) {
 const importing = ref(false)
 const importFile = ref<any>(null)
 
+// ===== 批量删除（与其它模块一致的交互：勾选 -> 确认 -> 删除） =====
+const deleting = ref(false)
+const selected = ref<any[]>([])
+function onSelectionChange(rows: any[]) {
+  selected.value = rows || []
+}
+
+// 删除口径：选中链接在当前筛选日期范围内的全部销售明细（列表为按链接聚合行，需按范围删除）
+async function batchRemove() {
+  if (!selected.value.length) return
+  const rangeText = dateRange.value?.[0] && dateRange.value?.[1]
+    ? `${dateRange.value[0]} 至 ${dateRange.value[1]}`
+    : '全部日期'
+  try {
+    await ElMessageBox.confirm(
+      `将删除选中的 ${selected.value.length} 个链接在【${rangeText}】内的全部销售明细，删除后不可恢复。是否继续？`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
+    )
+  } catch {
+    return
+  }
+  deleting.value = true
+  try {
+    const { data } = await api.post('/daily-sales/batch-delete', {
+      link_ids: selected.value.map((r: any) => String(r.link_id || '')).filter(Boolean),
+      sale_from: dateRange.value?.[0] || '',
+      sale_to: dateRange.value?.[1] || '',
+    })
+    ElMessage.success(`已删除 ${data?.deleted ?? 0} 条销售明细`)
+    selected.value = []
+    load()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.error?.message || '删除失败')
+  } finally {
+    deleting.value = false
+  }
+}
+
 function downloadTpl() {
   downloadTemplate(
     [
@@ -553,15 +597,23 @@ async function onImportFile(e: Event) {
       unit_price: ['平均售价(' + getCurrencyCode() + ')', '平均售价', '单价', 'price', 'unit_price'],
       overseas_stock: ['可用库存', '海外库存', 'overseas_stock', 'stock'],
     })
-    // 兼容任意币种后缀的平均售价列（如"平均售价(USD)"），并识别其币种用于换算
+    // 平均售价列：兼容任意币种后缀（如"平均售价(USD)"），并「始终」以列头币种为准换算。
+    // 注意：不能因为列头恰好等于当前显示币种就跳过币种解析——记账币种固定为 BASE_CURRENCY(MXN)，
+    // 一旦表格币种与之不同（如 USD），跳过解析会把 USD 数值直接当 MXN 写入，金额被放大约 17 倍。
     let unitPriceCurrency = BASE_CURRENCY
     if (col.unit_price === undefined) {
-      const priceIdx = headers.findIndex((h) => h.startsWith('平均售价'))
-      if (priceIdx >= 0) {
-        col.unit_price = priceIdx
-        const m = headers[priceIdx].match(/\(([A-Za-z]{3})\)/)
-        if (m) unitPriceCurrency = m[1].toUpperCase()
-      }
+      const priceIdx = headers.findIndex((h) => h.replace(/\s/g, '').startsWith('平均售价'))
+      if (priceIdx >= 0) col.unit_price = priceIdx
+    }
+    if (col.unit_price !== undefined) {
+      const rawHeader = String(headers[col.unit_price] || '').replace(/\s/g, '')
+      const m = rawHeader.match(/[（(]([A-Za-z]{3})[)）]/)
+      if (m) unitPriceCurrency = m[1].toUpperCase()
+    }
+    // 汇率缺失时直接拦截：宁可导入失败，也不静默把外币数值当记账币种写库
+    if (unitPriceCurrency !== BASE_CURRENCY && getRate(unitPriceCurrency, BASE_CURRENCY) == null) {
+      ElMessage.error(`缺少 ${unitPriceCurrency}→${BASE_CURRENCY} 汇率，无法换算平均售价，请先补全汇率后重试`)
+      return
     }
     if (col.link_id === undefined || col.quantity === undefined) {
       ElMessage.error('模板表头不识别，请使用下载的模板文件，确保包含"商品ID"和"实际销量"列')
@@ -682,8 +734,14 @@ async function onImportFile(e: Event) {
     if (payloadRows.length) {
       try {
         const { data } = await api.post('/daily-sales', { rows: payloadRows })
-        const ok = data.data?.imported ?? payloadRows.length
-        summaryParts.push(`成功导入销售 ${ok} 条`)
+        const d = data.data || {}
+        const ok = d.imported ?? payloadRows.length
+        // 反馈新增/更新/去重跳过，让「同一表格重复导入」的结果一目了然
+        const detailParts: string[] = []
+        if (d.inserted) detailParts.push(`新增 ${d.inserted}`)
+        if (d.updated) detailParts.push(`覆盖 ${d.updated}`)
+        if (d.skipped) detailParts.push(`跳过重复 ${d.skipped}`)
+        summaryParts.push(`成功导入销售 ${ok} 条${detailParts.length ? `（${detailParts.join('，')}）` : ''}`)
       } catch (err: any) {
         const msg = err?.response?.data?.error?.message || '导入失败'
         errLines.push(msg)

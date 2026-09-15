@@ -204,9 +204,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at: new Date().toISOString(),
       }));
 
-      // 增量累加语义：先按 sale_date 范围查询库中已有行，再做累加合并，
-      // 避免重复导入同一 (sale_date, platform, link_id) 时整行覆盖导致
-      // 已有 quantity / refund_qty / refund_amount 丢失。
+      // 幂等导入前置查询：先按 sale_date 范围取库中已有行，用于「重复判定」。
+      // 语义为覆盖（与 030 迁移唯一约束的设计一致）：同一 (sale_date, platform, link_id)
+      // 若库中数值与本次完全一致则跳过，不重复累加；有差异才以本次导入值覆盖。
       const saleDates = Array.from(new Set(rows.map((r: any) => r.sale_date)));
       const existingMap = new Map<string, any>();
       for (let i = 0; i < saleDates.length; i += 500) {
@@ -223,37 +223,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const now = new Date().toISOString();
-      const mergedRows = rows.map((r: any) => {
+      // 重复判定：库中已有行与本次导入值在「销售数量 / 退款数量 / 退款金额」上完全一致时，
+      // 视为同一张表格同一天同一销量的重复导入，直接跳过不写库（不再累加）；
+      // 数值有差异才以本次导入值覆盖，避免重复导入把销量翻倍。
+      const mergedRows: any[] = [];
+      let updated = 0;
+      let skipped = 0;
+      for (const r of rows) {
         const key = `${r.sale_date}|${r.platform}|${r.link_id}`;
         const ex = existingMap.get(key);
-        if (!ex) return r;
-        return {
+        if (!ex) {
+          mergedRows.push(r);
+          continue;
+        }
+        const isDuplicate =
+          Number(ex.quantity || 0) === Number(r.quantity || 0) &&
+          Number(ex.refund_qty || 0) === Number(r.refund_qty || 0) &&
+          Number(ex.refund_amount || 0) === Number(r.refund_amount || 0);
+        if (isDuplicate) {
+          skipped++;
+          continue;
+        }
+        mergedRows.push({
           sale_date: r.sale_date,
           platform: r.platform,
           link_id: r.link_id,
           product_name: r.product_name || ex.product_name || '',
           ad_group: r.ad_group || ex.ad_group || '',
-          quantity: (Number(ex.quantity) || 0) + (Number(r.quantity) || 0),
-          refund_qty: (Number(ex.refund_qty) || 0) + (Number(r.refund_qty) || 0),
-          refund_amount: (Number(ex.refund_amount) || 0) + (Number(r.refund_amount) || 0),
-          // unit_price / overseas_stock 取本次导入的最新非 0 值，为 0 时保留原值
+          quantity: Number(r.quantity) || 0,
+          refund_qty: Number(r.refund_qty) || 0,
+          refund_amount: Number(r.refund_amount) || 0,
+          // unit_price / overseas_stock 取本次导入的非 0 值，为 0 时保留原值
           unit_price: Number(r.unit_price) > 0 ? r.unit_price : (Number(ex.unit_price) || 0),
           overseas_stock: Number(r.overseas_stock) > 0 ? r.overseas_stock : (Number(ex.overseas_stock) || 0),
           updated_at: now,
-        };
-      });
+        });
+        updated++;
+      }
 
-      const { error } = await supabase.from('daily_sales').upsert(
-        mergedRows,
-        { onConflict: 'sale_date,platform,link_id' }
-      );
-      if (error) throw error;
+      if (mergedRows.length) {
+        const { error } = await supabase.from('daily_sales').upsert(
+          mergedRows,
+          { onConflict: 'sale_date,platform,link_id' }
+        );
+        if (error) throw error;
+      }
+
+      const inserted = mergedRows.length - updated;
 
       await writeAudit(ctx, req, 'create', 'daily_sales', undefined, null, {
         rows: mergedRows.length,
+        inserted,
+        updated,
+        skipped,
         sale_date: body.rows[0].sale_date,
       });
-      return res.status(201).json({ data: { imported: mergedRows.length } });
+      return res.status(201).json({ data: { imported: mergedRows.length, inserted, updated, skipped, total: rows.length } });
     }
 
     return res.status(405).json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' } });
