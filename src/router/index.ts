@@ -69,6 +69,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresPerm: ['sales.read'] }
       },
       {
+        path: 'product-sales-board',
+        name: 'product-sales-board',
+        component: () => import('@/pages/ProductSalesBoard.vue'),
+        meta: { requiresPerm: ['sales.read'] }
+      },
+      {
         path: 'shipments',
         name: 'shipments',
         component: () => import('@/pages/Shipments.vue'),

@@ -123,7 +123,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, User, Notebook, Setting, Tools } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, Document, Menu, Moon, Sunny, HomeFilled, Goods, Box, Sell, Van, Switch, ShoppingCart, Service, TrendCharts, DataLine, User, Notebook, Setting, Tools } from '@element-plus/icons-vue'
 import { setSystemSettings, getSystemTz, DEFAULT_TIMEZONES, fetchExchangeRates } from '@/utils/system'
 import { useAuthStore } from '@/stores/auth'
 import { useSiteStore } from '@/stores/site'
@@ -187,6 +187,7 @@ const menuGroups = reactive([
     open: true,
     children: [
       { path: '/sales', label: '销售订单', icon: Sell, perms: ['sales.read'] },
+      { path: '/product-sales-board', label: '商品销量看板', icon: DataLine, perms: ['sales.read'] },
       { path: '/shipments', label: '物流发货', icon: Van, perms: ['shipment.read'] },
       { path: '/after-sales', label: '售后管理', icon: Service, perms: ['after_sales.read'] },
       { path: '/replenishment', label: '补货管理', icon: TrendCharts, perms: ['replenishment.read'] }

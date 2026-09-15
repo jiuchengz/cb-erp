@@ -13,6 +13,7 @@ import stocktakes from './_handlers/stocktakes';
 import permissions from './_handlers/permissions';
 import products from './_handlers/products';
 import productTotal from './_handlers/product-total';
+import productSalesBoard from './_handlers/product-sales-board';
 import productsTracking from './_handlers/products/tracking';
 import costProfit from './_handlers/cost-profit';
 import productsBatchDelete from './_handlers/products/batch-delete';
@@ -118,6 +119,7 @@ const routes: Route[] = [
   { pattern: /^\/cost-profit\/save$/, handler: costProfit },
   { pattern: /^\/cost-profit$/, handler: costProfit },
   { pattern: /^\/product-total$/, handler: productTotal },
+  { pattern: /^\/product-sales-board$/, handler: productSalesBoard },
   { pattern: /^\/products\/([^/]+)$/, handler: productsId, params: ['id'] },
   { pattern: /^\/products$/, handler: products },
   { pattern: /^\/purchase-orders\/batch$/, handler: purchaseOrdersBatch },
