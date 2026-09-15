@@ -65,19 +65,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const completedIds: string[] = [];
       for (const row of rows) {
         const items = row.replenishment_order_items || [];
-        // 到货时间：取首个明细产品在采购拿货中最晚的拿货日期
+        // 匹配基准日：补货时间优先，为空时回落创建日期（与到货匹配判定同一口径）
+        const matchBase = matchBaseDate(row, tz);
+        // 到货时间：取首个明细产品在采购拿货中最晚的拿货日期；
+        // 仅纳入晚于匹配基准日（补货时间）的拿货记录——早于补货时间的是历史拿货，
+        // 无法代表本次补货到货，否则会出现"到货时间早于补货时间"的错误展示
         const firstItem = items[0];
         if (firstItem) {
-          const records = purchaseByProduct[firstItem.product_id] || [];
-          if (records.length) {
-            row.arrival_date = records.map((r: any) => r.receive_date).sort().slice(-1)[0] || null;
-          } else {
-            row.arrival_date = null;
-          }
+          const arrivalDates = (purchaseByProduct[firstItem.product_id] || [])
+            .filter((r: any) => !matchBase || r.receive_date > matchBase)
+            .map((r: any) => r.receive_date)
+            .sort();
+          row.arrival_date = arrivalDates.length ? arrivalDates[arrivalDates.length - 1] : null;
         } else {
           row.arrival_date = null;
         }
-        const matchBase = matchBaseDate(row, tz);
         const allMatched = isArrivalMatched(items, purchaseByProduct, matchBase);
         // 精确到货标记：供前端与统计助手判定"未到货"（未完成/未取消 且 arrival_matched=false 即未到货）
         row.arrival_matched = allMatched;

@@ -954,6 +954,9 @@ async function save() {
       ship_date: form.ship_date,
       store: form.store.trim(),
       from_warehouse_id: form.from_warehouse_id,
+      // 新增时必须回传到达海外仓，否则创建的货件 to_warehouse_id 恒为 NULL，
+      // 列表「出库仓 → 到达仓」显示"未填"，必须重新进入编辑另存一次才会写入
+      to_warehouse_id: form.to_warehouse_id || null,
       items: items.map((it) => ({ product_id: it.product_id, quantity: it.quantity, remark: it.remark || null })),
       source: 'transfer',
       cargo_status: '待发货',
