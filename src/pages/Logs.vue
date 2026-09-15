@@ -260,7 +260,7 @@ async function loadVisits() {
   visitLoading.value = true
   visitError.value = ''
   try {
-    const params: Record<string, any> = { ...visitQuery }
+    const params: Record<string, any> = { page: visitQuery.page, pageSize: visitQuery.pageSize, ip: visitQuery.ip, pathFilter: visitQuery.path }
     const r = visitRange.value
     if (Array.isArray(r) && r.length === 2 && r[0] && r[1]) {
       // 按浏览器本地日期取当天 00:00:00 ~ 23:59:59.999 的时间边界
