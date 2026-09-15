@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
       const ip = str(req.query.ip);
-      const path = str(req.query.path);
+      const pathFilter = str(req.query.pathFilter);
       const dateFrom = str(req.query.date_from);
       const dateTo = str(req.query.date_to);
 
@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getAdminClient(true);
       let query: any = supabase.from('visit_logs').select('*', { count: 'exact' });
       if (ip) query = query.ilike('ip', `%${ip}%`);
-      if (path) query = query.ilike('path', `%${path}%`);
+      if (pathFilter) query = query.ilike('path', `%${pathFilter}%`);
       if (dateFrom && !Number.isNaN(Date.parse(dateFrom))) query = query.gte('created_at', new Date(dateFrom).toISOString());
       if (dateTo && !Number.isNaN(Date.parse(dateTo))) query = query.lte('created_at', new Date(dateTo).toISOString());
 
